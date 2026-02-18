@@ -1,9 +1,10 @@
-import { useCallback, memo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect, memo } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
+import { searchMatches } from '@/services/matches';
 import {
   Tooltip,
   TooltipContent,
@@ -19,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// Memoized notification badge - only shows when count > 0
+// =========== Notification Badge ===========
 const NotificationBadge = memo(({ count }) => {
   if (!count || count <= 0) return null;
   return (
@@ -28,17 +29,16 @@ const NotificationBadge = memo(({ count }) => {
     </span>
   );
 });
-
 NotificationBadge.displayName = 'NotificationBadge';
 
-// Memoized header icon button with tooltip
+// =========== Header Icon Button ===========
 const HeaderIconButton = memo(({ icon: Icon, badge, onClick, tooltip, testId }) => (
   <TooltipProvider delayDuration={300}>
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="relative text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
           onClick={onClick}
           aria-label={tooltip}
@@ -54,23 +54,20 @@ const HeaderIconButton = memo(({ icon: Icon, badge, onClick, tooltip, testId }) 
     </Tooltip>
   </TooltipProvider>
 ));
-
 HeaderIconButton.displayName = 'HeaderIconButton';
 
-// User Avatar Dropdown Menu (for authenticated users)
+// =========== User Dropdown ===========
 const UserDropdownMenu = memo(({ user, onLogout }) => {
   const displayName = user?.nickname || user?.name || user?.email || 'User';
   const initials = displayName.charAt(0).toUpperCase();
-  
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="ml-2 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background rounded-full">
           <Avatar className="h-9 w-9 border-2 border-primary/50 cursor-pointer hover:border-primary transition-colors">
             <AvatarImage src={user?.picture} alt={displayName} />
-            <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">
-              {initials}
-            </AvatarFallback>
+            <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">{initials}</AvatarFallback>
           </Avatar>
         </button>
       </DropdownMenuTrigger>
@@ -82,58 +79,340 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="cursor-pointer">
-          Profile
-        </DropdownMenuItem>
-        <DropdownMenuItem className="cursor-pointer">
-          My Predictions
-        </DropdownMenuItem>
-        <DropdownMenuItem className="cursor-pointer">
-          Settings
-        </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">Profile</DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">My Predictions</DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer">Settings</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem 
-          className="cursor-pointer text-destructive focus:text-destructive"
-          onClick={onLogout}
-        >
+        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
           Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 });
-
 UserDropdownMenu.displayName = 'UserDropdownMenu';
 
-export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notifications = {} }) => {
-  const { theme, toggleTheme } = useTheme();
-  const navigate = useNavigate();
+// =========== Search Result Card (compact) ===========
+const SearchResultCard = memo(({ match, onClick }) => {
+  const isLive = match.status === 'LIVE';
 
-  // Handle navigation for authenticated features
-  const handleFeatureClick = useCallback((feature) => {
-    console.log(`Navigating to ${feature}`);
-    // In real app: navigate(`/${feature.toLowerCase()}`);
+  return (
+    <button
+      onClick={() => onClick(match)}
+      className="w-full text-left px-3 py-2.5 hover:bg-[hsl(var(--card-hover))] transition-colors border-b border-border/30 last:border-b-0 group"
+      data-testid={`search-result-${match.id}`}
+    >
+      {/* Competition + Status */}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{match.competition}</span>
+        {isLive ? (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-red-500/20 text-red-400 border border-red-500/30">
+            <Radio className="w-2.5 h-2.5 animate-pulse" />
+            Live
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-primary/10 text-primary border border-primary/20">
+            Upcoming
+          </span>
+        )}
+      </div>
+
+      {/* Teams row */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Home team */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {match.homeTeam.crest && (
+            <img src={match.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain flex-shrink-0" />
+          )}
+          <span className="text-xs font-medium text-foreground truncate">{match.homeTeam.name}</span>
+        </div>
+
+        {/* Time / Score */}
+        <div className="flex flex-col items-center flex-shrink-0 px-2">
+          {isLive && match.score.home !== null ? (
+            <span className="text-xs font-bold text-foreground tabular-nums">
+              {match.score.home} - {match.score.away}
+            </span>
+          ) : (
+            <span className="text-[10px] font-medium text-muted-foreground">{match.dateTime}</span>
+          )}
+        </div>
+
+        {/* Away team */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
+          <span className="text-xs font-medium text-foreground truncate text-right">{match.awayTeam.name}</span>
+          {match.awayTeam.crest && (
+            <img src={match.awayTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain flex-shrink-0" />
+          )}
+        </div>
+      </div>
+
+      {/* 1 / X / 2 row (display only) */}
+      <div className="flex items-center gap-1 mt-1.5">
+        <div className="flex-1 flex items-center justify-center gap-1 py-0.5 rounded bg-secondary/60 border border-border/30">
+          <span className="text-[9px] text-muted-foreground">1</span>
+          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes.home.count}</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center gap-1 py-0.5 rounded bg-secondary/60 border border-border/30">
+          <span className="text-[9px] text-muted-foreground">X</span>
+          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes.draw.count}</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center gap-1 py-0.5 rounded bg-secondary/60 border border-border/30">
+          <span className="text-[9px] text-muted-foreground">2</span>
+          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes.away.count}</span>
+        </div>
+      </div>
+    </button>
+  );
+});
+SearchResultCard.displayName = 'SearchResultCard';
+
+// =========== Search Component ===========
+const GlobalSearch = ({ onMatchSelect }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const debounceTimer = useRef(null);
+
+  // Open search
+  const openSearch = useCallback(() => {
+    setIsOpen(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
-  // Handle login button click
-  const handleLoginClick = useCallback(() => {
-    if (onLogin) {
-      onLogin();
-    } else {
-      navigate('/login');
+  // Close search
+  const closeSearch = useCallback(() => {
+    setIsOpen(false);
+    setQuery('');
+    setResults([]);
+    setHasSearched(false);
+  }, []);
+
+  // Debounced search
+  const performSearch = useCallback(async (searchQuery) => {
+    if (searchQuery.length < 2) {
+      setResults([]);
+      setHasSearched(false);
+      setIsSearching(false);
+      return;
     }
+
+    setIsSearching(true);
+    try {
+      const data = await searchMatches(searchQuery);
+      setResults(data.matches || []);
+      setHasSearched(true);
+    } catch {
+      setResults([]);
+      setHasSearched(true);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  // Handle input change with debounce
+  const handleInputChange = useCallback(
+    (e) => {
+      const value = e.target.value;
+      setQuery(value);
+
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+      if (value.trim().length < 2) {
+        setResults([]);
+        setHasSearched(false);
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+      debounceTimer.current = setTimeout(() => {
+        performSearch(value.trim());
+      }, 300);
+    },
+    [performSearch]
+  );
+
+  // Handle result click
+  const handleResultClick = useCallback(
+    (match) => {
+      closeSearch();
+      if (onMatchSelect) onMatchSelect(match.id);
+    },
+    [closeSearch, onMatchSelect]
+  );
+
+  // ESC key handler
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen) closeSearch();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, closeSearch]);
+
+  // Click outside handler
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        closeSearch();
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen, closeSearch]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, []);
+
+  if (!isOpen) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              onClick={openSearch}
+              aria-label="Search"
+              data-testid="header-search"
+            >
+              <Search className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>Search matches</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      {/* Search Input */}
+      <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5 min-w-[260px] md:min-w-[320px] border border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
+        <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={handleInputChange}
+          placeholder="Search teams..."
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          data-testid="search-input"
+        />
+        {isSearching && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin flex-shrink-0" />}
+        <button
+          onClick={closeSearch}
+          className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          data-testid="search-close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Dropdown */}
+      {(query.length >= 2 || hasSearched) && (
+        <div
+          className="absolute top-full right-0 mt-2 w-[340px] md:w-[400px] max-h-[480px] overflow-y-auto rounded-xl bg-card border border-border shadow-lg shadow-black/20 z-[100] scrollbar-hide"
+          data-testid="search-dropdown"
+        >
+          {/* Loading */}
+          {isSearching && results.length === 0 && (
+            <div className="flex items-center justify-center py-8 gap-2" data-testid="search-loading">
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+              <span className="text-sm text-muted-foreground">Searching...</span>
+            </div>
+          )}
+
+          {/* No results */}
+          {!isSearching && hasSearched && results.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 gap-1" data-testid="search-no-results">
+              <Search className="w-6 h-6 text-muted-foreground mb-1" />
+              <span className="text-sm text-muted-foreground">No matches found</span>
+              <span className="text-xs text-muted-foreground/60">Try a different team name</span>
+            </div>
+          )}
+
+          {/* Results */}
+          {results.length > 0 && (
+            <div>
+              {/* Group label */}
+              <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground border-b border-border/30">
+                {results.length} match{results.length !== 1 ? 'es' : ''} found
+              </div>
+              {results.map((match) => (
+                <SearchResultCard key={match.id} match={match} onClick={handleResultClick} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =========== Main Header ===========
+export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notifications = {}, onMatchSelect }) => {
+  const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleFeatureClick = useCallback((feature) => {
+    console.log(`Navigating to ${feature}`);
+  }, []);
+
+  const handleLoginClick = useCallback(() => {
+    if (onLogin) onLogin();
+    else navigate('/login');
   }, [onLogin, navigate]);
 
-  // Handle register button click
   const handleRegisterClick = useCallback(() => {
     navigate('/register');
   }, [navigate]);
+
+  // Handle match selection from search
+  const handleMatchSelect = useCallback(
+    (matchId) => {
+      // If onMatchSelect prop exists, use it
+      if (onMatchSelect) {
+        onMatchSelect(matchId);
+        return;
+      }
+
+      // Navigate to home if not there
+      if (location.pathname !== '/') {
+        navigate('/', { state: { highlightMatchId: matchId } });
+      } else {
+        // Scroll to the match and highlight it
+        const matchEl = document.querySelector(`[data-match-id="${matchId}"]`);
+        if (matchEl) {
+          matchEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          matchEl.classList.add('match-highlight');
+          setTimeout(() => matchEl.classList.remove('match-highlight'), 2500);
+        }
+      }
+    },
+    [onMatchSelect, location.pathname, navigate]
+  );
 
   return (
     <header className="sticky top-0 z-50 w-full bg-background border-b border-border">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo - Always visible */}
+          {/* Logo */}
           <Link to="/" className="flex items-center gap-2 no-underline">
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20">
               <span className="text-primary font-bold text-lg">G</span>
@@ -144,62 +423,21 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
             </span>
           </Link>
 
-          {/* Right side navigation */}
+          {/* Right side */}
           <div className="flex items-center gap-1 md:gap-2">
-            
-            {/* Search - Always visible (optional) */}
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                    aria-label="Search"
-                    data-testid="header-search"
-                  >
-                    <Search className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Search</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {/* Global Search */}
+            <GlobalSearch onMatchSelect={handleMatchSelect} />
 
-            {/* ===== AUTHENTICATED USER ICONS ===== */}
+            {/* Auth icons */}
             {isAuthenticated && (
               <>
-                {/* Messages - Only for authenticated users */}
-                <HeaderIconButton
-                  icon={Mail}
-                  badge={notifications?.messages}
-                  onClick={() => handleFeatureClick('Messages')}
-                  tooltip="Messages"
-                  testId="header-messages"
-                />
-
-                {/* Friends - Only for authenticated users */}
-                <HeaderIconButton
-                  icon={Users}
-                  badge={notifications?.friends}
-                  onClick={() => handleFeatureClick('Friends')}
-                  tooltip="Friend Requests"
-                  testId="header-friends"
-                />
-
-                {/* Notifications - Only for authenticated users */}
-                <HeaderIconButton
-                  icon={Bell}
-                  badge={notifications?.alerts}
-                  onClick={() => handleFeatureClick('Notifications')}
-                  tooltip="Notifications"
-                  testId="header-notifications"
-                />
+                <HeaderIconButton icon={Mail} badge={notifications?.messages} onClick={() => handleFeatureClick('Messages')} tooltip="Messages" testId="header-messages" />
+                <HeaderIconButton icon={Users} badge={notifications?.friends} onClick={() => handleFeatureClick('Friends')} tooltip="Friend Requests" testId="header-friends" />
+                <HeaderIconButton icon={Bell} badge={notifications?.alerts} onClick={() => handleFeatureClick('Notifications')} tooltip="Notifications" testId="header-notifications" />
               </>
             )}
 
-            {/* Theme Toggle - Always visible */}
+            {/* Theme Toggle */}
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -211,11 +449,7 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
                     className="w-10 h-10 rounded-full bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
                     aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                   >
-                    {theme === 'light' ? (
-                      <Moon className="w-5 h-5" />
-                    ) : (
-                      <Sun className="w-5 h-5 text-yellow-400" />
-                    )}
+                    {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
@@ -224,47 +458,25 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
               </Tooltip>
             </TooltipProvider>
 
-            {/* ===== NOT AUTHENTICATED - LOGIN/REGISTER BUTTONS ===== */}
+            {/* Login/Register */}
             {!isAuthenticated && (
               <div className="flex items-center gap-2 ml-2">
-                {/* Login Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={handleLoginClick}
-                  data-testid="header-login"
-                >
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={handleLoginClick} data-testid="header-login">
                   <LogIn className="w-4 h-4 mr-2 hidden sm:inline" />
                   <span>Login</span>
                 </Button>
-
-                {/* Register Button */}
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                  onClick={handleRegisterClick}
-                  data-testid="header-register"
-                >
+                <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleRegisterClick} data-testid="header-register">
                   <UserPlus className="w-4 h-4 mr-2 hidden sm:inline" />
                   <span>Register</span>
                 </Button>
               </div>
             )}
 
-            {/* ===== AUTHENTICATED - USER AVATAR WITH DROPDOWN ===== */}
-            {isAuthenticated && (
-              <UserDropdownMenu user={user} onLogout={onLogout} />
-            )}
+            {/* User avatar */}
+            {isAuthenticated && <UserDropdownMenu user={user} onLogout={onLogout} />}
 
-            {/* Menu (Mobile) - Always visible */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="ml-1 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors md:hidden"
-              aria-label="Menu"
-            >
+            {/* Mobile menu */}
+            <Button variant="ghost" size="icon" className="ml-1 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors md:hidden" aria-label="Menu">
               <Menu className="h-5 w-5" />
             </Button>
           </div>

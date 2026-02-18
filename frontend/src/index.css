@@ -319,6 +319,29 @@ code {
     animation: badge-pulse 2s ease-in-out infinite;
 }
 
+/* Match highlight animation (for search result click) */
+@keyframes match-glow {
+    0% {
+        box-shadow: 0 0 0 0 hsl(var(--primary) / 0.6);
+        border-color: hsl(var(--primary));
+    }
+    50% {
+        box-shadow: 0 0 24px 4px hsl(var(--primary) / 0.3);
+        border-color: hsl(var(--primary));
+    }
+    100% {
+        box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+        border-color: hsl(var(--border));
+    }
+}
+
+.match-highlight {
+    animation: match-glow 2s ease-in-out forwards !important;
+    border-color: hsl(var(--primary)) !important;
+    z-index: 5;
+    position: relative;
+}
+
 /* Theme transition */
 * {
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;

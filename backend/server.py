@@ -7,12 +7,15 @@ import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List
+from fastapi import WebSocket, WebSocketDisconnect
 import uuid
+import asyncio
 from datetime import datetime, timezone
 
 # Import auth routes
 from routes.auth import router as auth_router
 from routes.predictions import router as predictions_router
+from routes.football import router as football_router, manager as ws_manager, start_polling, stop_polling
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -80,6 +83,7 @@ async def get_status_checks():
 # Include auth routes
 api_router.include_router(auth_router)
 api_router.include_router(predictions_router)
+api_router.include_router(football_router)
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -99,6 +103,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# WebSocket endpoint for live match updates
+@app.websocket("/api/ws/matches")
+async def websocket_matches(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive, listen for client messages
+            data = await websocket.receive_text()
+            # Client can send "ping" to keep alive
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        await ws_manager.disconnect(websocket)
+    except Exception:
+        await ws_manager.disconnect(websocket)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background polling for live matches"""
+    start_polling(db)
+
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    stop_polling()
     client.close()

@@ -1,682 +1,481 @@
-# 🏆 GuessIt - Football Prediction Platform
-
 <div align="center">
 
-![GuessIt Logo](https://img.shields.io/badge/GuessIt-Football%20Predictions-22c55e?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyeiIvPjwvc3ZnPg==)
+# GuessIt — Football Prediction Platform
 
-[![React](https://img.shields.io/badge/React-19.0.0-61dafb?style=flat-square&logo=react)](https://reactjs.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4.17-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
-[![License](https://img.shields.io/badge/License-Private-red?style=flat-square)](LICENSE)
+**Predict match outcomes. Compete with fans. Track your accuracy.**
 
-**A social football prediction platform where users vote on match outcomes for fun.**
-
-⚠️ **NOT gambling** - No money, no odds, no betting, no payouts.
-
-[Live Demo](https://guess-it-predict.preview.emergentagent.com) · [Report Bug](#) · [Request Feature](#)
+A real-time football prediction platform powered by live data from [Football-Data.org](https://www.football-data.org/), built with React, FastAPI, and MongoDB.
 
 </div>
 
 ---
 
-## 📌 Project Overview
+## Table of Contents
 
-**GuessIt** is a modern, responsive football prediction platform that allows users to:
-
-- 🎯 **Vote** on match outcomes (Home/Draw/Away)
-- 📊 **View community statistics** and voting trends
-- 🌍 **Filter matches** by league, time, and status
-- 🌙 **Toggle between dark/light themes**
-- 📱 **Use on any device** with full responsiveness
-
-The platform is built as a **frontend prototype** with mock data, designed to demonstrate UI/UX capabilities and can be extended with a real backend.
-
-### Key Features
-
-| Feature | Description |
-|---------|-------------|
-| 🎨 **Dark/Light Mode** | Full theme support with smooth transitions |
-| 🏟️ **Match Predictions** | Vote on 1/X/2 outcomes with live stats |
-| 🎠 **Hero Carousel** | Auto-advancing promotional banner |
-| 🔔 **Notification System** | Badge indicators for messages/friends/alerts |
-| 📱 **Responsive Design** | Mobile-first approach, works on all devices |
-| 💾 **Local Persistence** | Votes and theme saved to localStorage |
+- [Project Overview](#project-overview)
+- [Key Features](#key-features)
+- [Tech Stack](#tech-stack)
+- [APIs & Integrations](#apis--integrations)
+- [Project Structure](#project-structure)
+- [Database Models](#database-models)
+- [Environment Variables](#environment-variables)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Backend Setup](#backend-setup)
+  - [Frontend Setup](#frontend-setup)
+- [Default Ports & Connections](#default-ports--connections)
+- [Core Flows](#core-flows)
+- [Real-Time Architecture](#real-time-architecture)
+- [Production Notes](#production-notes)
+- [Future Improvements](#future-improvements)
+- [License](#license)
 
 ---
 
-## 🏗 Project Structure
+## Project Overview
 
-```
-/app
-├── frontend/                    # React Frontend Application
-│   ├── public/
-│   │   └── index.html          # HTML entry point
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── home/           # Home page components
-│   │   │   │   ├── PromoBanner.jsx      # Hero carousel (theme-independent)
-│   │   │   │   ├── TabsSection.jsx      # Navigation tabs
-│   │   │   │   ├── LeagueFilters.jsx    # League filter chips
-│   │   │   │   ├── TopMatchesCards.jsx  # Featured match cards
-│   │   │   │   ├── MatchCard.jsx        # Individual match card
-│   │   │   │   └── MatchList.jsx        # Full match list
-│   │   │   ├── layout/
-│   │   │   │   └── Header.jsx           # App header with auth modal
-│   │   │   └── ui/                      # Shadcn UI components
-│   │   │       ├── button.jsx
-│   │   │       ├── avatar.jsx
-│   │   │       ├── dialog.jsx
-│   │   │       ├── card.jsx
-│   │   │       └── ...
-│   │   ├── data/
-│   │   │   └── mockData.js     # Mock matches, users, and slides
-│   │   ├── hooks/
-│   │   │   ├── useLocalStorage.js  # localStorage hook
-│   │   │   └── use-toast.js        # Toast notifications
-│   │   ├── lib/
-│   │   │   ├── ThemeContext.js     # Dark/Light mode context
-│   │   │   └── utils.js            # Utility functions (cn)
-│   │   ├── pages/
-│   │   │   └── HomePage.jsx    # Main home page
-│   │   ├── App.js              # Root component
-│   │   ├── App.css             # Global styles
-│   │   └── index.css           # Tailwind + CSS variables
-│   ├── package.json
-│   └── tailwind.config.js
-├── backend/                     # FastAPI Backend (for future use)
-│   ├── server.py
-│   └── requirements.txt
-├── memory/
-│   └── PRD.md                  # Product Requirements Document
-└── README.md                   # This file
-```
+**GuessIt** is a modern, real-time football prediction web application where users can:
 
-### Component Architecture
+- Browse upcoming and live football matches from major leagues
+- Predict match outcomes (Home Win / Draw / Away Win) before kick-off
+- Watch live scores update in real-time without page refreshes
+- Compete with other fans through a voting system
+- Experience a premium, sport-tech styled interface with dark/light themes
 
-```
-App.js
-└── ThemeProvider (Context)
-    └── BrowserRouter
-        └── HomePage
-            ├── Header
-            │   ├── Logo
-            │   ├── NavigationIcons (Messages, Friends, Notifications)
-            │   ├── ThemeToggle
-            │   ├── UserAvatar
-            │   └── AuthRequiredModal
-            ├── PromoBanner (Theme-Independent)
-            │   ├── SlideContent
-            │   ├── NavButtons
-            │   └── DotIndicators
-            ├── TabsSection
-            ├── LeagueFilters
-            ├── TopMatchesCards
-            └── MatchList
-                └── MatchRow[]
-```
+The platform uses **Football-Data.org** as its free football data provider, supporting major competitions including the Premier League, La Liga, Serie A, Bundesliga, Ligue 1, UEFA Champions League, and more.
+
+Predictions are automatically locked **10 minutes before kick-off**, and fully disabled once a match goes live, ensuring fair play.
 
 ---
 
-## 🛠 Technologies Used
+## Key Features
 
-### Frontend
+### Match Data & Live Scores
+- Real match data from Football-Data.org (free tier)
+- Live score updates via WebSocket (30-second polling)
+- Match status tracking: NOT_STARTED, LIVE (with estimated minute), FINISHED
+- Team crests/logos loaded from API
+- Competition filtering (Premier League, UCL, La Liga, Serie A, etc.)
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **React** | 19.0.0 | UI Framework |
-| **React Router** | 7.5.1 | Client-side routing |
-| **Tailwind CSS** | 3.4.17 | Utility-first styling |
-| **Shadcn/UI** | Latest | Accessible UI components |
-| **Radix UI** | Various | Headless UI primitives |
-| **Lucide React** | 0.507.0 | Icon library |
-| **Framer Motion** | - | Animations (available) |
-| **Sonner** | 2.0.3 | Toast notifications |
-| **Axios** | 1.8.4 | HTTP client |
+### Prediction System
+- Vote on match outcomes: **1** (Home) / **X** (Draw) / **2** (Away)
+- Prediction locking: disabled 10 minutes before match start
+- Fully locked for LIVE and FINISHED matches
+- Visual lock indicators with reason messages
+- Predictions persisted to MongoDB for authenticated users
+- Pending predictions saved in sessionStorage for unauthenticated users (restored after login)
 
-### Backend
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| **FastAPI** | 0.115.12 | REST API Framework |
-| **MongoDB** | - | Document database |
-| **Motor** | - | Async MongoDB driver |
-| **Pydantic** | 2.x | Data validation |
-| **Passlib** | - | Password hashing (bcrypt) |
-| **HTTPX** | - | Async HTTP client |
+### User Interface
+- Dark/Light theme toggle (persisted in localStorage)
+- Grid/List view toggle for match cards (persisted in localStorage)
+- Global search: type a team name to find matches instantly
+- Debounced search (300ms) with compact dropdown results
+- Click-to-navigate: search results scroll to the match card with a highlight animation
+- Team numbering (1 = Home, 2 = Away) for clear prediction context
+- Estimated match minute display for live matches
+- Animated loading screen on initial app load
+- Responsive design (mobile-first)
 
 ### Authentication
+- Email/Password registration with validation
+- Email/Password login
+- Google OAuth (via Emergent Auth)
+- Unique nickname system (required after registration)
+- Session-based authentication (httpOnly cookies, 7-day expiry)
+- Nickname availability checker with suggestions
 
-| Method | Description |
-|--------|-------------|
-| **Email/Password** | Traditional registration with password requirements |
-| **Google OAuth** | Via Emergent Auth service |
-| **Sessions** | HTTP-only cookies with 7-day expiry |
-| **Nicknames** | Unique username system with validation |
-
-### Build Tools
-
-| Tool | Purpose |
-|------|---------|
-| **CRACO** | Create React App Configuration Override |
-| **PostCSS** | CSS processing |
-| **Autoprefixer** | CSS vendor prefixing |
-| **ESLint** | Code linting |
-
-### State Management
-
-- **React Context API** - Theme and Auth management
-- **React Hooks** - Local component state
-- **localStorage** - Theme persistence
+### Real-Time Updates
+- WebSocket connection at `/api/ws/matches`
+- Backend polls Football-Data.org every 30 seconds for live matches
+- Score changes pushed to all connected clients
+- Graceful reconnection (5-second retry)
+- Fallback: 60-second polling when WebSocket is unavailable
 
 ---
 
-## ⚙ How To Run Locally
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 19, Tailwind CSS 3.4, Shadcn/UI, Radix UI, Lucide React |
+| **Build Tool** | CRACO (Create React App Configuration Override) |
+| **Routing** | React Router v7 |
+| **Backend** | Python 3.11, FastAPI, Uvicorn |
+| **Database** | MongoDB (via Motor async driver) |
+| **Auth** | bcrypt (password hashing), httpOnly session cookies |
+| **OAuth** | Emergent Auth (Google Sign-In) |
+| **Football API** | Football-Data.org v4 (free tier) |
+| **Real-Time** | WebSocket (native), Background polling |
+| **Validation** | Pydantic v2 |
+| **HTTP Client** | httpx (async) |
+
+---
+
+## APIs & Integrations
+
+### Football-Data.org (v4)
+
+- **Base URL**: `https://api.football-data.org/v4`
+- **Auth**: `X-Auth-Token` header
+- **Free Tier Limits**: 10 requests/minute
+- **Supported Competitions** (free tier):
+
+| Code | Competition |
+|------|------------|
+| `PL` | Premier League |
+| `PD` | La Liga |
+| `SA` | Serie A |
+| `BL1` | Bundesliga |
+| `FL1` | Ligue 1 |
+| `CL` | UEFA Champions League |
+| `EC` | European Championship |
+| `WC` | FIFA World Cup |
+
+- **Endpoints Used**:
+  - `GET /v4/matches` — All matches with date/status filters
+  - `GET /v4/competitions/{code}/matches` — Competition-specific matches
+
+### Emergent Auth (Google OAuth)
+
+- **Auth URL**: `https://auth.emergentagent.com/`
+- **Session Exchange**: `https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data`
+- **Flow**: Redirect → Google Sign-In → Session ID → Exchange for user data
+
+---
+
+## Project Structure
+
+```
+/app/
+├── backend/
+│   ├── .env                    # Backend environment variables
+│   ├── server.py               # FastAPI main app, routes, WebSocket
+│   ├── requirements.txt        # Python dependencies
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── auth.py             # User, Session, Login, Register models
+│   │   └── prediction.py       # Prediction CRUD models
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── auth.py             # Auth routes (register, login, OAuth, nickname)
+│   │   ├── predictions.py      # Prediction CRUD routes
+│   │   └── football.py         # Football API proxy, WebSocket, polling
+│   └── services/
+│       ├── __init__.py
+│       └── football_api.py     # Football-Data.org client, caching, transforms
+│
+├── frontend/
+│   ├── .env                    # Frontend environment variables
+│   ├── package.json            # Node.js dependencies
+│   ├── tailwind.config.js      # Tailwind + custom theme
+│   ├── craco.config.js         # Path aliases (@/)
+│   ├── public/
+│   │   └── index.html          # HTML template
+│   └── src/
+│       ├── index.js            # React entry point
+│       ├── index.css           # Global styles + CSS variables (light/dark)
+│       ├── App.js              # Root component, routing, loading screen
+│       ├── App.css             # App-level styles
+│       ├── lib/
+│       │   ├── AuthContext.js   # Auth state, login/register/OAuth handlers
+│       │   ├── ThemeContext.js  # Dark/light theme provider
+│       │   └── utils.js        # cn() utility (clsx + tailwind-merge)
+│       ├── hooks/
+│       │   ├── useLiveMatches.js   # WebSocket hook for live updates
+│       │   ├── useLocalStorage.js  # localStorage state hook
+│       │   └── use-toast.js        # Toast notification hook
+│       ├── services/
+│       │   ├── matches.js      # Football API client (fetch, search)
+│       │   └── predictions.js  # Prediction API client (save, get, delete)
+│       ├── data/
+│       │   └── mockData.js     # Banner slides, static content
+│       ├── pages/
+│       │   ├── HomePage.jsx        # Main page with matches, filters, toggle
+│       │   ├── LoginPage.jsx       # Email/password + Google login
+│       │   ├── RegisterPage.jsx    # Registration form
+│       │   ├── ChooseNicknamePage.jsx  # Nickname selection
+│       │   └── AuthCallback.jsx    # Google OAuth callback handler
+│       └── components/
+│           ├── layout/
+│           │   ├── Header.jsx   # Navbar with search, auth, theme toggle
+│           │   └── Footer.jsx   # Site footer
+│           ├── home/
+│           │   ├── PromoBanner.jsx     # Hero carousel
+│           │   ├── TabsSection.jsx     # Top Matches/Popular/Live/Soon tabs
+│           │   ├── LeagueFilters.jsx   # Competition filter chips
+│           │   ├── TopMatchesCards.jsx  # Featured match cards (top 2)
+│           │   ├── MatchCard.jsx       # Individual match card
+│           │   └── MatchList.jsx       # Full match list (grid/list view)
+│           └── ui/              # 46 Shadcn/UI components
+│               ├── button.jsx
+│               ├── dialog.jsx
+│               ├── avatar.jsx
+│               ├── dropdown-menu.jsx
+│               └── ... (and more)
+│
+├── tests/                       # Test directory
+├── test_reports/                # Automated test results
+└── README.md                    # This file
+```
+
+---
+
+## Database Models
+
+### Users Collection (`users`)
+
+| Field | Type | Description |
+|-------|------|------------|
+| `user_id` | String | Unique identifier (`user_xxxxxxxxxxxx`) |
+| `email` | String | User email (unique, case-insensitive) |
+| `name` | String | Display name (from Google or manual) |
+| `nickname` | String | Unique username (3-20 chars, alphanumeric + underscore) |
+| `password_hash` | String | bcrypt hash (null for Google-only users) |
+| `auth_provider` | String | `"email"` or `"google"` |
+| `nickname_set` | Boolean | Whether user has chosen a nickname |
+| `picture` | String | Profile picture URL |
+| `created_at` | String (ISO) | Registration timestamp |
+| `updated_at` | String (ISO) | Last update timestamp |
+
+### Sessions Collection (`user_sessions`)
+
+| Field | Type | Description |
+|-------|------|------------|
+| `session_id` | String | Unique session identifier |
+| `user_id` | String | Reference to user |
+| `session_token` | String | Auth token (stored in httpOnly cookie) |
+| `expires_at` | String (ISO) | Expiry time (7 days from creation) |
+| `created_at` | String (ISO) | Creation timestamp |
+
+### Predictions Collection (`predictions`)
+
+| Field | Type | Description |
+|-------|------|------------|
+| `prediction_id` | String | Unique identifier (`pred_xxxxxxxxxxxx`) |
+| `user_id` | String | Reference to user |
+| `match_id` | Integer | Football-Data.org match ID |
+| `prediction` | String | `"home"`, `"draw"`, or `"away"` |
+| `created_at` | String (ISO) | First prediction timestamp |
+| `updated_at` | String (ISO) | Last update timestamp |
+
+---
+
+## Environment Variables
+
+### Backend (`/backend/.env`)
+
+```env
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=guessit
+CORS_ORIGINS=*
+FOOTBALL_API_KEY=your_football_data_org_api_key
+```
+
+| Variable | Required | Description |
+|----------|----------|------------|
+| `MONGO_URL` | Yes | MongoDB connection string |
+| `DB_NAME` | Yes | Database name |
+| `CORS_ORIGINS` | Yes | Allowed CORS origins (comma-separated or `*`) |
+| `FOOTBALL_API_KEY` | Yes | Football-Data.org API key ([get free key](https://www.football-data.org/client/register)) |
+
+### Frontend (`/frontend/.env`)
+
+```env
+REACT_APP_BACKEND_URL=https://your-domain.com
+```
+
+| Variable | Required | Description |
+|----------|----------|------------|
+| `REACT_APP_BACKEND_URL` | Yes | Backend API base URL (used for all API calls) |
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
-- **Node.js** >= 18.0.0
-- **Yarn** >= 1.22.0
-- **Git**
+- **Node.js** 18+ and **Yarn** (for frontend)
+- **Python** 3.11+ (for backend)
+- **MongoDB** 6+ (local or Atlas)
+- **Football-Data.org API key** (free, [register here](https://www.football-data.org/client/register))
 
-### Installation
+### Backend Setup
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/Farhad-Iskandarov/NovaTech.git
-cd NovaTech
+# 1. Navigate to backend
+cd backend
 
-# 2. Navigate to frontend
-cd frontend
+# 2. Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
 
 # 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Configure environment
+cp .env.example .env
+# Edit .env and add your FOOTBALL_API_KEY
+
+# 5. Start the server
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+```
+
+The backend will be available at `http://localhost:8001`.
+
+API docs available at `http://localhost:8001/docs` (Swagger UI).
+
+### Frontend Setup
+
+```bash
+# 1. Navigate to frontend
+cd frontend
+
+# 2. Install dependencies
 yarn install
 
-# 4. Create environment file
-echo 'REACT_APP_BACKEND_URL=http://localhost:8001' > .env
+# 3. Configure environment
+# Edit .env and set REACT_APP_BACKEND_URL=http://localhost:8001
 
-# 5. Start development server
+# 4. Start development server
 yarn start
 ```
 
-### Available Scripts
-
-```bash
-# Development
-yarn start          # Start dev server on http://localhost:3000
-
-# Production Build
-yarn build          # Create optimized production build
-
-# Testing
-yarn test           # Run test suite
-
-# Linting
-yarn lint           # Check for code issues
-```
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `REACT_APP_BACKEND_URL` | Backend API URL | `http://localhost:8001` |
-| `WDS_SOCKET_PORT` | WebSocket port | `443` |
+The frontend will be available at `http://localhost:3000`.
 
 ---
 
-## 🌙 Feature Documentation
+## Default Ports & Connections
 
-### Dark/Light Mode System
+| Service | Port | URL |
+|---------|------|-----|
+| Frontend (React) | 3000 | `http://localhost:3000` |
+| Backend (FastAPI) | 8001 | `http://localhost:8001` |
+| MongoDB | 27017 | `mongodb://localhost:27017` |
+| WebSocket | 8001 | `ws://localhost:8001/api/ws/matches` |
 
-The theme system is implemented using React Context API with localStorage persistence.
+**Routing**: All backend API endpoints must be prefixed with `/api/` (e.g., `/api/auth/login`, `/api/football/matches`). The frontend uses `REACT_APP_BACKEND_URL` for all API calls.
 
-**Architecture:**
+---
 
-```javascript
-// ThemeContext.js
-export function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(() => {
-    return localStorage.getItem('guessit-theme') || 'dark';
-  });
+## Core Flows
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('guessit-theme', theme);
-  }, [theme]);
+### Authentication Flow
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, isDark }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
+```
+User → Register (email/password) → Set Nickname → Home
+User → Login (email/password) → Home
+User → Google Sign-In → Emergent Auth → Callback → Set Nickname → Home
 ```
 
-**Usage in Components:**
+### Prediction Flow
 
-```javascript
-import { useTheme } from '@/lib/ThemeContext';
-
-const Component = () => {
-  const { theme, toggleTheme, isDark } = useTheme();
-  return <button onClick={toggleTheme}>Toggle Theme</button>;
-};
+```
+1. User browses matches (fetched from Football-Data.org via backend proxy)
+2. User selects 1 (Home), X (Draw), or 2 (Away)
+3. User clicks "GUESS IT" → saved to MongoDB
+4. If not logged in → Auth modal → Login → Prediction saved from sessionStorage
+5. Predictions locked 10 minutes before kick-off
+6. Predictions fully disabled for LIVE and FINISHED matches
 ```
 
-**CSS Variables (index.css):**
+### Live Update Flow
 
-```css
-:root {
-  /* Light mode variables */
-  --background: 210 20% 98%;
-  --foreground: 222 47% 11%;
-  --primary: 142 70% 40%;
-}
-
-.dark {
-  /* Dark mode variables */
-  --background: 0 0% 8%;
-  --foreground: 0 0% 98%;
-  --primary: 142 70% 45%;
-}
 ```
-
-### Banner Carousel (Theme-Independent)
-
-The promotional banner is **excluded from theme changes** to maintain visual consistency.
-
-**Key Implementation:**
-
-```jsx
-// Fixed colors that don't use CSS variables
-<h1 className="text-white">...</h1>  // Not text-foreground
-<span className="text-[#facc15]">...</span>  // Fixed yellow
-<div style={{
-  backgroundImage: `linear-gradient(rgba(20, 20, 20, 0.95)...)`
-}}>
-```
-
-### Header Authentication Logic
-
-The header displays different elements based on authentication state.
-
-**When NOT Logged In (isAuthenticated = false):**
-| Element | Visibility |
-|---------|------------|
-| Logo | ✅ Visible |
-| Search | ✅ Visible |
-| Messages | ❌ Hidden |
-| Friends | ❌ Hidden |
-| Notifications | ❌ Hidden |
-| Theme Toggle | ✅ Visible |
-| Login Button | ✅ Visible |
-| Register Button | ✅ Visible |
-| User Avatar | ❌ Hidden |
-
-**When Logged In (isAuthenticated = true):**
-| Element | Visibility |
-|---------|------------|
-| Logo | ✅ Visible |
-| Search | ✅ Visible |
-| Messages | ✅ Visible (with badge) |
-| Friends | ✅ Visible (with badge) |
-| Notifications | ✅ Visible (with badge) |
-| Theme Toggle | ✅ Visible |
-| Login Button | ❌ Hidden |
-| Register Button | ❌ Hidden |
-| User Avatar | ✅ Visible (with dropdown) |
-
-**Icon Features:**
-- All icons have tooltips on hover
-- Badge counters only appear when count > 0
-- Avatar opens dropdown menu with Profile, Settings, Logout options
-
-```javascript
-// Dynamic header rendering
-{isAuthenticated ? (
-  <>
-    <HeaderIconButton icon={Mail} badge={notifications.messages} tooltip="Messages" />
-    <HeaderIconButton icon={Users} badge={notifications.friends} tooltip="Friend Requests" />
-    <HeaderIconButton icon={Bell} badge={notifications.alerts} tooltip="Notifications" />
-    <UserDropdownMenu user={user} onLogout={handleLogout} />
-  </>
-) : (
-  <div className="flex gap-2">
-    <Button onClick={onLogin}>Login</Button>
-    <Button variant="default" onClick={onLogin}>Register</Button>
-  </div>
-)}
-```
-
-### Voting System
-
-```javascript
-// useLocalStorage hook for vote persistence
-const { votes, addVote, hasVoted, getVote } = useVotes();
-
-// Adding a vote
-const handleVote = (matchId, prediction) => {
-  addVote(matchId, prediction);
-  toast.success('Vote submitted!');
-};
+Frontend ← WebSocket ← Backend ← Football-Data.org
+     ↑                     ↑
+     |                     |--- Polls every 30 seconds
+     |--- Receives push updates, applies to match cards
 ```
 
 ---
 
-## 🚀 Performance Strategy
+## Real-Time Architecture
 
-### Optimization Techniques
-
-| Technique | Implementation |
-|-----------|---------------|
-| **Memoization** | `React.memo()` on components, `useCallback` for handlers |
-| **Code Splitting** | Lazy loading ready (can add `React.lazy()`) |
-| **Virtualization** | Ready for `react-window` for large lists |
-| **Image Optimization** | Lazy loading, proper sizing |
-| **Bundle Size** | Tree-shaking, minimal dependencies |
-
-### Component Memoization Example
-
-```javascript
-// PromoBanner.jsx
-const SlideContent = memo(({ slide }) => (
-  <div>...</div>
-));
-
-const NavButton = memo(({ direction, onClick }) => (
-  <button>...</button>
-));
-
-export default memo(PromoBanner);
 ```
-
-### Event Handler Optimization
-
-```javascript
-// Using useCallback to prevent unnecessary re-renders
-const handleVote = useCallback((matchId, prediction) => {
-  addVote(matchId, prediction);
-}, [addVote]);
-
-const toggleTheme = useCallback(() => {
-  setTheme(prev => prev === 'light' ? 'dark' : 'light');
-}, []);
-```
-
-### Rendering Efficiency
-
-- **CSS Transitions** instead of JavaScript animations
-- **will-change** CSS property for animated elements
-- **Passive event listeners** for scroll events
-- **Debounced** user inputs where applicable
-
----
-
-## 🔐 Security Measures
-
-### Input Validation
-
-```javascript
-// Validate vote types
-const setTheme = (newTheme) => {
-  if (['light', 'dark'].includes(newTheme)) {
-    setThemeState(newTheme);
-  }
-};
-
-// Sanitize user inputs
-const sanitizeInput = (input) => {
-  return input.replace(/<[^>]*>/g, '');
-};
-```
-
-### XSS Prevention
-
-- No `dangerouslySetInnerHTML` usage
-- All user content rendered through React's built-in escaping
-- Content Security Policy ready
-
-### Authentication Security (Future)
-
-- JWT tokens stored in httpOnly cookies
-- CSRF protection ready
-- Rate limiting on API endpoints
-- Input sanitization on all forms
-
-### localStorage Security
-
-```javascript
-// Only non-sensitive data stored locally
-localStorage.setItem('guessit-theme', 'dark');  // OK
-localStorage.setItem('guessit_votes', JSON.stringify(votes));  // OK
-// Never store: passwords, tokens, PII
+┌─────────────────────┐
+│  Football-Data.org  │
+│    (External API)   │
+└─────────┬───────────┘
+          │ HTTP (10 req/min)
+          ▼
+┌─────────────────────┐
+│   FastAPI Backend    │
+│                     │
+│  ┌───────────────┐  │
+│  │  Cache Layer  │  │  ← In-memory, TTL-based
+│  │  30s (live)   │  │    (30s for live, 120s others)
+│  │  120s (other) │  │
+│  └───────────────┘  │
+│                     │
+│  ┌───────────────┐  │
+│  │ Background    │  │  ← Polls Football-Data.org every 30s
+│  │ Polling Task  │  │    (only when clients connected)
+│  └───────────────┘  │
+│                     │
+│  ┌───────────────┐  │
+│  │  WebSocket    │  │  ← Broadcasts to all connected clients
+│  │  Manager      │  │
+│  └───────────────┘  │
+└─────────┬───────────┘
+          │ WebSocket / HTTP
+          ▼
+┌─────────────────────┐
+│   React Frontend    │
+│                     │
+│  useLiveMatches()   │  ← WebSocket hook
+│  Auto-reconnect     │  ← 5s retry on disconnect
+│  60s polling        │  ← Fallback when WS unavailable
+└─────────────────────┘
 ```
 
 ---
 
-## 📦 Scalability Plan
+## Production Notes
 
-### Current Architecture Benefits
+### Security
+- **API Key**: `FOOTBALL_API_KEY` is stored server-side only, never exposed to the frontend
+- **Auth Cookies**: `httpOnly`, `Secure`, `SameSite=None` for cross-origin support
+- **Password Hashing**: bcrypt with automatic salt
+- **Session Tokens**: UUID-based, stored in MongoDB with 7-day expiry
+- **CORS**: Configure `CORS_ORIGINS` to restrict allowed origins in production
 
-| Aspect | Implementation |
-|--------|---------------|
-| **Modular Components** | Each component is self-contained |
-| **Context-based State** | Easy to add more contexts |
-| **API-ready** | Axios configured, endpoints ready |
-| **Type Safety Ready** | Can add TypeScript incrementally |
+### Rate Limiting
+- Football-Data.org free tier: **10 requests/minute**
+- Backend caching prevents exceeding limits (30s for live, 120s for others)
+- Rate limiter with automatic wait-and-retry
 
-### Future Scaling Path
+### Environment Separation
+- Use different MongoDB databases for dev/staging/production
+- Set `CORS_ORIGINS` to specific domains in production (not `*`)
+- Use environment-specific `.env` files
 
-```
-Phase 1 (Current): Frontend Prototype
-├── Mock data
-├── localStorage persistence
-└── Client-side routing
-
-Phase 2: Backend Integration
-├── FastAPI backend
-├── MongoDB database
-├── JWT authentication
-└── Real-time updates (WebSocket)
-
-Phase 3: Production Scale
-├── CDN for static assets
-├── Redis for caching
-├── Load balancing
-├── Horizontal scaling
-└── Microservices (if needed)
-```
-
-### Database Design (Future)
-
-```javascript
-// Matches Collection
-{
-  _id: ObjectId,
-  homeTeam: { name, shortName, flag },
-  awayTeam: { name, shortName, flag },
-  competition: String,
-  dateTime: Date,
-  votes: {
-    home: { count: Number, percentage: Number },
-    draw: { count: Number, percentage: Number },
-    away: { count: Number, percentage: Number }
-  },
-  totalVotes: Number,
-  status: 'upcoming' | 'live' | 'finished'
-}
-
-// Users Collection
-{
-  _id: ObjectId,
-  email: String,
-  passwordHash: String,
-  votes: [{ matchId, prediction, timestamp }],
-  stats: { correct: Number, total: Number }
-}
-```
-
-### API Design (Future)
-
-```javascript
-// RESTful Endpoints
-GET    /api/matches              // List matches
-GET    /api/matches/:id          // Get match details
-POST   /api/matches/:id/vote     // Submit vote
-GET    /api/users/me             // Get current user
-GET    /api/leaderboard          // Get rankings
-```
+### Performance
+- In-memory cache reduces API calls
+- WebSocket updates only pushed when clients are connected
+- Score animations use CSS transforms (GPU-accelerated, no layout shift)
+- Debounced search (300ms) prevents API spam
 
 ---
 
-## 🧪 Testing Strategy
+## Future Improvements
 
-### Unit Tests (Jest)
-
-```javascript
-// Example test structure
-describe('VoteButton', () => {
-  it('renders correct label for home vote', () => {...});
-  it('shows active state when selected', () => {...});
-  it('calls onClick with correct type', () => {...});
-});
-```
-
-### Integration Tests (React Testing Library)
-
-```javascript
-describe('HomePage', () => {
-  it('renders all main sections', () => {...});
-  it('filters matches by league', () => {...});
-  it('submits vote and shows toast', () => {...});
-});
-```
-
-### E2E Tests (Playwright)
-
-```javascript
-test('complete voting flow', async ({ page }) => {
-  await page.goto('/');
-  await page.click('[data-testid="vote-home"]');
-  await expect(page.locator('.toast')).toBeVisible();
-});
-```
+- **Leaderboard System**: Track prediction accuracy, weekly/monthly rankings
+- **User Profiles**: Prediction history, accuracy stats, badges
+- **Match Result Comparison**: Show correct/incorrect after match ends
+- **Push Notifications**: Alert users about goal events and prediction deadlines
+- **Friend System**: Add friends, view their predictions, private leagues
+- **Countdown Timer**: Show "Predictions close in X hours" for urgency
+- **Advanced Predictions**: Score prediction, first goal scorer, etc.
+- **Historical Statistics**: Past match data, head-to-head records
+- **Newsletter System**: Weekly prediction summaries via email
+- **PWA Support**: Installable app with offline capabilities
+- **Sort & Filter**: Sort matches by popularity, kick-off time, live-first
 
 ---
 
-## 📄 API Reference
+## License
 
-### Health Check
+This project is for educational and personal use.
 
-```http
-GET /api/health
-Response: {"status": "healthy", "timestamp": "..."}
-```
-
-### Authentication
-
-```http
-# Register with email/password
-POST /api/auth/register
-Body: {"email": "...", "password": "...", "confirm_password": "..."}
-Response: {"user": {...}, "requires_nickname": true}
-
-# Login with email/password
-POST /api/auth/login
-Body: {"email": "...", "password": "..."}
-Response: {"user": {...}, "requires_nickname": false}
-
-# Google OAuth callback
-POST /api/auth/google/callback
-Body: {"session_id": "..."}
-Response: {"user": {...}, "requires_nickname": true/false}
-
-# Set unique nickname
-POST /api/auth/nickname
-Body: {"nickname": "..."}
-Response: {"user": {...}, "requires_nickname": false}
-
-# Check nickname availability
-GET /api/auth/nickname/check?nickname=...
-Response: {"available": true/false, "message": "...", "suggestions": [...]}
-
-# Get current user
-GET /api/auth/me
-Response: {"user_id": "...", "email": "...", "nickname": "...", ...}
-
-# Logout
-POST /api/auth/logout
-Response: {"message": "Logged out successfully"}
-```
-
-### Predictions
-
-```http
-# Create/Update prediction
-POST /api/predictions
-Body: {"match_id": 1, "prediction": "home|draw|away"}
-Response: {"prediction_id": "...", "match_id": 1, "prediction": "home", "is_new": true/false}
-
-# Get all user predictions
-GET /api/predictions/me
-Response: {"predictions": [...], "total": 5}
-
-# Get prediction for specific match
-GET /api/predictions/match/{match_id}
-Response: {"prediction_id": "...", "match_id": 1, "prediction": "home", ...}
-
-# Delete prediction
-DELETE /api/predictions/match/{match_id}
-Response: {"message": "Prediction deleted successfully"}
-```
-
-### Password Requirements
-- Minimum 8 characters
-- At least one uppercase letter
-- At least one lowercase letter
-- At least one number
-
-### Nickname Requirements
-- 3-20 characters
-- Letters, numbers, underscores only
-- No spaces
-- Case-insensitive uniqueness
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is **private** - All rights reserved.
-
----
-
-## 👨‍💻 Author
-
-**Farhad Iskandarov**
-
-- GitHub: [@Farhad-Iskandarov](https://github.com/Farhad-Iskandarov)
-
----
-
-## 🙏 Acknowledgments
-
-- [Shadcn/UI](https://ui.shadcn.com/) - Beautiful UI components
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS
-- [Lucide](https://lucide.dev/) - Icon library
-- [Radix UI](https://www.radix-ui.com/) - Accessible primitives
-
----
-
-<div align="center">
-
-**Built with ❤️ using React and Tailwind CSS**
-
-</div>
+Football data provided by [Football-Data.org](https://www.football-data.org/).
