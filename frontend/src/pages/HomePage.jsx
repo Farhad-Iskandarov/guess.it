@@ -47,12 +47,13 @@ export const HomePage = () => {
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
   const [matchError, setMatchError] = useState(null);
-  const [viewMode, setViewMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('guessit-view-mode') || 'grid';
-    }
-    return 'grid';
-  });
+
+  // View mode: use ref + direct DOM toggle for instant CSS switch (no React re-render)
+  const viewModeRef = useRef(
+    (typeof window !== 'undefined' && localStorage.getItem('guessit-view-mode')) || 'grid'
+  );
+  const [viewMode, setViewMode] = useState(viewModeRef.current);
+  const matchListRef = useRef(null);
 
   // Saved predictions from backend
   const [savedPredictions, setSavedPredictions] = useState({});
@@ -210,10 +211,14 @@ export const HomePage = () => {
   }, []);
 
   const handlePredictionSaved = useCallback((matchId, prediction) => {
-    setSavedPredictions(prev => ({
-      ...prev,
-      [matchId]: prediction,
-    }));
+    setSavedPredictions(prev => {
+      if (prediction === null) {
+        const next = { ...prev };
+        delete next[matchId];
+        return next;
+      }
+      return { ...prev, [matchId]: prediction };
+    });
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -223,8 +228,15 @@ export const HomePage = () => {
   }, [logout]);
 
   const handleViewModeChange = useCallback((mode) => {
-    setViewMode(mode);
+    // Direct DOM class toggle for instant CSS switch - bypass React re-render
+    viewModeRef.current = mode;
+    setViewMode(mode); // Update button highlight state only
     localStorage.setItem('guessit-view-mode', mode);
+    const container = matchListRef.current || document.querySelector('[data-testid="match-list-container"]');
+    if (container) {
+      container.className = `match-list-container ${mode === 'grid' ? 'match-view-grid' : 'match-view-list'}`;
+      container.setAttribute('data-view-mode', mode);
+    }
   }, []);
 
   return (

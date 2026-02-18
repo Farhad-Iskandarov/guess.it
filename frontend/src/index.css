@@ -342,12 +342,178 @@ code {
     position: relative;
 }
 
-/* Theme transition */
-* {
+/* Theme transition - only apply to major containers, not all elements */
+body,
+.min-h-screen,
+nav,
+header,
+footer,
+main {
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+}
+
+/* Match list container: no transition on layout change for instant toggle */
+.match-list-container,
+.match-list-container * {
+    transition: none !important;
+}
+/* Re-enable transitions only for interactive elements inside match cards */
+.match-list-container button,
+.match-list-container a {
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease !important;
 }
 
 /* Disable transition for interactive elements to avoid lag */
 button, a, input, select, textarea {
     transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* ===== Match List: CSS-based Grid/List toggle (no re-render) ===== */
+.match-list-container {
+    gap: 0.75rem;
+}
+
+/* GRID mode */
+.match-view-grid {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
+}
+@media (min-width: 768px) {
+    .match-view-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+.match-view-grid .match-row-list-layout {
+    display: none !important;
+}
+.match-view-grid .match-row-grid-layout {
+    display: block !important;
+}
+.match-view-grid .match-row-card {
+    padding: 0.75rem;
+}
+.match-view-grid .match-row-meta {
+    margin-bottom: 0.75rem;
+}
+.match-view-grid .match-row-datetime {
+    font-size: 0.75rem;
+}
+.match-view-grid .match-row-footer {
+    margin-top: 0.75rem;
+    font-size: 0.6875rem;
+}
+.match-view-grid .match-vote-btn {
+    min-width: 60px;
+}
+.match-view-grid .match-action-btn {
+    min-width: 100px;
+}
+.match-view-grid .match-action-btn-sm {
+    min-width: 70px;
+}
+
+/* LIST mode */
+.match-view-list {
+    display: flex;
+    flex-direction: column;
+}
+.match-view-list .match-row-grid-layout {
+    display: none !important;
+}
+.match-view-list .match-row-list-layout {
+    display: block !important;
+}
+.match-view-list .match-row-card {
+    padding: 1rem 1.25rem;
+}
+.match-view-list .match-row-meta {
+    margin-bottom: 0.75rem;
+}
+.match-view-list .match-row-footer {
+    margin-top: 0.75rem;
+    font-size: 0.8125rem;
+}
+.match-view-list .match-vote-btn {
+    min-width: 80px;
+}
+.match-view-list .match-action-btn {
+    min-width: 120px;
+}
+.match-view-list .match-action-btn-sm {
+    min-width: 80px;
+}
+
+/* ===== Live Match Card: Subtle glow animation ===== */
+@keyframes live-glow {
+    0%, 100% {
+        border-color: rgba(239, 68, 68, 0.2);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+    50% {
+        border-color: rgba(239, 68, 68, 0.4);
+        box-shadow: 0 0 12px 0 rgba(239, 68, 68, 0.08);
+    }
+}
+@keyframes live-icon-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+.live-match-card {
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.03);
+    animation: live-glow 3s ease-in-out infinite;
+}
+.live-pulse-icon {
+    animation: live-icon-pulse 2.5s ease-in-out infinite;
+}
+.live-locked-banner {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: rgb(248, 113, 113);
+}
+
+/* ===== Score Block: Fixed width for consistent alignment ===== */
+.score-block {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+/* ===== Promo Banner: No layout shift ===== */
+.promo-banner-slide img {
+    transition: none !important;
+}
+
+/* Responsive banner height */
+[data-theme-independent="true"] {
+    height: 405px;
+}
+@media (min-width: 768px) {
+    [data-theme-independent="true"] {
+        height: 405px;
+    }
+}
+@media (min-width: 1024px) {
+    [data-theme-independent="true"] {
+        height: 405px;
+    }
+}
+
+/* Top Matches Cards: CSS-based toggle */
+.top-matches-grid {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
+    gap: 1rem;
+}
+@media (min-width: 768px) {
+    .top-matches-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+.top-matches-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }

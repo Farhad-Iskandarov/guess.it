@@ -2,7 +2,7 @@ import { useState, useCallback, memo } from 'react';
 import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, RotateCcw, Sparkles, Lock, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
-import { savePrediction } from '@/services/predictions';
+import { savePrediction, deletePrediction } from '@/services/predictions';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -14,19 +14,14 @@ import {
 } from '@/components/ui/dialog';
 
 // ============ Status Badge (compact) ============
-const StatusBadgeCompact = memo(({ status, statusDetail, matchMinute }) => {
+const StatusBadgeCompact = memo(({ status, statusDetail }) => {
   if (status === 'LIVE') {
     return (
       <div className="inline-flex items-center gap-1">
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-red-500/20 text-red-400 border border-red-500/30" data-testid="live-badge-compact">
-          <Radio className="w-2.5 h-2.5 animate-pulse" />
+          <Radio className="w-2.5 h-2.5 live-pulse-icon" />
           {statusDetail === 'HT' ? 'HT' : 'Live'}
         </span>
-        {matchMinute && (
-          <span className="text-[10px] font-bold text-red-400 tabular-nums" data-testid="match-minute-compact">
-            {matchMinute}
-          </span>
-        )}
       </div>
     );
   }
@@ -42,13 +37,26 @@ const StatusBadgeCompact = memo(({ status, statusDetail, matchMinute }) => {
 StatusBadgeCompact.displayName = 'StatusBadgeCompact';
 
 // ============ Score Display (compact) ============
-const ScoreCompact = memo(({ score, status }) => {
-  if (status === 'NOT_STARTED' || (score.home === null && score.away === null)) return null;
+const ScoreCompact = memo(({ score, status, matchMinute }) => {
+  const isLive = status === 'LIVE';
+  const hasScore = status !== 'NOT_STARTED' && !(score.home === null && score.away === null);
+
   return (
-    <div className="flex items-center gap-1 text-sm font-bold tabular-nums" data-testid="score-compact">
-      <span className="text-foreground">{score.home ?? 0}</span>
-      <span className="text-muted-foreground">-</span>
-      <span className="text-foreground">{score.away ?? 0}</span>
+    <div className="score-block flex flex-col items-center justify-center" data-testid="score-compact">
+      {isLive && matchMinute ? (
+        <span className="text-[11px] font-semibold text-red-400 tabular-nums mb-1">{matchMinute}</span>
+      ) : (
+        <span className="text-[11px] mb-1 invisible">00'</span>
+      )}
+      {hasScore ? (
+        <div className="flex items-center gap-1.5 text-2xl font-bold tabular-nums">
+          <span className="text-foreground">{score.home ?? 0}</span>
+          <span className="text-muted-foreground/60 text-lg">-</span>
+          <span className="text-foreground">{score.away ?? 0}</span>
+        </div>
+      ) : (
+        <span className="text-sm font-medium text-muted-foreground">vs</span>
+      )}
     </div>
   );
 });
@@ -267,15 +275,15 @@ const TopMatchCard = ({
 
   return (
     <div
-      className={`flex-1 min-w-0 bg-card rounded-xl p-4 border transition-all duration-300 animate-scale-in overflow-hidden ${
-        match.status === 'LIVE' ? 'border-red-500/30 bg-red-500/5' : 'border-border hover:border-border-hover'
+      className={`flex-1 min-w-0 bg-card rounded-xl p-4 border overflow-hidden ${
+        match.status === 'LIVE' ? 'live-match-card' : 'border-border hover:border-border-hover'
       }`}
       data-testid={`top-match-card-${match.id}`}
       data-match-id={match.id}
     >
       {/* Meta */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-        <StatusBadgeCompact status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
+        <StatusBadgeCompact status={match.status} statusDetail={match.statusDetail} />
         <span className="flex-shrink-0">{match.dateTime}</span>
         <span className="mx-1 flex-shrink-0">|</span>
         <span className="truncate">{match.competition}</span>
@@ -283,25 +291,27 @@ const TopMatchCard = ({
 
       {/* Locked indicator */}
       {isLocked && (
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/10 border border-destructive/20 text-destructive text-[10px] font-medium mb-2" data-testid="prediction-locked-compact">
+        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium mb-2 w-fit ${
+          match.status === 'LIVE'
+            ? 'live-locked-banner'
+            : 'bg-destructive/10 border border-destructive/20 text-destructive'
+        }`} data-testid="prediction-locked-compact">
           <Lock className="w-2.5 h-2.5" />
           <span>{match.lockReason || 'Prediction closed'}</span>
         </div>
       )}
 
       {/* Content Row */}
-      <div className="flex items-center gap-2">
-        {/* Teams + Score */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-            <TeamDisplay team={match.homeTeam} number={1} />
-            <TeamDisplay team={match.awayTeam} number={2} />
-          </div>
-          <ScoreCompact score={match.score} status={match.status} />
+      <div className="flex items-center">
+        {/* Teams */}
+        <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+          <TeamDisplay team={match.homeTeam} number={1} />
+          <TeamDisplay team={match.awayTeam} number={2} />
         </div>
-
+        {/* Score - fixed width centered */}
+        <ScoreCompact score={match.score} status={match.status} matchMinute={match.matchMinute} />
         {/* Votes */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0 ml-2">
           <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
           <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
           <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
@@ -359,10 +369,23 @@ export const TopMatchesCards = ({ matches, savedPredictions = {}, onPredictionSa
     });
   }, []);
 
-  const handleRefresh = useCallback((matchId) => {
+  const handleRefresh = useCallback(async (matchId) => {
     setCurrentSelections((prev) => ({ ...prev, [matchId]: null }));
-    toast.info('Selection cleared', { duration: 2000 });
-  }, []);
+    if (savedPredictions[matchId]) {
+      setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
+      try {
+        await deletePrediction(matchId);
+        if (onPredictionSaved) onPredictionSaved(matchId, null);
+        toast.success('Vote removed', { description: 'Your prediction has been cleared.', duration: 2000 });
+      } catch (error) {
+        toast.error('Failed to remove vote', { description: error.message, duration: 3000 });
+      } finally {
+        setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
+      }
+    } else {
+      toast.info('Selection cleared', { duration: 2000 });
+    }
+  }, [savedPredictions, onPredictionSaved]);
 
   const handleAdvance = useCallback(() => {
     toast.info('Coming Soon!', { description: 'Advanced predictions will be available soon.', duration: 3000 });
@@ -433,8 +456,8 @@ export const TopMatchesCards = ({ matches, savedPredictions = {}, onPredictionSa
 
   return (
     <>
-      <div className={`mt-4 transition-all duration-300 ${
-        viewMode === 'list' ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'
+      <div className={`mt-4 top-matches-container ${
+        viewMode === 'list' ? 'top-matches-list' : 'top-matches-grid'
       }`}>
         {featuredMatches.map((match) => (
           <TopMatchCard

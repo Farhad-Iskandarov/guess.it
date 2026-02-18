@@ -14,17 +14,28 @@ import {
   Info
 } from 'lucide-react';
 
-const FooterLogo = () => (
-  <Link to="/" className="flex items-center gap-2 group">
-    <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-bold text-lg">
-      G
-    </div>
-    <span className="text-xl font-bold">
-      <span className="text-primary">GUESS</span>
-      <span className="text-foreground">IT</span>
-    </span>
-  </Link>
-);
+const FooterLogo = () => {
+  const handleClick = (e) => {
+    e.preventDefault();
+    if (window.location.pathname === '/') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.location.href = '/';
+    }
+  };
+
+  return (
+    <a href="/" onClick={handleClick} className="flex items-center gap-2 group no-underline cursor-pointer" data-testid="footer-logo">
+      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-bold text-lg">
+        G
+      </div>
+      <span className="text-xl font-bold">
+        <span className="text-primary">GUESS</span>
+        <span className="text-foreground">IT</span>
+      </span>
+    </a>
+  );
+};
 
 const FooterLink = ({ to, icon: Icon, children, external }) => {
   const baseClasses = "flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors duration-200 text-sm";

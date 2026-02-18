@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +33,9 @@ const GoogleIcon = () => (
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { loginEmail, loginGoogle, isAuthenticated, requiresNickname } = useAuth();
+  const from = location.state?.from?.pathname || '/';
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,10 +49,10 @@ export const LoginPage = () => {
       if (requiresNickname) {
         navigate('/choose-nickname');
       } else {
-        navigate('/');
+        navigate(from, { replace: true });
       }
     }
-  }, [isAuthenticated, requiresNickname, navigate]);
+  }, [isAuthenticated, requiresNickname, navigate, from]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -86,7 +88,7 @@ export const LoginPage = () => {
       if (result.requires_nickname) {
         navigate('/choose-nickname');
       } else {
-        navigate('/');
+        navigate(from, { replace: true });
       }
     } catch (error) {
       toast.error('Login failed', {

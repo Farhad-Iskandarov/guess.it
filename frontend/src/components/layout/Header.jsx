@@ -60,6 +60,7 @@ HeaderIconButton.displayName = 'HeaderIconButton';
 const UserDropdownMenu = memo(({ user, onLogout }) => {
   const displayName = user?.nickname || user?.name || user?.email || 'User';
   const initials = displayName.charAt(0).toUpperCase();
+  const nav = useNavigate();
 
   return (
     <DropdownMenu>
@@ -80,7 +81,7 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer">Profile</DropdownMenuItem>
-        <DropdownMenuItem className="cursor-pointer">My Predictions</DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer">Settings</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
@@ -413,7 +414,20 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 no-underline">
+          <Link
+            to="/"
+            className="flex items-center gap-2 no-underline"
+            onClick={(e) => {
+              e.preventDefault();
+              if (window.location.pathname === '/') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                navigate('/');
+                setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+              }
+            }}
+            data-testid="header-logo"
+          >
             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20">
               <span className="text-primary font-bold text-lg">G</span>
             </div>

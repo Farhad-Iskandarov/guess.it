@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Memoized slide content to prevent unnecessary re-renders
 const SlideContent = memo(({ slide }) => (
-  <div className="max-w-md animate-fade-in">
+  <div className="max-w-md">
     {/* Badge */}
     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/30 mb-4">
       <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
@@ -37,8 +37,11 @@ SlideContent.displayName = 'SlideContent';
 const NavButton = memo(({ direction, onClick }) => (
   <button
     onClick={onClick}
-    className="absolute top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white transition-all duration-200"
-    style={{ [direction === 'prev' ? 'left' : 'right']: '1rem' }}
+    className="absolute top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white z-20"
+    style={{
+      [direction === 'prev' ? 'left' : 'right']: '1rem',
+      transition: 'background-color 0.2s ease',
+    }}
     aria-label={`${direction === 'prev' ? 'Previous' : 'Next'} slide`}
   >
     {direction === 'prev' ? (
@@ -55,11 +58,12 @@ NavButton.displayName = 'NavButton';
 const DotIndicator = memo(({ index, isActive, onClick }) => (
   <button
     onClick={() => onClick(index)}
-    className={`w-2 h-2 rounded-full transition-all duration-300 ${
+    className={`h-2 rounded-full ${
       isActive
         ? 'w-6 bg-[#facc15] dot-active'
-        : 'bg-white/30 hover:bg-white/50'
+        : 'w-2 bg-white/30 hover:bg-white/50'
     }`}
+    style={{ transition: 'width 0.3s ease, background-color 0.3s ease' }}
     aria-label={`Go to slide ${index + 1}`}
   />
 ));
@@ -70,7 +74,7 @@ export const PromoBanner = ({ slides }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
-  // Auto-advance slides with useCallback for optimization
+  // Auto-advance slides
   useEffect(() => {
     if (!isAutoPlaying) return;
     const timer = setInterval(() => {
@@ -82,7 +86,6 @@ export const PromoBanner = ({ slides }) => {
   const goToSlide = useCallback((index) => {
     setCurrentSlide(index);
     setIsAutoPlaying(false);
-    // Resume auto-play after 10 seconds of inactivity
     setTimeout(() => setIsAutoPlaying(true), 10000);
   }, []);
 
@@ -98,35 +101,59 @@ export const PromoBanner = ({ slides }) => {
     setTimeout(() => setIsAutoPlaying(true), 10000);
   }, [slides.length]);
 
-  const slide = slides[currentSlide];
-
   return (
-    // Theme-independent banner container - uses fixed dark colors
-    <div 
+    <div
       className="relative w-full overflow-hidden rounded-xl"
       data-theme-independent="true"
+      style={{ height: '405px' }}
     >
-      {/* Banner Container - Fixed dark gradient that doesn't change with theme */}
-      <div 
-        className="relative h-[280px] md:h-[320px] lg:h-[360px] w-full bg-cover bg-center transition-all duration-700"
-        style={{
-          backgroundImage: `linear-gradient(to right, rgba(20, 20, 20, 0.95) 0%, rgba(20, 20, 20, 0.7) 50%, rgba(20, 20, 20, 0.3) 100%), url(${slide.image})`
-        }}
-      >
-        {/* Content */}
-        <div className="absolute inset-0 flex items-center">
-          <div className="container mx-auto px-6 md:px-10">
-            <SlideContent slide={slide} />
+      {/* Fixed-height container for all slides */}
+      <div className="promo-banner-slides" style={{ position: 'relative', width: '100%', height: '100%' }}>
+        {slides.map((slide, index) => (
+          <div
+            key={slide.id}
+            className="promo-banner-slide"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              opacity: index === currentSlide ? 1 : 0,
+              transition: 'opacity 0.7s ease-in-out',
+              pointerEvents: index === currentSlide ? 'auto' : 'none',
+              zIndex: index === currentSlide ? 1 : 0,
+            }}
+          >
+            {/* Background image - fixed size, object-fit cover */}
+            <img
+              src={slide.image}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover"
+              loading={index === 0 ? 'eager' : 'lazy'}
+              draggable={false}
+            />
+            {/* Dark gradient overlay */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(to right, rgba(20, 20, 20, 0.95) 0%, rgba(20, 20, 20, 0.7) 50%, rgba(20, 20, 20, 0.3) 100%)',
+              }}
+            />
+            {/* Content */}
+            <div className="absolute inset-0 flex items-center z-10">
+              <div className="container mx-auto" style={{ paddingLeft: '4.5rem', paddingRight: '2.5rem' }}>
+                <SlideContent slide={slide} />
+              </div>
+            </div>
           </div>
-        </div>
-
-        {/* Navigation Arrows - Fixed dark styling */}
-        <NavButton direction="prev" onClick={prevSlide} />
-        <NavButton direction="next" onClick={nextSlide} />
+        ))}
       </div>
 
-      {/* Carousel Dots - Fixed styling */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
+      {/* Navigation Arrows */}
+      <NavButton direction="prev" onClick={prevSlide} />
+      <NavButton direction="next" onClick={nextSlide} />
+
+      {/* Carousel Dots */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
         {slides.map((_, index) => (
           <DotIndicator
             key={index}

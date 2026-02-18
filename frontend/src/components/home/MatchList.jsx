@@ -2,7 +2,7 @@ import { useState, useCallback, memo, useEffect, useRef } from 'react';
 import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, RotateCcw, Sparkles, Lock, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
-import { savePrediction } from '@/services/predictions';
+import { savePrediction, deletePrediction } from '@/services/predictions';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 // ============ Status Badge ============
-const StatusBadge = memo(({ status, statusDetail, matchMinute }) => {
+const StatusBadge = memo(({ status, statusDetail }) => {
   if (status === 'LIVE') {
     return (
       <div className="inline-flex items-center gap-1.5">
@@ -22,14 +22,9 @@ const StatusBadge = memo(({ status, statusDetail, matchMinute }) => {
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-red-500/20 text-red-400 border border-red-500/30"
           data-testid="live-badge"
         >
-          <Radio className="w-3 h-3 animate-pulse" />
+          <Radio className="w-3 h-3 live-pulse-icon" />
           {statusDetail === 'HT' ? 'Half Time' : 'Live'}
         </span>
-        {matchMinute && (
-          <span className="text-[11px] font-bold text-red-400 tabular-nums" data-testid="match-minute">
-            {matchMinute}
-          </span>
-        )}
       </div>
     );
   }
@@ -48,31 +43,44 @@ const StatusBadge = memo(({ status, statusDetail, matchMinute }) => {
 StatusBadge.displayName = 'StatusBadge';
 
 // ============ Score Display ============
-const ScoreDisplay = memo(({ score, status, prevScore }) => {
+const ScoreDisplay = memo(({ score, status, prevScore, matchMinute }) => {
   const homeChanged = prevScore && prevScore.home !== score.home;
   const awayChanged = prevScore && prevScore.away !== score.away;
-
-  if (status === 'NOT_STARTED' || (score.home === null && score.away === null)) {
-    return null;
-  }
+  const isLive = status === 'LIVE';
+  const hasScore = status !== 'NOT_STARTED' && !(score.home === null && score.away === null);
 
   return (
-    <div className="flex flex-col items-center gap-0.5 min-w-[36px]" data-testid="score-display">
-      <span
-        className={`text-lg font-bold tabular-nums transition-all duration-500 ${
-          homeChanged ? 'text-primary scale-125' : 'text-foreground'
-        }`}
-      >
-        {score.home ?? 0}
-      </span>
-      <span className="text-xs text-muted-foreground">-</span>
-      <span
-        className={`text-lg font-bold tabular-nums transition-all duration-500 ${
-          awayChanged ? 'text-primary scale-125' : 'text-foreground'
-        }`}
-      >
-        {score.away ?? 0}
-      </span>
+    <div className="score-block flex flex-col items-center justify-center" data-testid="score-display">
+      {/* Match minute above score for LIVE matches */}
+      {isLive && matchMinute ? (
+        <span className="text-[11px] font-semibold text-red-400 tabular-nums mb-0.5" data-testid="score-minute">
+          {matchMinute}
+        </span>
+      ) : (
+        /* Invisible placeholder to keep vertical alignment consistent */
+        <span className="text-[11px] mb-0.5 invisible">00'</span>
+      )}
+      {hasScore ? (
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`text-xl font-bold tabular-nums transition-all duration-500 ${
+              homeChanged ? 'text-primary scale-110' : 'text-foreground'
+            }`}
+          >
+            {score.home ?? 0}
+          </span>
+          <span className="text-sm text-muted-foreground font-medium">-</span>
+          <span
+            className={`text-xl font-bold tabular-nums transition-all duration-500 ${
+              awayChanged ? 'text-primary scale-110' : 'text-foreground'
+            }`}
+          >
+            {score.away ?? 0}
+          </span>
+        </div>
+      ) : (
+        <span className="text-sm font-medium text-muted-foreground">vs</span>
+      )}
     </div>
   );
 });
@@ -107,7 +115,7 @@ const TeamCrest = memo(({ team }) => {
   }
   return (
     <div className="flex items-center justify-center w-6 h-6 md:w-7 md:h-7 rounded-full bg-secondary text-sm md:text-base flex-shrink-0">
-      {team.flag || team.logo || '⚽'}
+      {team.flag || team.logo || ''}
     </div>
   );
 });
@@ -124,13 +132,14 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
       disabled={isLocked}
       data-selected={isSelected ? 'true' : 'false'}
       data-testid={`vote-btn-${type}`}
-      className={`flex flex-col items-center justify-center min-w-[60px] md:min-w-[80px] px-2 md:px-3 py-2 rounded-lg transition-all duration-200 border ${
+      className={`flex flex-col items-center justify-center match-vote-btn px-2 md:px-3 py-2 rounded-lg border ${
         isLocked
           ? 'opacity-40 cursor-not-allowed bg-muted border-border/30'
           : isSelected
             ? 'bg-primary/30 border-primary border-2 shadow-glow ring-2 ring-primary/30'
             : 'bg-vote-inactive border-transparent hover:bg-vote-inactive-hover hover:border-border cursor-pointer'
       }`}
+      style={{ transition: 'background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease' }}
     >
       <div className="flex items-center gap-1 mb-0.5">
         <span className={`text-sm md:text-base font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
@@ -175,8 +184,7 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
       disabled={isDisabled}
       data-testid="guess-it-btn"
       className={`
-        relative min-w-[100px] md:min-w-[120px] h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
-        transition-all duration-300 transform
+        relative match-action-btn h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
         ${state.isLocked
           ? 'bg-muted border-2 border-border text-muted-foreground cursor-not-allowed'
           : state.isSaved
@@ -185,6 +193,7 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
         }
         ${isDisabled && !state.isSaved && !state.isLocked ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''}
       `}
+      style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
     >
       <div className="flex flex-col items-center justify-center gap-1">
         {state.isLocked ? (
@@ -213,12 +222,12 @@ const RefreshButton = memo(({ onClick, disabled, hasSelection }) => (
     variant="outline"
     data-testid="refresh-prediction-btn"
     className={`
-      relative min-w-[70px] md:min-w-[80px] h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
-      transition-all duration-300 transform
+      relative match-action-btn-sm h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
       border-2 border-muted-foreground/30 hover:border-destructive/50
       bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive
       ${!hasSelection ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105'}
     `}
+    style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
   >
     <div className="flex flex-col items-center justify-center gap-1">
       <RotateCcw className="w-5 h-5" />
@@ -236,14 +245,14 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
     variant="outline"
     data-testid="advance-prediction-btn"
     className={`
-      relative min-w-[70px] md:min-w-[80px] h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
-      transition-all duration-300 transform
+      relative match-action-btn-sm h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
       border-2 border-amber-500/30 hover:border-amber-500
       bg-gradient-to-br from-amber-500/5 to-orange-500/10 
       hover:from-amber-500/20 hover:to-orange-500/20
       text-amber-600 dark:text-amber-400
       hover:scale-105 hover:shadow-lg hover:shadow-amber-500/20
     `}
+    style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
   >
     <div className="flex flex-col items-center justify-center gap-1">
       <Sparkles className="w-5 h-5" />
@@ -284,8 +293,8 @@ const AuthRequiredModal = memo(({ isOpen, onClose, onLogin, onRegister }) => (
 ));
 AuthRequiredModal.displayName = 'AuthRequiredModal';
 
-// ============ Match Row ============
-const MatchRow = ({
+// ============ Match Row (Memoized - renders BOTH layouts, CSS controls visibility) ============
+const MatchRow = memo(({
   match,
   currentSelection,
   savedPrediction,
@@ -295,7 +304,6 @@ const MatchRow = ({
   onAdvance,
   isLoading,
   prevScores,
-  viewMode = 'grid',
 }) => {
   const displayedSelection = currentSelection !== undefined ? currentSelection : savedPrediction;
   const isLocked = match.predictionLocked;
@@ -314,72 +322,81 @@ const MatchRow = ({
   const isCurrentSaved = savedPrediction && savedPrediction === displayedSelection;
   const hasUnsavedChanges = savedPrediction && displayedSelection && savedPrediction !== displayedSelection;
 
-  const isGrid = viewMode === 'grid';
-
   return (
     <div
-      className={`bg-card/50 hover:bg-card rounded-xl border transition-all duration-200 animate-slide-in overflow-hidden ${
-        match.status === 'LIVE' ? 'border-red-500/30 bg-red-500/5' : 'border-border/50 hover:border-border'
-      } ${isGrid ? 'px-3 py-3.5' : 'px-4 py-5'}`}
+      className={`match-row-card bg-card/50 hover:bg-card rounded-xl border overflow-hidden ${
+        match.status === 'LIVE' ? 'live-match-card' : 'border-border/50 hover:border-border'
+      }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
+      style={{ contain: 'layout style', transition: 'background-color 0.2s ease, border-color 0.2s ease' }}
     >
-      {/* Match Meta */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-        <StatusBadge status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
-        <span className={isGrid ? 'text-xs' : ''}>{match.dateTime}</span>
+      {/* Match Meta - shared between both views */}
+      <div className="match-row-meta flex items-center gap-2 text-sm text-muted-foreground">
+        <StatusBadge status={match.status} statusDetail={match.statusDetail} />
+        <span className="match-row-datetime">{match.dateTime}</span>
         <span className="text-border">|</span>
         <span className="truncate">{match.competition}</span>
       </div>
 
       {/* Locked Banner */}
-      {isLocked && <div className="mb-2"><PredictionLockedBanner lockReason={match.lockReason} /></div>}
-
-      {/* ======= LIST VIEW (full-width horizontal) ======= */}
-      {!isGrid && (
-        <div className="flex items-center justify-between gap-2 md:gap-4">
-          {/* Teams + Score */}
-          <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-home">1</span>
-                <TeamCrest team={match.homeTeam} />
-                <span className="text-sm md:text-base font-medium text-foreground truncate max-w-[180px] md:max-w-[280px]">
-                  {match.homeTeam.name}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-away">2</span>
-                <TeamCrest team={match.awayTeam} />
-                <span className="text-sm md:text-base font-medium text-foreground truncate max-w-[180px] md:max-w-[280px]">
-                  {match.awayTeam.name}
-                </span>
-              </div>
-            </div>
-            <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} />
+      {isLocked && (
+        <div className="mb-2">
+          <div
+            className={`flex items-center gap-1.5 py-1.5 rounded-lg text-xs font-medium ${
+              match.status === 'LIVE'
+                ? 'live-locked-banner px-3 w-fit'
+                : 'bg-destructive/10 border border-destructive/20 text-destructive px-3'
+            }`}
+            data-testid="prediction-locked"
+          >
+            <Lock className="w-3 h-3" />
+            <span>{match.lockReason || 'Prediction closed'}</span>
           </div>
+        </div>
+      )}
 
-          {/* Vote Buttons */}
+      {/* ======= LIST VIEW LAYOUT ======= */}
+      <div className="match-row-list-layout">
+        <div className="flex items-center gap-3 md:gap-4">
+          {/* Left: Team names */}
+          <div className="flex flex-col gap-2 min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-home">1</span>
+              <TeamCrest team={match.homeTeam} />
+              <span className="text-sm md:text-base font-medium text-foreground truncate">
+                {match.homeTeam.name}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-away">2</span>
+              <TeamCrest team={match.awayTeam} />
+              <span className="text-sm md:text-base font-medium text-foreground truncate">
+                {match.awayTeam.name}
+              </span>
+            </div>
+          </div>
+          {/* Center: Score */}
+          <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
+          {/* Right: Vote buttons + Action buttons */}
           <div className="flex items-center gap-1 md:gap-2">
             <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
             <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
             <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
           </div>
-
-          {/* Action Buttons */}
           <div className="flex items-center gap-1 md:gap-2">
             <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} />
             <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
             <RefreshButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
           </div>
         </div>
-      )}
+      </div>
 
-      {/* ======= GRID VIEW (compact stacked) ======= */}
-      {isGrid && (
+      {/* ======= GRID VIEW LAYOUT ======= */}
+      <div className="match-row-grid-layout">
         <div className="space-y-2.5">
-          {/* Teams + Score Row */}
-          <div className="flex items-center gap-2">
+          {/* Teams + Score row */}
+          <div className="flex items-center">
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-home">1</span>
@@ -392,18 +409,14 @@ const MatchRow = ({
                 <span className="text-xs font-medium text-foreground truncate">{match.awayTeam.name}</span>
               </div>
             </div>
-            <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} />
+            <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
           </div>
-
-          {/* Vote + Actions Row */}
           <div className="flex items-center gap-1.5">
-            {/* Compact votes */}
             <div className="flex items-center gap-1 flex-1">
               <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
               <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
               <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
             </div>
-            {/* Compact actions */}
             <div className="flex items-center gap-1 flex-shrink-0">
               <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} />
               <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
@@ -411,10 +424,10 @@ const MatchRow = ({
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Footer Stats */}
-      <div className={`flex items-center gap-3 mt-3 pt-2.5 border-t border-border/30 ${isGrid ? 'text-[11px]' : 'text-xs md:text-sm'}`}>
+      {/* Footer Stats - shared */}
+      <div className="match-row-footer flex items-center gap-3 pt-2.5 border-t border-border/30">
         <span className="text-muted-foreground">
           Total votes: <span className="text-foreground font-medium">{match.totalVotes.toLocaleString()}</span>
         </span>
@@ -436,7 +449,8 @@ const MatchRow = ({
       </div>
     </div>
   );
-};
+});
+MatchRow.displayName = 'MatchRow';
 
 // ============ Main MatchList ============
 export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid' }) => {
@@ -467,10 +481,24 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     });
   }, []);
 
-  const handleRefresh = useCallback((matchId) => {
+  const handleRefresh = useCallback(async (matchId) => {
     setCurrentSelections((prev) => ({ ...prev, [matchId]: null }));
-    toast.info('Selection cleared', { description: 'Your selection has been reset.', duration: 2000 });
-  }, []);
+    // If user had a saved prediction, delete it from backend
+    if (savedPredictions[matchId]) {
+      setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
+      try {
+        await deletePrediction(matchId);
+        if (onPredictionSaved) onPredictionSaved(matchId, null);
+        toast.success('Vote removed', { description: 'Your prediction has been cleared.', duration: 2000 });
+      } catch (error) {
+        toast.error('Failed to remove vote', { description: error.message, duration: 3000 });
+      } finally {
+        setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
+      }
+    } else {
+      toast.info('Selection cleared', { duration: 2000 });
+    }
+  }, [savedPredictions, onPredictionSaved]);
 
   const handleAdvance = useCallback(() => {
     toast.info('Coming Soon!', {
@@ -546,7 +574,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     setPendingPrediction(null);
   }, []);
 
-  // Filter only for live filter - other filtering is done at the API level now
+  // Filter only for live filter
   const displayMatches = activeLeague === 'live' ? matches.filter((m) => m.status === 'LIVE') : matches;
 
   return (
@@ -554,11 +582,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
       <div className="mt-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">All Matches</h3>
         <div
-          className={`transition-all duration-300 ${
-            viewMode === 'grid'
-              ? 'grid grid-cols-1 md:grid-cols-2 gap-3'
-              : 'flex flex-col gap-3'
-          }`}
+          className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
           data-testid="match-list-container"
           data-view-mode={viewMode}
         >
@@ -574,7 +598,6 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               onAdvance={handleAdvance}
               isLoading={loadingMatches[match.id]}
               prevScores={prevScores}
-              viewMode={viewMode}
             />
           ))}
         </div>

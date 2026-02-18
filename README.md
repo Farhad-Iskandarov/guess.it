@@ -474,6 +474,38 @@ Frontend ← WebSocket ← Backend ← Football-Data.org
 
 ---
 
+## Football-Data.org API Token
+
+Hi anonimman926,
+thanks for registering for an API authentication token. Please modify your client to use a HTTP header named "X-Auth-Token" with the underneath personal token as value.
+
+Your API token: 22713fd8769c4a6393cc424a32939dbe
+
+In order to keep your account active and receive updates, please verify your e-mail address by clicking here.
+
+It's perfectly okay not to do so, your account and all of it's data will then automatically get deleted within a certain amount of inactivity.
+
+Follow the quickstart guide to get up and running quickly and dive further into implementation details using the Reference Documentation.
+
+In case there are still open questions feel free to mail and ask me directly.
+
+Best,
+daniel
+
+---
+
+## Changelog
+
+### 2026-02-18
+- Added real Football-Data.org API key for live match data
+- Fixed banner carousel layout shaking (fixed height, opacity transitions, no layout shift)
+- Fixed Grid/List toggle performance (CSS-based switch, memoized components, instant transition)
+- Banner height set to exactly 405px with text padding-left adjusted to 4.5rem
+- Live match cards: larger scores, match minute above score, subtle glow animation, compact locked banner
+- Score alignment: Fixed-width score block (80px) for consistent positioning across all card types (LIVE, FT, upcoming)
+
+---
+
 ## License
 
 This project is for educational and personal use.

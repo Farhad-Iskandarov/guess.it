@@ -6,6 +6,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ChooseNicknamePage } from "@/pages/ChooseNicknamePage";
 import { AuthCallback } from "@/pages/AuthCallback";
+import { MyPredictionsPage } from "@/pages/MyPredictionsPage";
 import { useState, useEffect, useRef } from "react";
 
 // ============ Initial Loading Screen ============
@@ -139,6 +140,7 @@ function AppRouter() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/choose-nickname" element={<ChooseNicknamePage />} />
+      <Route path="/my-predictions" element={<ProtectedRoute><MyPredictionsPage /></ProtectedRoute>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
