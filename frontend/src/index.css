@@ -1,0 +1,330 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+    font-family:
+        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+@layer base {
+    /* ====== LIGHT MODE (Default) ====== */
+    :root {
+        /* GuessIt Light Theme - Clean Sports Prediction */
+        --background: 210 20% 98%;
+        --background-secondary: 210 15% 95%;
+        --foreground: 222 47% 11%;
+        
+        /* Cards and surfaces */
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 11%;
+        --card-hover: 210 15% 97%;
+        
+        /* Popover */
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 11%;
+        
+        /* Primary - Green accent for selections and highlights */
+        --primary: 142 70% 40%;
+        --primary-foreground: 0 0% 100%;
+        --primary-glow: 142 70% 50%;
+        
+        /* Secondary - Light surfaces */
+        --secondary: 210 15% 93%;
+        --secondary-foreground: 222 47% 20%;
+        
+        /* CTA Yellow - For Get Started button only */
+        --cta: 45 100% 45%;
+        --cta-foreground: 0 0% 10%;
+        --cta-hover: 45 100% 50%;
+        
+        /* Muted text */
+        --muted: 210 15% 93%;
+        --muted-foreground: 215 16% 47%;
+        
+        /* Accent for tabs and highlights */
+        --accent: 45 90% 45%;
+        --accent-foreground: 0 0% 10%;
+        
+        /* Destructive - Red for notifications */
+        --destructive: 0 85% 55%;
+        --destructive-foreground: 0 0% 100%;
+        
+        /* Border colors */
+        --border: 214 32% 91%;
+        --border-hover: 214 32% 80%;
+        --input: 214 32% 91%;
+        --ring: 142 70% 40%;
+        
+        /* Vote button states */
+        --vote-active: 142 70% 40%;
+        --vote-active-bg: 142 70% 95%;
+        --vote-inactive: 210 15% 93%;
+        --vote-inactive-hover: 210 15% 88%;
+        
+        /* Chip states */
+        --chip-active: 142 70% 40%;
+        --chip-inactive: 210 15% 93%;
+        
+        /* Text variations */
+        --text-primary: 222 47% 11%;
+        --text-secondary: 215 16% 35%;
+        --text-muted: 215 16% 47%;
+        
+        /* Chart colors */
+        --chart-1: 142 70% 40%;
+        --chart-2: 45 100% 45%;
+        --chart-3: 200 80% 50%;
+        --chart-4: 280 65% 60%;
+        --chart-5: 340 75% 55%;
+        
+        /* Radius */
+        --radius: 0.5rem;
+        --radius-lg: 0.75rem;
+        --radius-xl: 1rem;
+        
+        /* Shadows */
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        --shadow-glow: 0 0 20px hsl(var(--primary) / 0.2);
+        
+        /* Transitions */
+        --transition-fast: 0.15s ease;
+        --transition-normal: 0.25s ease;
+        --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ====== DARK MODE ====== */
+    .dark {
+        /* GuessIt Dark Theme - Premium Sports Prediction */
+        --background: 0 0% 8%;
+        --background-secondary: 0 0% 12%;
+        --foreground: 0 0% 98%;
+        
+        /* Cards and surfaces */
+        --card: 0 0% 14%;
+        --card-foreground: 0 0% 98%;
+        --card-hover: 0 0% 18%;
+        
+        /* Popover */
+        --popover: 0 0% 12%;
+        --popover-foreground: 0 0% 98%;
+        
+        /* Primary - Green accent for selections and highlights */
+        --primary: 142 70% 45%;
+        --primary-foreground: 0 0% 100%;
+        --primary-glow: 142 70% 55%;
+        
+        /* Secondary - Dark surfaces */
+        --secondary: 0 0% 16%;
+        --secondary-foreground: 0 0% 90%;
+        
+        /* CTA Yellow - For Get Started button only */
+        --cta: 45 100% 50%;
+        --cta-foreground: 0 0% 10%;
+        --cta-hover: 45 100% 55%;
+        
+        /* Muted text */
+        --muted: 0 0% 20%;
+        --muted-foreground: 0 0% 60%;
+        
+        /* Accent for tabs and highlights */
+        --accent: 45 90% 50%;
+        --accent-foreground: 0 0% 10%;
+        
+        /* Destructive - Red for notifications */
+        --destructive: 0 85% 55%;
+        --destructive-foreground: 0 0% 100%;
+        
+        /* Border colors */
+        --border: 0 0% 20%;
+        --border-hover: 0 0% 30%;
+        --input: 0 0% 18%;
+        --ring: 142 70% 45%;
+        
+        /* Vote button states */
+        --vote-active: 142 70% 45%;
+        --vote-active-bg: 142 70% 20%;
+        --vote-inactive: 0 0% 22%;
+        --vote-inactive-hover: 0 0% 28%;
+        
+        /* Chip states */
+        --chip-active: 142 70% 45%;
+        --chip-inactive: 0 0% 20%;
+        
+        /* Text variations */
+        --text-primary: 0 0% 100%;
+        --text-secondary: 0 0% 75%;
+        --text-muted: 0 0% 55%;
+        
+        /* Chart colors */
+        --chart-1: 142 70% 45%;
+        --chart-2: 45 100% 50%;
+        --chart-3: 200 80% 50%;
+        --chart-4: 280 65% 60%;
+        --chart-5: 340 75% 55%;
+        
+        /* Shadows for dark mode */
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        --shadow-glow: 0 0 20px hsl(var(--primary) / 0.3);
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+
+    [data-debug-wrapper="true"] > * {
+        margin-left: inherit;
+        margin-right: inherit;
+        margin-top: inherit;
+        margin-bottom: inherit;
+        padding-left: inherit;
+        padding-right: inherit;
+        padding-top: inherit;
+        padding-bottom: inherit;
+        column-gap: inherit;
+        row-gap: inherit;
+        gap: inherit;
+        border-left-width: inherit;
+        border-right-width: inherit;
+        border-top-width: inherit;
+        border-bottom-width: inherit;
+        border-left-style: inherit;
+        border-right-style: inherit;
+        border-top-style: inherit;
+        border-bottom-style: inherit;
+        border-left-color: inherit;
+        border-right-color: inherit;
+        border-top-color: inherit;
+        border-bottom-color: inherit;
+    }
+}
+
+/* Custom utility classes */
+@layer utilities {
+    .text-gradient-primary {
+        @apply bg-gradient-to-r from-primary to-primary-foreground bg-clip-text text-transparent;
+    }
+    
+    .shadow-glow {
+        box-shadow: var(--shadow-glow);
+    }
+    
+    .transition-smooth {
+        transition: var(--transition-smooth);
+    }
+    
+    .bg-glass {
+        backdrop-filter: blur(8px);
+        background: hsl(var(--background) / 0.8);
+    }
+}
+
+/* Vote button animations */
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    }
+    50% {
+        box-shadow: 0 0 15px 3px hsl(var(--primary) / 0.2);
+    }
+}
+
+.vote-pulse {
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Carousel dot animation */
+@keyframes dot-pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+}
+
+.dot-active {
+    animation: dot-pulse 1.5s ease-in-out infinite;
+}
+
+/* Scrollbar styling - Light mode */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: hsl(210 15% 95%);
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(214 32% 80%);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(214 32% 70%);
+}
+
+/* Scrollbar styling - Dark mode */
+.dark ::-webkit-scrollbar-track {
+    background: hsl(0 0% 12%);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: hsl(0 0% 25%);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: hsl(0 0% 35%);
+}
+
+/* Badge notification pulse */
+@keyframes badge-pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+.badge-pulse {
+    animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* Theme transition */
+* {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+}
+
+/* Disable transition for interactive elements to avoid lag */
+button, a, input, select, textarea {
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
