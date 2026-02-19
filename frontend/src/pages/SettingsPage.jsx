@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import {
   User, Camera, Mail, Lock, Edit3, Loader2, Check, X, AlertTriangle,
-  Eye, EyeOff, Shield, Upload, Trash2, Info, ChevronLeft
+  Eye, EyeOff, Shield, Upload, Trash2, Info, ChevronLeft, Bell, Volume2, VolumeX, Globe
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -35,6 +35,127 @@ const SectionCard = memo(({ icon: Icon, title, description, children }) => (
   </div>
 ));
 SectionCard.displayName = 'SectionCard';
+
+// ============ Toggle Row ============
+const ToggleRow = memo(({ icon: Icon, iconColor, title, description, checked, onChange, loading, testId }) => (
+  <div className="flex items-center justify-between py-3" data-testid={testId}>
+    <div className="flex items-start gap-3">
+      <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${iconColor || 'bg-primary/10'} flex-shrink-0 mt-0.5`}>
+        <Icon className="w-4 h-4 text-current" />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+      </div>
+    </div>
+    <button
+      onClick={onChange}
+      disabled={loading}
+      className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${
+        checked ? 'bg-primary' : 'bg-muted-foreground/30'
+      }`}
+      data-testid={`${testId}-toggle`}
+      aria-label={`Toggle ${title}`}
+    >
+      <span className={`block w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+        checked ? 'translate-x-[22px]' : 'translate-x-[2px]'
+      }`} />
+    </button>
+  </div>
+));
+ToggleRow.displayName = 'ToggleRow';
+
+// ============ Privacy & Notifications Section ============
+const PrivacyNotificationsSection = memo(() => {
+  const [onlineVisibility, setOnlineVisibility] = useState(true);
+  const [notificationSound, setNotificationSound] = useState(true);
+  const [loadingVisibility, setLoadingVisibility] = useState(false);
+  const [loadingSound, setLoadingSound] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const resp = await fetch(`${API_URL}/api/settings/preferences`, { credentials: 'include' });
+        if (resp.ok) {
+          const data = await resp.json();
+          setOnlineVisibility(data.data?.online_visibility ?? true);
+          setNotificationSound(data.data?.notification_sound ?? true);
+        }
+      } catch {}
+    };
+    load();
+  }, []);
+
+  const toggleVisibility = useCallback(async () => {
+    setLoadingVisibility(true);
+    const newVal = !onlineVisibility;
+    try {
+      const resp = await fetch(`${API_URL}/api/settings/online-visibility`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible: newVal })
+      });
+      if (resp.ok) {
+        setOnlineVisibility(newVal);
+        toast.success(newVal ? 'Online status visible to friends' : 'Online status hidden from friends');
+      }
+    } catch {
+      toast.error('Failed to update visibility');
+    } finally {
+      setLoadingVisibility(false);
+    }
+  }, [onlineVisibility]);
+
+  const toggleSound = useCallback(async () => {
+    setLoadingSound(true);
+    const newVal = !notificationSound;
+    try {
+      const resp = await fetch(`${API_URL}/api/settings/notification-sound`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newVal })
+      });
+      if (resp.ok) {
+        setNotificationSound(newVal);
+        toast.success(newVal ? 'Notification sounds enabled' : 'Notification sounds muted');
+      }
+    } catch {
+      toast.error('Failed to update sound setting');
+    } finally {
+      setLoadingSound(false);
+    }
+  }, [notificationSound]);
+
+  return (
+    <SectionCard icon={Bell} title="Privacy & Notifications" description="Control your visibility and notification preferences">
+      <div className="space-y-1 divide-y divide-border/30">
+        <ToggleRow
+          icon={Globe}
+          iconColor="bg-emerald-500/10 text-emerald-500"
+          title="Online Visibility"
+          description="Show your online status to friends"
+          checked={onlineVisibility}
+          onChange={toggleVisibility}
+          loading={loadingVisibility}
+          testId="online-visibility"
+        />
+        <ToggleRow
+          icon={notificationSound ? Volume2 : VolumeX}
+          iconColor="bg-blue-500/10 text-blue-500"
+          title="Notification Sounds"
+          description="Play sounds for messages and alerts"
+          checked={notificationSound}
+          onChange={toggleSound}
+          loading={loadingSound}
+          testId="notification-sound"
+        />
+      </div>
+    </SectionCard>
+  );
+});
+PrivacyNotificationsSection.displayName = 'PrivacyNotificationsSection';
 
 // ============ Password Input ============
 const PasswordInput = memo(({ id, label, value, onChange, placeholder, error, disabled }) => {
@@ -756,6 +877,9 @@ export const SettingsPage = () => {
               </div>
             </SectionCard>
           )}
+
+          {/* ============ Privacy & Notifications Section ============ */}
+          <PrivacyNotificationsSection />
         </div>
       </main>
 

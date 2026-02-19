@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-route
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { FriendsProvider } from "@/lib/FriendsContext";
+import { MessagesProvider } from "@/lib/MessagesContext";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
@@ -11,6 +12,8 @@ import { MyPredictionsPage } from "@/pages/MyPredictionsPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { FriendsPage } from "@/pages/FriendsPage";
+import { MessagesPage } from "@/pages/MessagesPage";
+import { GuestProfilePage } from "@/pages/GuestProfilePage";
 import { useState, useEffect, useRef } from "react";
 
 // ============ Initial Loading Screen ============
@@ -148,6 +151,8 @@ function AppRouter() {
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
+      <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+      <Route path="/profile/:userId" element={<ProtectedRoute><GuestProfilePage /></ProtectedRoute>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -188,7 +193,9 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <FriendsProvider>
-          <AppShell />
+          <MessagesProvider>
+            <AppShell />
+          </MessagesProvider>
         </FriendsProvider>
       </AuthProvider>
     </ThemeProvider>

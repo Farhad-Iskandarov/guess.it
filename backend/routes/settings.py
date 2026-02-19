@@ -82,6 +82,14 @@ class SettingsResponse(BaseModel):
     message: str
     data: dict = None
 
+class OnlineVisibilityRequest(BaseModel):
+    """Toggle online visibility"""
+    visible: bool
+
+class NotificationSoundRequest(BaseModel):
+    """Toggle notification sounds"""
+    enabled: bool
+
 # ==================== Helper Functions ====================
 
 def get_db(request: Request) -> AsyncIOMotorDatabase:
@@ -478,5 +486,91 @@ async def get_nickname_change_status(
             "nickname_set": nickname_set,
             "nickname_changed": nickname_changed,
             "can_change_nickname": can_change
+        }
+    )
+
+
+@router.post("/online-visibility", response_model=SettingsResponse)
+async def set_online_visibility(
+    data: OnlineVisibilityRequest,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Toggle online/offline visibility to other users"""
+    user = await get_current_user(request, db)
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"online_visibility": data.visible, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    return SettingsResponse(
+        success=True,
+        message=f"Online visibility {'enabled' if data.visible else 'disabled'}",
+        data={"online_visibility": data.visible}
+    )
+
+@router.get("/online-visibility", response_model=SettingsResponse)
+async def get_online_visibility(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get current online visibility setting"""
+    user = await get_current_user(request, db)
+
+    return SettingsResponse(
+        success=True,
+        message="Online visibility status",
+        data={"online_visibility": user.get("online_visibility", True)}
+    )
+
+@router.post("/notification-sound", response_model=SettingsResponse)
+async def set_notification_sound(
+    data: NotificationSoundRequest,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Toggle notification sounds"""
+    user = await get_current_user(request, db)
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"notification_sound": data.enabled, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    return SettingsResponse(
+        success=True,
+        message=f"Notification sounds {'enabled' if data.enabled else 'disabled'}",
+        data={"notification_sound": data.enabled}
+    )
+
+@router.get("/notification-sound", response_model=SettingsResponse)
+async def get_notification_sound(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get notification sound setting"""
+    user = await get_current_user(request, db)
+
+    return SettingsResponse(
+        success=True,
+        message="Notification sound status",
+        data={"notification_sound": user.get("notification_sound", True)}
+    )
+
+@router.get("/preferences", response_model=SettingsResponse)
+async def get_all_preferences(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get all user preferences at once"""
+    user = await get_current_user(request, db)
+
+    return SettingsResponse(
+        success=True,
+        message="Preferences loaded",
+        data={
+            "online_visibility": user.get("online_visibility", True),
+            "notification_sound": user.get("notification_sound", True)
         }
     )

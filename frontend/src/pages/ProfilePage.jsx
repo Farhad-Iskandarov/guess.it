@@ -256,10 +256,11 @@ export const ProfilePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [removingFavorite, setRemovingFavorite] = useState(null);
 
-  // Fetch user data
+  // Fetch user data — parallelized, don't block on user refresh
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
+      // Core data fetches in parallel — don't wait for user refresh
       const [predictionsData, favoritesData] = await Promise.all([
         getMyDetailedPredictions(),
         getFavoriteClubs()
@@ -268,13 +269,13 @@ export const ProfilePage = () => {
       setPredictions(predictionsData.predictions || []);
       setSummary(predictionsData.summary || { correct: 0, wrong: 0, pending: 0, points: 0 });
       setFavorites(favoritesData.favorites || []);
+      setIsLoading(false);
 
-      // Refresh user and friends
-      await Promise.all([refreshUser(), fetchFriends(true)]);
+      // Background refresh — non-blocking
+      Promise.all([refreshUser(), fetchFriends(true)]).catch(() => {});
     } catch (error) {
       console.error('Failed to fetch profile data:', error);
       toast.error('Failed to load profile data');
-    } finally {
       setIsLoading(false);
     }
   }, [refreshUser, fetchFriends]);

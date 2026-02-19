@@ -246,3 +246,24 @@ async def search_matches(
             break
 
     return {"matches": results, "total": len(results), "query": q}
+
+
+@router.get("/matches/ended")
+async def ended_matches(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Get recently finished matches (within the last 24 hours)"""
+    today = datetime.now(timezone.utc)
+    yesterday = today - timedelta(hours=24)
+    date_from = yesterday.strftime("%Y-%m-%d")
+    date_to = today.strftime("%Y-%m-%d")
+
+    all_matches = await get_matches(db, date_from=date_from, date_to=date_to)
+
+    # Filter only finished matches
+    finished = [m for m in all_matches if m.get("status") == "FINISHED"]
+
+    # Sort by utcDate descending (most recent first)
+    finished.sort(key=lambda m: m.get("utcDate", ""), reverse=True)
+
+    return {"matches": finished, "total": len(finished)}

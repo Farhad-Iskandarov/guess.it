@@ -142,3 +142,19 @@ export const getStaleCachedMatches = (leagueId) => {
   if (leagueId === 'all') return getStale('matches_');
   return getStale(`matches_competition_${leagueId}`);
 };
+
+
+/**
+ * Fetch recently ended matches (within last 24 hours)
+ */
+export const fetchEndedMatches = async () => {
+  const cacheKey = 'matches_ended';
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  const response = await fetch(`${API_URL}/api/football/matches/ended`);
+  if (!response.ok) throw new Error('Failed to fetch ended matches');
+  const data = await response.json();
+  setCache(cacheKey, data);
+  return data;
+};

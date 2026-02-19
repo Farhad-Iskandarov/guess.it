@@ -10,12 +10,12 @@ import { MatchList } from '@/components/home/MatchList';
 import { useAuth } from '@/lib/AuthContext';
 import { getMyPredictions, savePrediction } from '@/services/predictions';
 import { getFavoriteClubs, addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
-import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches } from '@/services/matches';
+import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches, fetchEndedMatches } from '@/services/matches';
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock } from 'lucide-react';
 
 // League filters - maps to competition codes
 const leagueFilters = [
@@ -34,13 +34,40 @@ const baseTabs = [
   { id: 'popular', name: 'Popular', active: true },
   { id: 'top-live', name: 'Top Live' },
   { id: 'soon', name: 'Soon' },
+  { id: 'ended', name: 'Ended' },
 ];
 
-const mockNotifications = {
-  messages: 10,
-  friends: 3,
-  alerts: 5,
-};
+// ============ Loading Skeleton ============
+const MatchSkeleton = () => (
+  <div className="match-skeleton">
+    <div className="flex items-center gap-2 mb-3">
+      <div className="skeleton-line w-12 h-4" />
+      <div className="skeleton-line w-20 h-4" />
+      <div className="skeleton-line w-16 h-4" />
+    </div>
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-2">
+        <div className="skeleton-circle w-6 h-6" />
+        <div className="skeleton-line w-24 h-4 flex-1" />
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="skeleton-circle w-6 h-6" />
+        <div className="skeleton-line w-28 h-4 flex-1" />
+      </div>
+    </div>
+    <div className="flex gap-2 mt-3">
+      <div className="skeleton-line h-12 flex-1 rounded-lg" />
+      <div className="skeleton-line h-12 flex-1 rounded-lg" />
+      <div className="skeleton-line h-12 flex-1 rounded-lg" />
+    </div>
+  </div>
+);
+
+const MatchSkeletonGrid = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+    {[...Array(4)].map((_, i) => <MatchSkeleton key={i} />)}
+  </div>
+);
 
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('popular');
@@ -69,6 +96,13 @@ export const HomePage = () => {
   // Favorites state
   const [favoriteTeamIds, setFavoriteTeamIds] = useState(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+
+  // Ended matches state
+  const [endedMatches, setEndedMatches] = useState([]);
+  const [endedLoading, setEndedLoading] = useState(false);
+
+  // Filter animation key — triggers re-animation on filter change
+  const [filterKey, setFilterKey] = useState(0);
 
   // Real authentication from AuthContext
   const { user, isAuthenticated, logout } = useAuth();
@@ -276,14 +310,24 @@ export const HomePage = () => {
 
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
+    setFilterKey(prev => prev + 1);
     // When switching to favorite tab, reset league to 'all' to show all matches
     if (tabId === 'favorite') {
       setActiveLeague('all');
+    }
+    // When switching to ended tab, fetch ended matches
+    if (tabId === 'ended') {
+      setEndedLoading(true);
+      fetchEndedMatches()
+        .then(data => setEndedMatches(data.matches || []))
+        .catch(e => console.error('Failed to fetch ended matches:', e))
+        .finally(() => setEndedLoading(false));
     }
   }, []);
 
   const handleLeagueChange = useCallback((leagueId) => {
     setActiveLeague(leagueId);
+    setFilterKey(prev => prev + 1);
   }, []);
 
   const handlePredictionSaved = useCallback((matchId, prediction) => {
@@ -322,7 +366,6 @@ export const HomePage = () => {
         user={user}
         isAuthenticated={isAuthenticated}
         onLogout={handleLogout}
-        notifications={isAuthenticated ? mockNotifications : {}}
         onMatchSelect={handleMatchHighlight}
       />
 
@@ -388,12 +431,9 @@ export const HomePage = () => {
           </div>
         </div>
 
-        {/* Loading State */}
-        {isLoadingMatches && matches.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="matches-loading">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground text-sm">Loading matches...</p>
-          </div>
+        {/* Loading State - Skeleton */}
+        {isLoadingMatches && matches.length === 0 && activeTab !== 'ended' && (
+          <MatchSkeletonGrid />
         )}
 
         {/* Error State */}
@@ -410,7 +450,7 @@ export const HomePage = () => {
         )}
 
         {/* No Matches */}
-        {!isLoadingMatches && !matchError && matches.length === 0 && activeTab !== 'favorite' && (
+        {!isLoadingMatches && !matchError && matches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
           <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="no-matches">
             <p className="text-lg text-foreground font-medium">No matches found</p>
             <p className="text-sm text-muted-foreground">
@@ -423,7 +463,7 @@ export const HomePage = () => {
 
         {/* Favorite Tab Content */}
         {activeTab === 'favorite' && isAuthenticated && (
-          <>
+          <div key={`filter-fav-${filterKey}`} className="match-list-animate-in">
             {(() => {
               const favoriteMatches = matches.filter(m =>
                 favoriteTeamIds.has(m.homeTeam.id) || favoriteTeamIds.has(m.awayTeam.id)
@@ -462,12 +502,46 @@ export const HomePage = () => {
                 />
               );
             })()}
-          </>
+          </div>
         )}
 
-        {/* Match Content (non-favorite tabs) */}
-        {matches.length > 0 && activeTab !== 'favorite' && (
-          <>
+        {/* Ended Matches Tab Content */}
+        {activeTab === 'ended' && (
+          <div key={`filter-ended-${filterKey}`} className="match-list-animate-in ended-matches-section" data-testid="ended-matches-section">
+            {endedLoading ? (
+              <MatchSkeletonGrid />
+            ) : endedMatches.length > 0 ? (
+              <>
+                <div className="flex items-center gap-2 mt-4 mb-3">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-base font-semibold text-foreground">Recently Finished</h3>
+                  <span className="text-xs text-muted-foreground">({endedMatches.length} matches in last 24h)</span>
+                </div>
+                <MatchList
+                  matches={endedMatches}
+                  savedPredictions={savedPredictions}
+                  onPredictionSaved={handlePredictionSaved}
+                  activeLeague="all"
+                  viewMode={viewMode}
+                  favoriteTeamIds={favoriteTeamIds}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="no-ended-matches">
+                <Clock className="w-12 h-12 text-muted-foreground/30" />
+                <p className="text-lg text-foreground font-medium">No recently ended matches</p>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Finished matches will appear here for 24 hours after the final whistle.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Match Content (non-favorite, non-ended tabs) */}
+        {matches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+          <div key={`filter-${activeLeague}-${filterKey}`} className="match-list-animate-in">
             {/* Full Match List */}
             <MatchList
               matches={matches}
@@ -478,7 +552,7 @@ export const HomePage = () => {
               favoriteTeamIds={favoriteTeamIds}
               onToggleFavorite={handleToggleFavorite}
             />
-          </>
+          </div>
         )}
       </main>
 

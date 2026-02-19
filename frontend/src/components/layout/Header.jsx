@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
 import { useFriends } from '@/lib/FriendsContext';
+import { useMessages } from '@/lib/MessagesContext';
 import { searchMatches } from '@/services/matches';
+import { NotificationDropdown } from './NotificationDropdown';
 import {
   Tooltip,
   TooltipContent,
@@ -147,6 +149,7 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/profile')} data-testid="nav-profile">Profile</DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/messages')} data-testid="nav-messages">Messages</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/settings')} data-testid="nav-settings">Settings</DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -433,7 +436,7 @@ const GlobalSearch = ({ onMatchSelect }) => {
 };
 
 // =========== Main Header ===========
-export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notifications = {}, onMatchSelect }) => {
+export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, onMatchSelect }) => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -445,15 +448,29 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
     const { pendingCount } = useFriends();
     friendRequestCount = pendingCount;
   } catch {
-    // FriendsContext not available (not authenticated)
     friendRequestCount = 0;
+  }
+
+  // Get unread message and notification counts
+  let messageCount = 0;
+  let notifCount = 0;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { unreadMessages, unreadNotifications } = useMessages();
+    messageCount = unreadMessages;
+    notifCount = unreadNotifications;
+  } catch {
+    messageCount = 0;
+    notifCount = 0;
   }
 
   const handleFeatureClick = useCallback((feature) => {
     if (feature === 'Friends') {
       navigate('/friends');
-    } else {
-      console.log(`Navigating to ${feature}`);
+    } else if (feature === 'Messages') {
+      navigate('/messages');
+    } else if (feature === 'Notifications') {
+      navigate('/messages'); // Notifications shown in messages for now
     }
   }, [navigate]);
 
@@ -528,12 +545,12 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
             {isAuthenticated && (
               <>
                 <span className="hidden sm:inline-flex">
-                  <HeaderIconButton icon={Mail} badge={notifications?.messages} onClick={() => handleFeatureClick('Messages')} tooltip="Messages" testId="header-messages" />
+                  <HeaderIconButton icon={Mail} badge={messageCount} onClick={() => handleFeatureClick('Messages')} tooltip="Messages" testId="header-messages" />
                 </span>
                 <span className="hidden sm:inline-flex">
                   <HeaderIconButton icon={Users} badge={friendRequestCount} onClick={() => handleFeatureClick('Friends')} tooltip="Friend Requests" testId="header-friends" />
                 </span>
-                <HeaderIconButton icon={Bell} badge={notifications?.alerts} onClick={() => handleFeatureClick('Notifications')} tooltip="Notifications" testId="header-notifications" />
+                <NotificationDropdown />
               </>
             )}
 

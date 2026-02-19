@@ -1,153 +1,65 @@
-# GuessIt - Football Match Prediction Application
+# GuessIt — Football Prediction Platform (Clone)
 
 ## Original Problem Statement
-Clone the GitHub project https://github.com/Farhad-Iskandarov/guess.it completely and set it up as an identical, editable copy. The project is a football match prediction application that allows users to predict match outcomes and compete with friends.
+Clone the existing GuessIt project from https://github.com/Farhad-Iskandarov/guess.it as an exact 100% identical duplicate. No redesign, no changes. Preserve all pages, routes, logic, database schema, and integrations.
 
-## Project Overview
-GuessIt is a football match prediction platform where users can:
-- View upcoming and live football matches
-- Make predictions on match outcomes (Home Win, Draw, Away Win)
-- Earn points for correct predictions
-- Track their prediction history and performance
-- Add favorite teams
-- Compete with friends
+## Architecture
+- **Frontend**: React 19, Tailwind CSS, Shadcn/UI, Radix UI, Lucide React, CRACO, React Router v7
+- **Backend**: Python 3.11, FastAPI, Uvicorn, Motor (async MongoDB driver)
+- **Database**: MongoDB (guessit)
+- **Auth**: bcrypt, httpOnly session cookies, Emergent Google OAuth
+- **External API**: Football-Data.org v4 (API key: configured in .env)
+- **Real-Time**: WebSocket + polling fallback
 
-## Tech Stack
-- **Frontend**: React 19, Tailwind CSS, shadcn/ui components
-- **Backend**: FastAPI (Python)
-- **Database**: MongoDB
-- **External API**: Football-Data.org (free tier)
-- **Authentication**: Email/Password + Google OAuth (Emergent Auth)
+## Core Requirements (Static)
+1. Browse upcoming/live football matches from major leagues
+2. Predict match outcomes (Home/Draw/Away)
+3. Live score updates via WebSocket (30s polling)
+4. User authentication (email/password + Google OAuth)
+5. Points & Level system (10 levels, +10 correct, -5 wrong after Lv5)
+6. Favorite clubs with heart toggle
+7. Friends system with real-time WebSocket notifications
+8. User profile & settings (avatar upload, nickname change, password change)
+9. My Predictions page with filters, search, edit/remove
+10. Dark/Light theme toggle
 
-## Core Features
+## What's Been Implemented (Clone completed 2026-02-19)
+- Full project cloned from GitHub repository
+- All backend routes: auth, football, predictions, favorites, friends, settings
+- All frontend pages: Home, Login, Register, ChooseNickname, AuthCallback, MyPredictions, Profile, Settings, Friends
+- All components: Header, Footer, PromoBanner, TabsSection, LeagueFilters, MatchList, MatchCard, etc.
+- 46 Shadcn/UI components
+- Football-Data.org API integration configured with API key
+- MongoDB configured with DB_NAME=guessit
+- WebSocket for live match updates and friend notifications
 
-### 1. Match Display
-- Live matches section with real-time updates via WebSocket
-- Upcoming matches for the next 7 days
-- Competition filters (UCL, Premier League, La Liga, Serie A, Bundesliga, Ligue 1)
-- Grid/List view toggle
-- Team crests and competition emblems
+## Testing Results
+- Backend: 100% (all API endpoints working)
+- Frontend: 95% (all UI working, WebSocket through preview proxy uses fallback polling)
+- Registration, Login, Football API, Predictions, Favorites, Friends, Settings — all verified
 
-### 2. User Authentication
-- Email registration with password confirmation
-- Google OAuth integration
-- Unique nickname system (required after registration)
-- Session-based authentication with httpOnly cookies
+## User Personas
+- Football fans who want to predict match outcomes
+- Competitive users who track points/levels
+- Social users who add friends and share predictions
 
-### 3. Predictions System
-- Vote on match outcomes (Home/Draw/Away)
-- Predictions lock 10 minutes before match start
-- Points system:
-  - +10 points for correct prediction
-  - -5 points penalty for wrong predictions (level 5+)
-- Level progression based on total points
+## Prioritized Backlog
+### P0 (Critical) — Done
+- [x] Full project clone
+- [x] Football API integration
+- [x] Auth system
+- [x] All pages and routes
 
-### 4. Favorites System
-- Add/remove favorite clubs
-- Filter matches by favorite teams
-- Quick access via Favorite tab
+### P1 (High)
+- [ ] Leaderboard System
+- [ ] Push Notifications
+- [ ] Match Result Comparison (show correct/incorrect)
 
-### 5. User Profile
-- Points and level tracking
-- Prediction history with results
-- Performance statistics
+### P2 (Medium)
+- [ ] Advanced Predictions (score prediction, first goal scorer)
+- [ ] Newsletter System
+- [ ] PWA Support
+- [ ] Historical Statistics
 
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - Register with email/password
-- `POST /api/auth/login` - Login with email/password
-- `POST /api/auth/google/callback` - Google OAuth callback
-- `POST /api/auth/nickname` - Set user nickname
-- `GET /api/auth/nickname/check` - Check nickname availability
-- `GET /api/auth/me` - Get current user
-- `POST /api/auth/logout` - Logout
-
-### Football
-- `GET /api/football/competitions` - List available competitions
-- `GET /api/football/matches` - Get matches with filters
-- `GET /api/football/matches/today` - Today's matches
-- `GET /api/football/matches/live` - Live matches
-- `GET /api/football/matches/upcoming` - Upcoming matches
-- `GET /api/football/search` - Search matches by team name
-- `WS /api/ws/matches` - WebSocket for live updates
-
-### Predictions
-- `POST /api/predictions` - Create/update prediction
-- `GET /api/predictions/me` - Get user's predictions
-- `GET /api/predictions/me/detailed` - Get predictions with match data
-- `GET /api/predictions/match/{match_id}` - Get prediction for specific match
-- `DELETE /api/predictions/match/{match_id}` - Delete prediction
-
-### Favorites
-- `GET /api/favorites/clubs` - Get favorite clubs
-- `POST /api/favorites/clubs` - Add favorite club
-- `DELETE /api/favorites/clubs/{team_id}` - Remove favorite club
-
-## Environment Variables
-
-### Backend (.env)
-```
-MONGO_URL="mongodb://localhost:27017"
-DB_NAME="test_database"
-CORS_ORIGINS="*"
-FOOTBALL_API_KEY=<your-api-key>
-```
-
-### Frontend (.env)
-```
-REACT_APP_BACKEND_URL=<backend-url>
-WDS_SOCKET_PORT=443
-ENABLE_HEALTH_CHECK=false
-```
-
-## What's Been Implemented (Feb 19, 2026)
-
-### Completed
-- [x] Project cloned from GitHub repository
-- [x] Backend server running with FastAPI
-- [x] Frontend running with React
-- [x] Football-Data.org API integration
-- [x] User registration (email + Google OAuth)
-- [x] User login and session management
-- [x] Nickname system
-- [x] Match listing with filters
-- [x] Live match updates via WebSocket
-- [x] Prediction creation and management
-- [x] Points and level system
-- [x] Favorites system
-- [x] Dark/Light mode toggle
-- [x] All API tests passing (56+ tests)
-- [x] ESLint warnings fixed
-- [x] **Profile Page** - Modern, animated user profile with stats and achievements
-- [x] **Settings Page** - Comprehensive account settings (avatar, email, password, nickname)
-- [x] **Real-Time Friendship System**:
-  - Friends page with search, tabs (Friends/Incoming/Sent)
-  - Send/Accept/Decline/Cancel friend requests
-  - Remove friends
-  - WebSocket notifications for real-time updates
-  - Header badge showing pending request count
-  - Friends section in Profile page
-
-### Test Users Created
-- testuser@example.com / TestPass123! / TestPlayer
-- testuser2@example.com / TestPass123! / Player2
-- uitest_76272@example.com / TestPass123! / UITest8258
-
-## Project Health
-- Backend: RUNNING (100% healthy)
-- Frontend: RUNNING (100% healthy)
-- Database: MongoDB RUNNING
-- External API: Football-Data.org CONNECTED
-
-## Upcoming Tasks
-*No upcoming tasks - awaiting user confirmation that clone is complete*
-
-## Future/Backlog Tasks
-*All future changes pending user confirmation*
-
-## Notes
-- Football API has rate limit of 10 requests/minute on free tier
-- Predictions lock 10 minutes before match kickoff
-- WebSocket provides live match updates every 30 seconds
-- Session tokens expire after 7 days
+## Next Tasks
+- Awaiting user's specific change requests for the cloned project

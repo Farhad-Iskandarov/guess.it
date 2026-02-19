@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -20,11 +20,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
   Search, Users, UserPlus, UserMinus, UserCheck, UserX, Clock,
-  Loader2, ChevronLeft, Trophy, Zap, Send, X, Check, AlertCircle
+  Loader2, ChevronLeft, Trophy, Zap, Send, X, Check, AlertCircle, MessageSquare
 } from 'lucide-react';
 
 // ============ User Card ============
-const UserCard = memo(({ user, action, actionLabel, actionIcon: ActionIcon, onAction, isLoading, variant = 'default' }) => {
+const UserCard = memo(({ user, action, actionLabel, actionIcon: ActionIcon, onAction, isLoading, variant = 'default', onMessage }) => {
   const initials = (user.nickname || 'U').charAt(0).toUpperCase();
   
   return (
@@ -59,27 +59,41 @@ const UserCard = memo(({ user, action, actionLabel, actionIcon: ActionIcon, onAc
         </div>
       </div>
       
-      {action && (
-        <Button
-          variant={action === 'remove' || action === 'decline' ? 'ghost' : 'default'}
-          size="sm"
-          onClick={() => onAction(user)}
-          disabled={isLoading}
-          className={`gap-1.5 flex-shrink-0 ${
-            action === 'remove' || action === 'decline' 
-              ? 'text-destructive hover:text-destructive hover:bg-destructive/10' 
-              : ''
-          }`}
-          data-testid={`${action}-btn-${user.user_id}`}
-        >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            ActionIcon && <ActionIcon className="w-4 h-4" />
-          )}
-          <span className="hidden sm:inline">{actionLabel}</span>
-        </Button>
-      )}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {onMessage && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onMessage(user)}
+            className="gap-1.5 text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+            data-testid={`message-btn-${user.user_id}`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">Message</span>
+          </Button>
+        )}
+        {action && (
+          <Button
+            variant={action === 'remove' || action === 'decline' ? 'ghost' : 'default'}
+            size="sm"
+            onClick={() => onAction(user)}
+            disabled={isLoading}
+            className={`gap-1.5 ${
+              action === 'remove' || action === 'decline' 
+                ? 'text-destructive hover:text-destructive hover:bg-destructive/10' 
+                : ''
+            }`}
+            data-testid={`${action}-btn-${user.user_id}`}
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              ActionIcon && <ActionIcon className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">{actionLabel}</span>
+          </Button>
+        )}
+      </div>
     </div>
   );
 });
@@ -425,6 +439,19 @@ export const FriendsPage = () => {
     }
   }, [removeFriendLocal]);
 
+  // Handle message friend - navigate to /messages with friend pre-selected
+  const handleMessageFriend = useCallback((friend) => {
+    navigate('/messages', { state: { openChat: friend } });
+  }, [navigate]);
+
+  // Friend list filter
+  const [friendFilter, setFriendFilter] = useState('');
+  const filteredFriends = useMemo(() => {
+    if (!friendFilter) return friends;
+    const q = friendFilter.toLowerCase();
+    return friends.filter(f => f.nickname?.toLowerCase().includes(q));
+  }, [friends, friendFilter]);
+
   // Handle logout
   const handleLogout = useCallback(async () => {
     await logout();
@@ -553,8 +580,29 @@ export const FriendsPage = () => {
 
           {/* Friends Tab */}
           <TabsContent value="friends" className="space-y-2">
-            {friends.length > 0 ? (
-              friends.map(friend => (
+            {friends.length > 5 && (
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Filter friends..."
+                  value={friendFilter}
+                  onChange={(e) => setFriendFilter(e.target.value)}
+                  className="pl-9 pr-9 h-9 text-sm"
+                  data-testid="friend-filter-input"
+                />
+                {friendFilter && (
+                  <button
+                    onClick={() => setFriendFilter('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            {filteredFriends.length > 0 ? (
+              filteredFriends.map(friend => (
                 <UserCard
                   key={friend.user_id}
                   user={friend}
@@ -562,9 +610,12 @@ export const FriendsPage = () => {
                   actionLabel="Remove"
                   actionIcon={UserMinus}
                   onAction={handleRemoveFriend}
+                  onMessage={handleMessageFriend}
                   isLoading={loadingAction === friend.user_id}
                 />
               ))
+            ) : friendFilter ? (
+              <p className="text-center text-muted-foreground py-8">No friends matching "{friendFilter}"</p>
             ) : (
               <EmptyState
                 icon={Users}

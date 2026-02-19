@@ -266,6 +266,14 @@ async def send_friend_request(
         "request": formatted
     })
     
+    # Create persistent notification
+    from routes.notifications import create_notification
+    await create_notification(
+        db, target_user["user_id"], "friend_request",
+        f"{user.get('nickname')} sent you a friend request",
+        {"sender_id": user["user_id"], "sender_nickname": user.get("nickname"), "request_id": request_id}
+    )
+    
     logger.info(f"Friend request sent from {user['user_id']} to {target_user['user_id']}")
     
     return {
@@ -386,6 +394,14 @@ async def accept_friend_request(
         "type": "friend_added",
         "friend": format_friend(sender) if sender else None
     })
+    
+    # Create persistent notification for the sender
+    from routes.notifications import create_notification
+    await create_notification(
+        db, friend_request["sender_id"], "friend_accepted",
+        f"{user.get('nickname')} accepted your friend request",
+        {"friend_id": user["user_id"], "friend_nickname": user.get("nickname")}
+    )
     
     logger.info(f"Friend request {request_id} accepted. {user['user_id']} and {friend_request['sender_id']} are now friends")
     
@@ -618,3 +634,52 @@ async def search_users(
         })
     
     return {"users": results, "total": len(results)}
+
+
+@router.get("/profile/{friend_user_id}")
+async def get_friend_profile(
+    friend_user_id: str,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get a friend's profile (guest view) - only accessible if friends"""
+    user = await get_current_user(request, db)
+
+    # Must be friends
+    friendship = await db.friendships.find_one({
+        "$or": [
+            {"user_a": user["user_id"], "user_b": friend_user_id},
+            {"user_a": friend_user_id, "user_b": user["user_id"]}
+        ]
+    })
+    if not friendship:
+        raise HTTPException(status_code=403, detail="You can only view profiles of your friends")
+
+    friend = await get_user_by_id(db, friend_user_id)
+    if not friend:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Check online visibility preference
+    show_online = friend.get("online_visibility", True)
+
+    # Get prediction stats
+    total_predictions = await db.predictions.count_documents({"user_id": friend_user_id})
+    correct_predictions = await db.predictions.count_documents({"user_id": friend_user_id, "result": "correct"})
+
+    # Determine online status from WS managers
+    from routes.messages import chat_manager, notification_manager
+    is_online = chat_manager.is_online(friend_user_id) or notification_manager.is_online(friend_user_id)
+
+    return {
+        "user_id": friend["user_id"],
+        "nickname": friend.get("nickname"),
+        "picture": friend.get("picture"),
+        "level": friend.get("level", 0),
+        "points": friend.get("points", 0),
+        "is_online": is_online if show_online else None,
+        "last_seen": friend.get("last_seen") if show_online else None,
+        "total_predictions": total_predictions,
+        "correct_predictions": correct_predictions,
+        "created_at": friend.get("created_at"),
+        "is_friend": True
+    }

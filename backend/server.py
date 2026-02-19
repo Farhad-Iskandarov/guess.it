@@ -20,6 +20,8 @@ from routes.football import router as football_router, manager as ws_manager, st
 from routes.favorites import router as favorites_router
 from routes.settings import router as settings_router
 from routes.friends import router as friends_router, friend_manager
+from routes.messages import router as messages_router, chat_manager, notification_manager
+from routes.notifications import router as notifications_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -91,6 +93,8 @@ api_router.include_router(football_router)
 api_router.include_router(favorites_router)
 api_router.include_router(settings_router)
 api_router.include_router(friends_router)
+api_router.include_router(messages_router)
+api_router.include_router(notifications_router)
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -164,9 +168,100 @@ async def websocket_friends(websocket: WebSocket, user_id: str):
         await friend_manager.disconnect(websocket, user_id)
 
 
+# ==================== WebSocket: Chat ====================
+
+@app.websocket("/api/ws/chat/{user_id}")
+async def websocket_chat(websocket: WebSocket, user_id: str):
+    """WebSocket for real-time chat messages"""
+    session_token = websocket.cookies.get("session_token")
+    if not session_token:
+        # Try query param fallback
+        session_token = websocket.query_params.get("token")
+    if not session_token:
+        await websocket.close(code=4001, reason="Not authenticated")
+        return
+
+    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+    if not session or session.get("user_id") != user_id:
+        await websocket.close(code=4003, reason="Invalid session")
+        return
+
+    # Update online status
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_online": True, "last_seen": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    await chat_manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        await chat_manager.disconnect(websocket, user_id)
+        # Update offline status only if no other connections remain
+        if not chat_manager.is_online(user_id) and not notification_manager.is_online(user_id):
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}
+            )
+
+
+# ==================== WebSocket: Notifications ====================
+
+@app.websocket("/api/ws/notifications/{user_id}")
+async def websocket_notifications(websocket: WebSocket, user_id: str):
+    """WebSocket for real-time notifications (messages, friend requests, badges, etc.)"""
+    session_token = websocket.cookies.get("session_token")
+    if not session_token:
+        session_token = websocket.query_params.get("token")
+    if not session_token:
+        await websocket.close(code=4001, reason="Not authenticated")
+        return
+
+    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+    if not session or session.get("user_id") != user_id:
+        await websocket.close(code=4003, reason="Invalid session")
+        return
+
+    # Update online status
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_online": True, "last_seen": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    await notification_manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        await notification_manager.disconnect(websocket, user_id)
+        if not chat_manager.is_online(user_id) and not notification_manager.is_online(user_id):
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}
+            )
+
+
 @app.on_event("startup")
 async def startup_event():
     """Start background polling for live matches"""
+    # Create indexes for messages and notifications
+    await db.messages.create_index([("sender_id", 1), ("receiver_id", 1), ("created_at", -1)])
+    await db.messages.create_index([("receiver_id", 1), ("read", 1)])
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("read", 1)])
     start_polling(db)
 
 

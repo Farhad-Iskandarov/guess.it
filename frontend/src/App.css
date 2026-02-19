@@ -140,8 +140,10 @@ main {
 }
 
 /* Match list container: no transition on layout change for instant toggle */
-.match-list-container,
-.match-list-container * {
+.match-list-container {
+    /* transitions enabled for smooth view switching */
+}
+.match-list-container .match-row-card > div > div {
     transition: none !important;
 }
 /* Re-enable transitions only for interactive elements inside match cards */
@@ -158,6 +160,67 @@ button, a, input, select, textarea {
 /* ===== Match List: CSS-based Grid/List toggle (no re-render) ===== */
 .match-list-container {
     gap: 0.75rem;
+}
+
+/* Smooth view mode transition — animate cards on grid/list switch */
+.match-list-container .match-row-card {
+    animation: card-appear 0.3s ease-out both;
+}
+@keyframes card-appear {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Stagger children for visual delight */
+.match-list-container .match-row-card:nth-child(1) { animation-delay: 0ms; }
+.match-list-container .match-row-card:nth-child(2) { animation-delay: 30ms; }
+.match-list-container .match-row-card:nth-child(3) { animation-delay: 60ms; }
+.match-list-container .match-row-card:nth-child(4) { animation-delay: 90ms; }
+.match-list-container .match-row-card:nth-child(5) { animation-delay: 120ms; }
+.match-list-container .match-row-card:nth-child(6) { animation-delay: 150ms; }
+.match-list-container .match-row-card:nth-child(n+7) { animation-delay: 180ms; }
+
+/* Filter change fade animation */
+.match-list-animate-in {
+    animation: filter-fade-in 0.35s ease-out;
+}
+@keyframes filter-fade-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Loading Skeleton ===== */
+.match-skeleton {
+    border-radius: 0.75rem;
+    border: 1px solid hsl(var(--border) / 0.3);
+    background: hsl(var(--card));
+    padding: 1rem;
+    overflow: hidden;
+}
+.match-skeleton .skeleton-line {
+    height: 0.75rem;
+    border-radius: 0.375rem;
+    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted) / 0.4) 50%, hsl(var(--muted)) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.match-skeleton .skeleton-circle {
+    border-radius: 50%;
+    background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted) / 0.4) 50%, hsl(var(--muted)) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* ===== Ended Matches section ===== */
+.ended-matches-section .match-row-card {
+    opacity: 0.85;
+}
+.ended-matches-section .match-row-card:hover {
+    opacity: 1;
 }
 
 /* GRID mode */
