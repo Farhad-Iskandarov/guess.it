@@ -540,3 +540,145 @@ Football data provided by [Football-Data.org](https://www.football-data.org/).
 - Backend `routes/predictions.py` — Enhanced `/me/detailed` endpoint with wider date range + individual match fetching
 - No new pages or routes added
 - No framework or library changes
+
+---
+
+### 2026-02-19
+
+#### Bug Fixes
+- **Login error message**: Fixed login error that showed technical message "Failed to execute 'json' on 'Response': body stream already read." when credentials are wrong. Now shows clean user-friendly message: "Email or password is incorrect." (`AuthContext.js`, `LoginPage.jsx`)
+
+#### Performance Improvements
+- **Match data caching (Main Page)**: Implemented in-memory cache with 5-minute TTL in `matches.js` service. When navigating away from the main page and returning, matches load instantly from cache instead of showing "Loading matches..." every time. Live match data uses a shorter 30-second TTL. Stale cached data is shown immediately while fresh data loads in the background.
+- **Optimistic UI for "Guess It" button**: The Guess It button now updates the UI immediately upon click (optimistic update) before the API call completes. If the API call fails, the change is reverted. This makes the prediction interaction feel instant and responsive. (`MatchList.jsx`)
+
+#### New Features
+- **Points section (My Predictions)**: Added a 5th summary card "Points" with a star icon (violet theme) to the stats section on the My Predictions page. Summary grid updated from 4 to 5 columns. Points value defaults to 0 — logic to be defined later.
+
+#### UI Updates
+- **League name at top of prediction cards**: Moved the competition/league name to the top of each prediction card on the My Predictions page (both grid and list views). Previously it was inline with status and date, causing layout issues with long names like "Campeonato Brasileiro Série A". Now displayed as a separate line at the top, truncated with ellipsis if too long.
+- **Finished match result styling (My Predictions)**: Enhanced visual distinction for finished match predictions:
+  - **Correct predictions**: Subtle green background (`bg-emerald-500/8%`), green border, and a 3px green left accent bar
+  - **Wrong predictions**: Subtle red background (`bg-red-500/7%`), red border, and a 3px red left accent bar
+  - Clean and modern — not aggressive, just clear visual feedback
+
+#### Modified Files
+- `frontend/src/lib/AuthContext.js` — Safe JSON parsing in loginEmail, user-friendly error messages
+- `frontend/src/pages/LoginPage.jsx` — Cleaner error catch for login
+- `frontend/src/services/matches.js` — In-memory cache layer with TTL-based expiry
+- `frontend/src/pages/HomePage.jsx` — Stale-while-revalidate pattern for instant page loads
+- `frontend/src/components/home/MatchList.jsx` — Optimistic UI update in handleGuessIt
+- `frontend/src/pages/MyPredictionsPage.jsx` — Points summary card, league name at top, enhanced red/green styling for finished matches
+
+---
+
+### 2026-02-19 (Session 2)
+
+#### New Features
+- **Live Matches Section**: Added a dedicated "Live Matches" section above "All Matches" on the homepage. When there are IN_PLAY/LIVE matches, they appear in a separated section at the top with:
+  - Animated pulsing red dot indicator
+  - Match count badge (e.g., "Live Matches (2)")
+  - Same card structure and layout as normal match cards
+  - Live cards have the existing red glow/border styling (`live-match-card` CSS class)
+  - Real-time score and minute updates via WebSocket
+  - Section only appears when there are live matches; otherwise hidden
+  - When user clicks "Live" filter, only the "All Matches" section changes to show filtered live matches (no duplication)
+
+#### Performance Improvements
+- **Prediction data caching (My Predictions page)**: Added in-memory cache to `predictions.js` service with 5-minute TTL for both `getMyPredictions()` and `getMyDetailedPredictions()`. Cache is automatically invalidated on save or delete operations. Navigating between Main Page and My Predictions page is now instant on subsequent visits.
+  - **Caching strategy**: Simple in-memory JavaScript object with timestamp validation
+  - **Cache duration**: 5 minutes for match data (30s for live), 5 minutes for predictions
+  - **How it works**: First load fetches from API normally. Subsequent navigations within TTL return cached data instantly. Mutations (save/delete prediction) invalidate the cache so next fetch gets fresh data. Live match updates bypass cache and use WebSocket for real-time updates.
+
+#### UI/Responsive Updates
+- **Grid/List toggle hidden on mobile**: The view mode toggle (Grid/List) is now hidden on screens smaller than `md` (768px) on both the homepage and My Predictions page. Mobile users see a single optimized grid layout. Desktop users retain full toggle functionality with no changes.
+  - Implementation: Uses Tailwind responsive utility `hidden md:flex` on the toggle container
+  - No JavaScript device detection
+  - No layout shifts or functional regression on desktop
+
+#### Modified Files
+- `frontend/src/components/home/MatchList.jsx` — Split matches into Live section + All Matches section; live matches filtered out of All Matches to avoid duplication
+- `frontend/src/pages/HomePage.jsx` — View toggle uses `hidden md:flex` for mobile responsiveness
+- `frontend/src/pages/MyPredictionsPage.jsx` — View toggle uses `hidden md:flex`; now uses cached `getMyDetailedPredictions()` instead of direct fetch
+- `frontend/src/services/predictions.js` — Added in-memory cache with 5-min TTL and invalidation on mutations
+
+---
+
+### 2026-02-19 (Session 3)
+
+#### New Features
+- **Clickable summary card filters (My Predictions)**: The summary cards (Total, Correct, Wrong, Pending) are now clickable filter buttons. Clicking a card instantly filters predictions by result type:
+  - **Total** → Shows all predictions (default active)
+  - **Correct** → Shows only correctly predicted matches
+  - **Wrong** → Shows only incorrectly predicted matches
+  - **Pending** → Shows only predictions for matches not yet finished
+  - **Filtering logic**: Uses a `summaryFilter` state that drives client-side filtering in a `useMemo` hook. Filters by `prediction.result` field (`correct`, `wrong`, `pending`). Works alongside the existing status filter (All/Live/Upcoming/Finished) — both filters compose together.
+  - **State handling**: React `useState` + `useMemo` for derived filtered list. No API calls on filter switch. Data is already loaded in memory.
+  - **No extra API calls**: Filtering is purely client-side using already-fetched prediction data.
+  - Active card highlighted with green ring (`ring-2 ring-primary/30`) and primary border
+  - Smooth fade-in animation on filter change (CSS `@keyframes fade-in`, applied via React `key` prop)
+  - Works on both desktop and mobile with no layout shift
+
+#### Performance Improvements
+- **Instant navigation (My Predictions → Main Page)**: Fixed loading flash when navigating back to the Main Page. The `HomePage` component now initializes `matches` state and `isLoadingMatches` state directly from the in-memory cache (via `getStaleCachedMatches`) using lazy initializer functions in `useState`. This eliminates the brief "Loading matches..." spinner that appeared before the `useEffect` ran.
+
+#### Modified Files
+- `frontend/src/pages/MyPredictionsPage.jsx` — SummaryCard now clickable with `summaryFilter` state; `filtered` useMemo applies summary + status + search filters; fade animation on filter change
+- `frontend/src/pages/HomePage.jsx` — `useState` lazy initializers read from match cache to prevent loading flash
+- `frontend/src/index.css` — Added `.animate-fade-in` keyframe animation
+
+---
+
+### 2026-02-19 (Session 4)
+
+#### UI Updates
+- **Saved prediction card highlight**: Match cards on the homepage now show a subtle light green background (`bg-emerald-500/6%`) and green border (`border-emerald-500/25`) when the user has a saved prediction for that match. This provides clear visual feedback that a prediction was saved. Live match cards retain their red live styling (takes priority over the green saved state).
+
+---
+
+### 2026-02-19 (Session 5) — Points & Level System
+
+#### New Features
+
+**Points System:**
+- Users earn **+10 points** for each correctly predicted match result
+- Points are permanently stored in MongoDB (`users.points`, `users.level`)
+- Points persist across page refreshes, logout/login, and server restarts
+- Anti-duplicate protection: Each prediction has `points_awarded` flag — points calculated exactly once per finished match
+- All points calculation happens server-side (no frontend manipulation possible)
+
+**Level System:**
+- Users start at Level 0, progressing to Level 10
+- Level thresholds: Lv1=100, Lv2=120, Lv3=200, Lv4=330, Lv5=500, Lv6=580, Lv7=650, Lv8=780, Lv9=900, Lv10=1000
+- Level calculated automatically from total points using `calculate_level()` function
+- Level updates immediately when points change
+
+**Point Deduction (After Level 5):**
+- When user is at Level 5 or higher (500+ points), wrong predictions deduct **-5 points**
+- If user drops below Level 5 threshold, deduction stops until they reach Level 5 again
+- Points cannot go below 0
+
+**Points UI:**
+- Header: "Lv.X Xpts" badge displayed next to avatar (visible on desktop)
+- User dropdown menu: Shows Level and Points with icons
+- My Predictions page: Level and Points badges below page title
+- Points summary card: Clickable filter showing only point-earning predictions
+- Prediction cards: Shows "+10 pts" (green) or "-5 pts" (red) in card footer when points were awarded
+
+#### Database Schema Changes
+- `users` collection: Added `points` (int, default 0) and `level` (int, default 0) fields
+- `predictions` collection: Added `points_awarded` (bool), `points_value` (int), `points_awarded_at` (ISO string) fields
+
+#### Persistence Strategy
+- Points stored in MongoDB `users` collection, not frontend state
+- Points calculated server-side in `/api/predictions/me/detailed` endpoint
+- `points_awarded` flag on each prediction prevents double reward
+- Frontend reads points from API response, never writes points directly
+
+#### Modified Files
+- `backend/models/auth.py` — Added `points` and `level` fields to `UserResponse` model
+- `backend/routes/auth.py` — `/api/auth/me` now returns `points` and `level`
+- `backend/routes/predictions.py` — Added `LEVEL_THRESHOLDS`, `calculate_level()`, points processing in `/me/detailed`
+- `frontend/src/components/layout/Header.jsx` — Level/Points badge in header and dropdown menu
+- `frontend/src/pages/MyPredictionsPage.jsx` — Level/Points display, Points card clickable filter, per-prediction points display
+

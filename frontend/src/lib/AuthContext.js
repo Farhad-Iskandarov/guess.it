@@ -70,10 +70,23 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new Error('Email or password is incorrect.');
+      }
+      throw new Error('Something went wrong. Please try again.');
+    }
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Login failed');
+      const msg = data?.detail;
+      // Map technical/generic backend errors to user-friendly message
+      if (response.status === 401 || response.status === 400 || !msg) {
+        throw new Error('Email or password is incorrect.');
+      }
+      throw new Error(msg);
     }
 
     setUser(data.user);

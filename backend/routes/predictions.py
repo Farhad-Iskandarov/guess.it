@@ -13,6 +13,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predictions", tags=["Predictions"])
 
+# Level thresholds: index = level, value = min points
+LEVEL_THRESHOLDS = [0, 100, 120, 200, 330, 500, 580, 650, 780, 900, 1000]
+POINTS_CORRECT = 10
+POINTS_WRONG_PENALTY = -5
+PENALTY_MIN_LEVEL = 5  # Only deduct points at level 5+
+
+def calculate_level(points):
+    """Calculate level from total points"""
+    level = 0
+    for i, threshold in enumerate(LEVEL_THRESHOLDS):
+        if points >= threshold:
+            level = i
+        else:
+            break
+    return level
+
 # Dependency to get database
 def get_db(request: Request) -> AsyncIOMotorDatabase:
     return request.app.state.db
@@ -210,7 +226,8 @@ async def get_my_predictions_detailed(
     request: Request,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get all predictions for the current user, enriched with match data from Football API."""
+    """Get all predictions for the current user, enriched with match data from Football API.
+    Also processes points for finished matches (server-side, once per match)."""
     from services.football_api import get_matches, _api_get, _transform_match
 
     user = await get_current_user(request, db)
@@ -223,7 +240,13 @@ async def get_my_predictions_detailed(
     ).to_list(1000)
 
     if not predictions:
-        return {"predictions": [], "total": 0, "summary": {"correct": 0, "wrong": 0, "pending": 0}}
+        user_points = user.get("points", 0)
+        user_level = user.get("level", 0)
+        return {
+            "predictions": [], "total": 0,
+            "summary": {"correct": 0, "wrong": 0, "pending": 0, "points": user_points},
+            "user_points": user_points, "user_level": user_level
+        }
 
     # Fetch matches with standard date range (today + 7 days, same as homepage)
     now = datetime.now(timezone.utc)
@@ -251,6 +274,7 @@ async def get_my_predictions_detailed(
     correct = 0
     wrong = 0
     pending = 0
+    points_delta = 0  # Points to add/subtract this run
 
     for pred in predictions:
         match_id = pred["match_id"]
@@ -267,6 +291,8 @@ async def get_my_predictions_detailed(
             "updated_at": updated_at,
             "match": None,
             "result": "pending",
+            "points_awarded": pred.get("points_awarded", False),
+            "points_value": pred.get("points_value", 0),
         }
 
         if match_data:
@@ -297,12 +323,41 @@ async def get_my_predictions_detailed(
                 elif away_score > home_score:
                     actual_result = "away"
 
-                if pred["prediction"] == actual_result:
+                is_correct = pred["prediction"] == actual_result
+
+                if is_correct:
                     entry["result"] = "correct"
                     correct += 1
                 else:
                     entry["result"] = "wrong"
                     wrong += 1
+
+                # Process points if not yet awarded for this prediction
+                if not pred.get("points_awarded", False):
+                    current_user_points = user.get("points", 0) + points_delta
+                    current_level = calculate_level(current_user_points)
+
+                    if is_correct:
+                        pts = POINTS_CORRECT
+                    else:
+                        # Deduct only if level >= 5
+                        if current_level >= PENALTY_MIN_LEVEL:
+                            pts = POINTS_WRONG_PENALTY
+                        else:
+                            pts = 0
+
+                    # Mark as awarded in DB
+                    await db.predictions.update_one(
+                        {"prediction_id": pred["prediction_id"]},
+                        {"$set": {
+                            "points_awarded": True,
+                            "points_value": pts,
+                            "points_awarded_at": now.isoformat()
+                        }}
+                    )
+                    points_delta += pts
+                    entry["points_awarded"] = True
+                    entry["points_value"] = pts
             else:
                 pending += 1
         else:
@@ -310,8 +365,28 @@ async def get_my_predictions_detailed(
 
         results.append(entry)
 
+    # Update user points and level if there were changes
+    if points_delta != 0:
+        new_points = max(0, user.get("points", 0) + points_delta)
+        new_level = calculate_level(new_points)
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "points": new_points,
+                "level": new_level,
+                "updated_at": now.isoformat()
+            }}
+        )
+        user_points = new_points
+        user_level = new_level
+    else:
+        user_points = user.get("points", 0)
+        user_level = user.get("level", 0)
+
     return {
         "predictions": results,
         "total": len(results),
-        "summary": {"correct": correct, "wrong": wrong, "pending": pending},
+        "summary": {"correct": correct, "wrong": wrong, "pending": pending, "points": user_points},
+        "user_points": user_points,
+        "user_level": user_level,
     }

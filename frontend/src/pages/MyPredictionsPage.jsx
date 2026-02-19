@@ -3,16 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
-import { savePrediction, deletePrediction } from '@/services/predictions';
+import { savePrediction, deletePrediction, getMyDetailedPredictions } from '@/services/predictions';
 import { toast } from 'sonner';
 import {
   Trophy, Clock, CheckCircle2, XCircle, AlertCircle,
   Radio, ArrowRight, Filter, TrendingUp, Calendar, Search, X,
-  Pencil, Trash2, Check, Loader2, LayoutGrid, List
+  Pencil, Trash2, Check, Loader2, LayoutGrid, List, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 // ============ Filter Tab ============
 const FilterTab = memo(({ label, value, active, count, onClick }) => (
@@ -39,13 +37,18 @@ const FilterTab = memo(({ label, value, active, count, onClick }) => (
 FilterTab.displayName = 'FilterTab';
 
 // ============ Summary Card ============
-const SummaryCard = memo(({ icon: Icon, label, value, color }) => (
-  <div
-    className="flex items-center gap-3 bg-card rounded-xl p-4 border border-border/50 shadow-sm"
+const SummaryCard = memo(({ icon: Icon, label, value, color, active, onClick, filterKey }) => (
+  <button
+    onClick={() => onClick(filterKey)}
+    className={`flex items-center gap-3 bg-card rounded-xl p-4 border shadow-sm text-left w-full cursor-pointer ${
+      active
+        ? 'border-primary ring-2 ring-primary/30 shadow-md'
+        : 'border-border/50 hover:border-border'
+    }`}
     data-testid={`summary-${label.toLowerCase()}`}
-    style={{ transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
-    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px -5px rgba(0,0,0,0.15)'; }}
-    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ''; }}
+    style={{ transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, ring 0.2s ease' }}
+    onMouseEnter={e => { if (!active) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 25px -5px rgba(0,0,0,0.15)'; }}}
+    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = active ? '' : ''; }}
   >
     <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${color}`}>
       <Icon className="w-5 h-5" />
@@ -54,7 +57,7 @@ const SummaryCard = memo(({ icon: Icon, label, value, color }) => (
       <p className="text-2xl font-bold text-foreground">{value}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
-  </div>
+  </button>
 ));
 SummaryCard.displayName = 'SummaryCard';
 
@@ -165,6 +168,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
   const [isRemoving, setIsRemoving] = useState(false);
 
   const isUpcoming = match && match.status === 'NOT_STARTED';
+  const isFinished = match && match.status === 'FINISHED';
   const canEdit = isUpcoming && !match.predictionLocked;
   const isList = viewMode === 'list';
 
@@ -180,17 +184,25 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
     );
   }
 
+  // Enhanced styling for finished matches
   const borderColor = {
-    correct: 'border-emerald-500/30 hover:border-emerald-500/50',
-    wrong: 'border-red-500/20 hover:border-red-500/40',
+    correct: isFinished ? 'border-emerald-500/40 hover:border-emerald-500/60' : 'border-emerald-500/30 hover:border-emerald-500/50',
+    wrong: isFinished ? 'border-red-500/40 hover:border-red-500/60' : 'border-red-500/20 hover:border-red-500/40',
     pending: 'border-border/50 hover:border-border',
   };
 
   const bgAccent = {
-    correct: 'bg-emerald-500/[0.03]',
-    wrong: 'bg-red-500/[0.02]',
+    correct: isFinished ? 'bg-emerald-500/[0.08]' : 'bg-emerald-500/[0.03]',
+    wrong: isFinished ? 'bg-red-500/[0.07]' : 'bg-red-500/[0.02]',
     pending: '',
   };
+
+  // Left accent bar color for finished matches
+  const accentBar = isFinished && result === 'correct'
+    ? 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-emerald-500 before:rounded-l-xl'
+    : isFinished && result === 'wrong'
+      ? 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-red-500 before:rounded-l-xl'
+      : '';
 
   const votedDate = created_at ? new Date(created_at) : null;
   const votedStr = votedDate
@@ -236,7 +248,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
 
   return (
     <div
-      className={`prediction-card bg-card ${bgAccent[result]} rounded-xl border overflow-hidden ${borderColor[result]} ${isEditing ? 'ring-1 ring-primary/30' : ''}`}
+      className={`prediction-card relative ${bgAccent[result]} rounded-xl border overflow-hidden ${borderColor[result]} ${isEditing ? 'ring-1 ring-primary/30' : ''} ${accentBar}`}
       data-testid={`prediction-card-${index}`}
       style={{
         animationDelay: `${index * 60}ms`,
@@ -248,11 +260,17 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
       {/* ======= LIST VIEW ======= */}
       {isList && !isEditing && (
         <div className="px-4 py-3">
+          {/* League name on top */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] font-medium text-muted-foreground truncate max-w-[250px]" title={match.competition}>
+              {match.competition}
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             {/* Status + Meta */}
-            <div className="flex items-center gap-2 flex-shrink-0 min-w-[180px]">
+            <div className="flex items-center gap-2 flex-shrink-0 min-w-[140px]">
               <StatusBadge status={match.status} matchMinute={match.matchMinute} />
-              <span className="text-xs text-muted-foreground truncate">{match.competition}</span>
+              <span className="text-xs text-muted-foreground">{match.dateTime}</span>
             </div>
 
             {/* Teams row */}
@@ -319,13 +337,18 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
       {/* ======= GRID VIEW (or editing in list) ======= */}
       {(!isList || isEditing) && (
         <>
+          {/* League name at top */}
+          <div className="px-5 pt-3 pb-0">
+            <span className="text-[11px] font-medium text-muted-foreground truncate block max-w-full" title={match.competition} data-testid="card-league-name">
+              {match.competition}
+            </span>
+          </div>
+
           {/* Top meta bar */}
-          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <div className="flex items-center justify-between px-5 pt-2 pb-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <StatusBadge status={match.status} matchMinute={match.matchMinute} />
               <span>{match.dateTime}</span>
-              <span className="text-border">|</span>
-              <span className="truncate">{match.competition}</span>
             </div>
             <div className="flex items-center gap-2">
               {result === 'correct' && (
@@ -450,6 +473,14 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
               <span>Voted on: {votedStr}</span>
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {data.points_awarded && data.points_value !== 0 && (
+                <span
+                  className={`font-semibold ${data.points_value > 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                  data-testid={`points-badge-${data.match_id}`}
+                >
+                  {data.points_value > 0 ? '+' : ''}{data.points_value} pts
+                </span>
+              )}
               <span>Total votes: <span className="text-foreground font-medium">{match.totalVotes}</span></span>
             </div>
           </div>
@@ -536,11 +567,14 @@ export const MyPredictionsPage = () => {
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const [predictions, setPredictions] = useState([]);
-  const [summary, setSummary] = useState({ correct: 0, wrong: 0, pending: 0 });
+  const [summary, setSummary] = useState({ correct: 0, wrong: 0, pending: 0, points: 0 });
   const [total, setTotal] = useState(0);
+  const [userPoints, setUserPoints] = useState(0);
+  const [userLevel, setUserLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [summaryFilter, setSummaryFilter] = useState('total');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState(() => {
     return (typeof window !== 'undefined' && localStorage.getItem('guessit-predictions-view')) || 'grid';
@@ -555,21 +589,17 @@ export const MyPredictionsPage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/predictions/me/detailed`, {
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        if (res.status === 401) {
-          navigate('/login');
-          return;
-        }
-        throw new Error('Failed to fetch predictions');
-      }
-      const data = await res.json();
+      const data = await getMyDetailedPredictions();
       setPredictions(data.predictions || []);
-      setSummary(data.summary || { correct: 0, wrong: 0, pending: 0 });
+      setSummary(data.summary || { correct: 0, wrong: 0, pending: 0, points: 0 });
       setTotal(data.total || 0);
+      setUserPoints(data.user_points ?? data.summary?.points ?? 0);
+      setUserLevel(data.user_level ?? 0);
     } catch (err) {
+      if (err.message?.includes('401')) {
+        navigate('/login');
+        return;
+      }
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -624,7 +654,19 @@ export const MyPredictionsPage = () => {
   const filtered = useMemo(() => {
     let result = predictions;
 
-    // Status filter
+    // Summary card filter (by result)
+    if (summaryFilter === 'correct') {
+      result = result.filter(p => p.result === 'correct');
+    } else if (summaryFilter === 'wrong') {
+      result = result.filter(p => p.result === 'wrong');
+    } else if (summaryFilter === 'pending') {
+      result = result.filter(p => p.result === 'pending');
+    } else if (summaryFilter === 'points') {
+      result = result.filter(p => p.points_awarded && p.points_value !== 0);
+    }
+    // 'total' shows all
+
+    // Status filter (by match status)
     if (activeFilter !== 'all') {
       result = result.filter(p => {
         if (!p.match) return false;
@@ -647,7 +689,7 @@ export const MyPredictionsPage = () => {
     }
 
     return result;
-  }, [predictions, activeFilter, searchQuery]);
+  }, [predictions, activeFilter, summaryFilter, searchQuery]);
 
   const filterCounts = {
     all: predictions.length,
@@ -682,34 +724,67 @@ export const MyPredictionsPage = () => {
           <p className="text-sm text-muted-foreground ml-[52px]">
             Track all your match predictions and see how accurate you are.
           </p>
+          {!isLoading && (
+            <div className="flex items-center gap-3 ml-[52px] mt-2" data-testid="level-progress">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-sm font-semibold text-foreground">Level {userLevel}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary/10 border border-primary/20">
+                <Star className="w-3.5 h-3.5 text-primary" />
+                <span className="text-sm font-semibold text-primary">{userPoints} points</span>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Summary cards */}
+        {/* Summary cards - clickable filters */}
         {!isLoading && total > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8" data-testid="summary-section">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8" data-testid="summary-section">
             <SummaryCard
               icon={TrendingUp}
               label="Total"
               value={total}
               color="bg-primary/15 text-primary"
+              active={summaryFilter === 'total'}
+              onClick={setSummaryFilter}
+              filterKey="total"
             />
             <SummaryCard
               icon={CheckCircle2}
               label="Correct"
               value={summary.correct}
               color="bg-emerald-500/15 text-emerald-400"
+              active={summaryFilter === 'correct'}
+              onClick={setSummaryFilter}
+              filterKey="correct"
             />
             <SummaryCard
               icon={XCircle}
               label="Wrong"
               value={summary.wrong}
               color="bg-red-500/15 text-red-400"
+              active={summaryFilter === 'wrong'}
+              onClick={setSummaryFilter}
+              filterKey="wrong"
             />
             <SummaryCard
               icon={Clock}
               label="Pending"
               value={summary.pending}
               color="bg-amber-500/15 text-amber-400"
+              active={summaryFilter === 'pending'}
+              onClick={setSummaryFilter}
+              filterKey="pending"
+            />
+            <SummaryCard
+              icon={Star}
+              label="Points"
+              value={userPoints}
+              color="bg-violet-500/15 text-violet-400"
+              active={summaryFilter === 'points'}
+              onClick={setSummaryFilter}
+              filterKey="points"
             />
           </div>
         )}
@@ -748,8 +823,8 @@ export const MyPredictionsPage = () => {
                 <FilterTab label="Upcoming" value="upcoming" active={activeFilter === 'upcoming'} count={filterCounts.upcoming} onClick={setActiveFilter} />
                 <FilterTab label="Finished" value="finished" active={activeFilter === 'finished'} count={filterCounts.finished} onClick={setActiveFilter} />
               </div>
-              {/* View Toggle */}
-              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-secondary border border-border" data-testid="predictions-view-toggle">
+              {/* View Toggle - hidden on mobile */}
+              <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg bg-secondary border border-border" data-testid="predictions-view-toggle">
                 <button
                   onClick={() => handleViewModeChange('grid')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
@@ -792,10 +867,11 @@ export const MyPredictionsPage = () => {
             <Button onClick={fetchPredictions} variant="outline">Try Again</Button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState filter={activeFilter} isSearch={!!searchQuery.trim()} />
+          <EmptyState filter={summaryFilter !== 'total' ? summaryFilter : activeFilter} isSearch={!!searchQuery.trim()} />
         ) : (
           <div
-            className={`predictions-list-container transition-all duration-300 ${
+            key={`${summaryFilter}-${activeFilter}`}
+            className={`predictions-list-container animate-fade-in ${
               viewMode === 'grid'
                 ? 'grid grid-cols-1 md:grid-cols-2 gap-3'
                 : 'space-y-3'

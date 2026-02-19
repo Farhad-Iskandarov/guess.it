@@ -91,10 +91,11 @@ export const LoginPage = () => {
         navigate(from, { replace: true });
       }
     } catch (error) {
+      const msg = error.message || 'Email or password is incorrect.';
       toast.error('Login failed', {
-        description: error.message,
+        description: msg,
       });
-      setErrors({ form: error.message });
+      setErrors({ form: msg });
     } finally {
       setIsLoading(false);
     }

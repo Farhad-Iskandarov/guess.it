@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from routes.auth import router as auth_router
 from routes.predictions import router as predictions_router
 from routes.football import router as football_router, manager as ws_manager, start_polling, stop_polling
+from routes.favorites import router as favorites_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -84,6 +85,7 @@ async def get_status_checks():
 api_router.include_router(auth_router)
 api_router.include_router(predictions_router)
 api_router.include_router(football_router)
+api_router.include_router(favorites_router)
 
 # Include the router in the main app
 app.include_router(api_router)

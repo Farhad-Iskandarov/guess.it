@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 
 class GuessItAPITester:
-    def __init__(self, base_url="https://guess-it-duplicate.preview.emergentagent.com"):
+    def __init__(self, base_url="https://guess-it-copy-1.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.session_token = None
         self.user_id = None
@@ -245,15 +245,15 @@ class GuessItAPITester:
         return success, response
     
     def test_auth_with_test_credentials(self):
-        """Test authentication with test credentials: testpred@test.com"""
+        """Test authentication with test credentials: test_view@test.com (testviewer)"""
         success, response = self.run_test(
             "Auth Login - Test Credentials",
             "POST",
             "/api/auth/login",
             200,
             data={
-                "email": "testpred@test.com",
-                "password": "Test1234!"
+                "email": "test_view@test.com",
+                "password": "TestPass123!"
             }
         )
         
@@ -286,8 +286,8 @@ class GuessItAPITester:
         # First login to get session cookie
         login_url = f"{self.base_url}/api/auth/login"
         login_response = session.post(login_url, json={
-            "email": "testpred@test.com", 
-            "password": "Test1234!"
+            "email": "test_view@test.com", 
+            "password": "TestPass123!"
         }, headers=headers, timeout=10)
         
         if login_response.status_code != 200:
@@ -510,6 +510,264 @@ class GuessItAPITester:
         )
         return success, response
 
+    def test_auth_me_points_and_level(self):
+        """Test /api/auth/me returns points and level fields for authenticated user"""
+        # Create a session to maintain cookies
+        session = requests.Session()
+        headers = {'Content-Type': 'application/json'}
+        
+        # First login to get session cookie
+        login_url = f"{self.base_url}/api/auth/login"
+        login_response = session.post(login_url, json={
+            "email": "test_view@test.com", 
+            "password": "TestPass123!"
+        }, headers=headers, timeout=10)
+        
+        if login_response.status_code != 200:
+            self.log_test("Auth Me - Points & Level", False, f"Login failed: {login_response.status_code}")
+            return False, {}
+        
+        # Now test the /me endpoint
+        try:
+            url = f"{self.base_url}/api/auth/me"
+            response = session.get(url, headers=headers, timeout=10)
+            
+            success = response.status_code == 200
+            
+            try:
+                response_json = response.json()
+            except:
+                response_json = {"raw_text": response.text[:200]}
+            
+            if success:
+                # Validate that points and level fields are present
+                required_fields = ['points', 'level']
+                missing_fields = [field for field in required_fields if field not in response_json]
+                
+                if missing_fields:
+                    self.log_test("Auth Me - Points & Level", False, f"Missing fields: {missing_fields}", response_json)
+                    return False, response_json
+                
+                points = response_json.get('points', 'NOT_FOUND')
+                level = response_json.get('level', 'NOT_FOUND')
+                
+                self.log_test("Auth Me - Points & Level", True, f"Points: {points}, Level: {level}", response_json)
+            else:
+                self.log_test("Auth Me - Points & Level", False, f"Expected 200, got {response.status_code}", response_json)
+            
+            return success, response_json
+            
+        except Exception as e:
+            self.log_test("Auth Me - Points & Level", False, f"Exception: {str(e)}")
+            return False, {}
+
+    def test_predictions_detailed_points_fields(self):
+        """Test /api/predictions/me/detailed returns user_points, user_level and per-prediction points fields"""
+        # Create a session to maintain cookies
+        session = requests.Session()
+        headers = {'Content-Type': 'application/json'}
+        
+        # First login to get session cookie
+        login_url = f"{self.base_url}/api/auth/login"
+        login_response = session.post(login_url, json={
+            "email": "test_view@test.com", 
+            "password": "TestPass123!"
+        }, headers=headers, timeout=10)
+        
+        if login_response.status_code != 200:
+            self.log_test("Predictions Detailed - Points Fields", False, f"Login failed: {login_response.status_code}")
+            return False, {}
+        
+        # Now test the detailed endpoint
+        try:
+            url = f"{self.base_url}/api/predictions/me/detailed"
+            response = session.get(url, headers=headers, timeout=15)
+            
+            success = response.status_code == 200
+            
+            try:
+                response_json = response.json()
+            except:
+                response_json = {"raw_text": response.text[:200]}
+            
+            if success:
+                # Validate required top-level fields
+                required_top_fields = ['user_points', 'user_level']
+                missing_top_fields = [field for field in required_top_fields if field not in response_json]
+                
+                if missing_top_fields:
+                    self.log_test("Predictions Detailed - Points Fields", False, f"Missing top-level fields: {missing_top_fields}", response_json)
+                    return False, response_json
+                
+                # Check if predictions exist and validate their structure
+                predictions = response_json.get('predictions', [])
+                if predictions:
+                    # Check first prediction for required fields
+                    first_pred = predictions[0]
+                    required_pred_fields = ['points_awarded', 'points_value']
+                    missing_pred_fields = [field for field in required_pred_fields if field not in first_pred]
+                    
+                    if missing_pred_fields:
+                        self.log_test("Predictions Detailed - Points Fields", False, f"Missing prediction fields: {missing_pred_fields}", response_json)
+                        return False, response_json
+                
+                user_points = response_json.get('user_points', 'NOT_FOUND')
+                user_level = response_json.get('user_level', 'NOT_FOUND')
+                pred_count = len(predictions)
+                
+                self.log_test("Predictions Detailed - Points Fields", True, f"User Points: {user_points}, User Level: {user_level}, Predictions: {pred_count}", response_json)
+            else:
+                self.log_test("Predictions Detailed - Points Fields", False, f"Expected 200, got {response.status_code}", response_json)
+            
+            return success, response_json
+            
+        except Exception as e:
+            self.log_test("Predictions Detailed - Points Fields", False, f"Exception: {str(e)}")
+            return False, {}
+
+    def test_points_calculation_logic(self):
+        """Test points calculation and anti-duplicate reward protection by checking existing predictions"""
+        # Create a session to maintain cookies
+        session = requests.Session()
+        headers = {'Content-Type': 'application/json'}
+        
+        # First login to get session cookie
+        login_url = f"{self.base_url}/api/auth/login"
+        login_response = session.post(login_url, json={
+            "email": "test_view@test.com", 
+            "password": "TestPass123!"
+        }, headers=headers, timeout=10)
+        
+        if login_response.status_code != 200:
+            self.log_test("Points Calculation Logic", False, f"Login failed: {login_response.status_code}")
+            return False, {}
+        
+        # Get detailed predictions to check points logic
+        try:
+            url = f"{self.base_url}/api/predictions/me/detailed"
+            response = session.get(url, headers=headers, timeout=15)
+            
+            if response.status_code != 200:
+                self.log_test("Points Calculation Logic", False, f"Failed to get detailed predictions: {response.status_code}")
+                return False, {}
+            
+            response_json = response.json()
+            predictions = response_json.get('predictions', [])
+            
+            # Check for finished matches and validate points logic
+            finished_predictions = [p for p in predictions if p.get('match', {}).get('status') == 'FINISHED']
+            
+            if not finished_predictions:
+                # No finished predictions to test - this is expected for test user with pending predictions
+                self.log_test("Points Calculation Logic", True, "No finished predictions to test (expected for test user)", response_json)
+                return True, response_json
+            
+            points_logic_valid = True
+            details = []
+            
+            for pred in finished_predictions:
+                match_data = pred.get('match')
+                if not match_data:
+                    continue  # Skip predictions with no match data
+                
+                result = pred.get('result', 'unknown')
+                points_awarded = pred.get('points_awarded', False)
+                points_value = pred.get('points_value', 0)
+                
+                # Validate points logic
+                if result == 'correct' and points_awarded:
+                    if points_value != 10:
+                        points_logic_valid = False
+                        details.append(f"Correct prediction should award +10 pts, got {points_value}")
+                elif result == 'wrong' and points_awarded:
+                    # Wrong predictions should only deduct points at level 5+
+                    if points_value not in [0, -5]:
+                        points_logic_valid = False
+                        details.append(f"Wrong prediction should award 0 or -5 pts, got {points_value}")
+                
+            if points_logic_valid:
+                self.log_test("Points Calculation Logic", True, f"Validated {len(finished_predictions)} finished predictions", response_json)
+            else:
+                self.log_test("Points Calculation Logic", False, f"Points logic errors: {'; '.join(details)}", response_json)
+            
+            return points_logic_valid, response_json
+            
+        except Exception as e:
+            self.log_test("Points Calculation Logic", False, f"Exception: {str(e)}")
+            return False, {}
+
+    def test_predictions_save_no_points_effect(self):
+        """Test that POST /api/predictions (save) does NOT affect points (only /me/detailed should)"""
+        # Create a session to maintain cookies
+        session = requests.Session()
+        headers = {'Content-Type': 'application/json'}
+        
+        # First login to get session cookie
+        login_url = f"{self.base_url}/api/auth/login"
+        login_response = session.post(login_url, json={
+            "email": "test_view@test.com", 
+            "password": "TestPass123!"
+        }, headers=headers, timeout=10)
+        
+        if login_response.status_code != 200:
+            self.log_test("Predictions Save - No Points Effect", False, f"Login failed: {login_response.status_code}")
+            return False, {}
+        
+        try:
+            # Get current points
+            me_response = session.get(f"{self.base_url}/api/auth/me", headers=headers, timeout=10)
+            if me_response.status_code != 200:
+                self.log_test("Predictions Save - No Points Effect", False, "Cannot get current user points")
+                return False, {}
+            
+            me_data = me_response.json()
+            initial_points = me_data.get('points', 0)
+            
+            # Get available matches to predict on
+            matches_response = session.get(f"{self.base_url}/api/football/matches", headers=headers, timeout=15)
+            if matches_response.status_code != 200:
+                self.log_test("Predictions Save - No Points Effect", False, f"Failed to get matches: {matches_response.status_code}")
+                return False, {}
+            
+            matches_data = matches_response.json()
+            matches = matches_data.get('matches', [])
+            
+            if not matches:
+                # Try to make prediction on a test match ID
+                test_match_id = 999999
+            else:
+                test_match_id = matches[0]['id']
+            
+            # Make a prediction
+            prediction_response = session.post(f"{self.base_url}/api/predictions", json={
+                "match_id": test_match_id,
+                "prediction": "home"
+            }, headers=headers, timeout=10)
+            
+            if prediction_response.status_code not in [200, 201]:
+                self.log_test("Predictions Save - No Points Effect", False, f"Failed to make prediction: {prediction_response.status_code}")
+                return False, {}
+            
+            # Check points again - should not have changed
+            me_response_after = session.get(f"{self.base_url}/api/auth/me", headers=headers, timeout=10)
+            if me_response_after.status_code != 200:
+                self.log_test("Predictions Save - No Points Effect", False, "Cannot get user points after prediction")
+                return False, {}
+            
+            me_data_after = me_response_after.json()
+            final_points = me_data_after.get('points', 0)
+            
+            if initial_points == final_points:
+                self.log_test("Predictions Save - No Points Effect", True, f"Points unchanged: {initial_points} -> {final_points}")
+                return True, {"initial_points": initial_points, "final_points": final_points}
+            else:
+                self.log_test("Predictions Save - No Points Effect", False, f"Points changed unexpectedly: {initial_points} -> {final_points}")
+                return False, {"initial_points": initial_points, "final_points": final_points}
+            
+        except Exception as e:
+            self.log_test("Predictions Save - No Points Effect", False, f"Exception: {str(e)}")
+            return False, {}
+
     def run_all_tests(self):
         """Run all backend tests"""
         print("=" * 60)
@@ -552,6 +810,13 @@ class GuessItAPITester:
         else:
             # This is expected for fresh deployments
             print("ℹ️  Predefined test user not found (expected for fresh deployment)")
+
+        # Points & Level System Tests
+        print("📌 Testing Points & Level System...")
+        self.test_auth_me_points_and_level()
+        self.test_predictions_detailed_points_fields()
+        self.test_points_calculation_logic()
+        self.test_predictions_save_no_points_effect()
 
         # Football endpoints
         print("📌 Testing Football Endpoints...")

@@ -498,7 +498,9 @@ async def get_current_user(
         picture=user.get("picture"),
         auth_provider=user.get("auth_provider", "email"),
         nickname_set=user.get("nickname_set", False),
-        created_at=created_at
+        created_at=created_at,
+        points=user.get("points", 0),
+        level=user.get("level", 0)
     )
 
 @router.post("/logout")

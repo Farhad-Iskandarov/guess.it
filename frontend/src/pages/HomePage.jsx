@@ -9,7 +9,7 @@ import { LeagueFilters } from '@/components/home/LeagueFilters';
 import { MatchList } from '@/components/home/MatchList';
 import { useAuth } from '@/lib/AuthContext';
 import { getMyPredictions, savePrediction } from '@/services/predictions';
-import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches } from '@/services/matches';
+import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches } from '@/services/matches';
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { Toaster } from '@/components/ui/sonner';
@@ -44,8 +44,15 @@ const mockNotifications = {
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('popular');
   const [activeLeague, setActiveLeague] = useState('all');
-  const [matches, setMatches] = useState([]);
-  const [isLoadingMatches, setIsLoadingMatches] = useState(true);
+  // Initialize from cache to prevent loading flash on navigation
+  const [matches, setMatches] = useState(() => {
+    const cached = getStaleCachedMatches('all');
+    return (cached && cached.matches) ? cached.matches : [];
+  });
+  const [isLoadingMatches, setIsLoadingMatches] = useState(() => {
+    const cached = getStaleCachedMatches('all');
+    return !(cached && cached.matches && cached.matches.length > 0);
+  });
   const [matchError, setMatchError] = useState(null);
 
   // View mode: use ref + direct DOM toggle for instant CSS switch (no React re-render)
@@ -115,9 +122,16 @@ export const HomePage = () => {
   // Connect to WebSocket for live updates
   const { isConnected } = useLiveMatches(handleLiveUpdate);
 
-  // Fetch matches from API
+  // Fetch matches from API (with cache support)
   const loadMatches = useCallback(async (leagueId) => {
-    setIsLoadingMatches(true);
+    // Show stale cached data instantly while refreshing
+    const stale = getStaleCachedMatches(leagueId);
+    if (stale && stale.matches && stale.matches.length > 0) {
+      setMatches(stale.matches);
+      setIsLoadingMatches(false);
+    } else {
+      setIsLoadingMatches(true);
+    }
     setMatchError(null);
 
     try {
@@ -132,13 +146,15 @@ export const HomePage = () => {
 
       if (data.matches && data.matches.length > 0) {
         setMatches(data.matches);
-      } else {
+      } else if (!stale || !stale.matches || stale.matches.length === 0) {
         setMatches([]);
       }
     } catch (error) {
       console.error('Failed to fetch matches:', error);
-      setMatchError('Failed to load matches. Please try again.');
-      setMatches([]);
+      if (!stale || !stale.matches || stale.matches.length === 0) {
+        setMatchError('Failed to load matches. Please try again.');
+        setMatches([]);
+      }
     } finally {
       setIsLoadingMatches(false);
     }
@@ -281,8 +297,8 @@ export const HomePage = () => {
             )}
           </div>
 
-          {/* View Toggle */}
-          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-secondary border border-border" data-testid="view-toggle">
+          {/* View Toggle - hidden on mobile */}
+          <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg bg-secondary border border-border" data-testid="view-toggle">
             <button
               onClick={() => handleViewModeChange('grid')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${

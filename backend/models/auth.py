@@ -60,6 +60,8 @@ class UserResponse(BaseModel):
     auth_provider: str
     nickname_set: bool
     created_at: datetime
+    points: int = 0
+    level: int = 0
 
 class NicknameSet(BaseModel):
     """Nickname selection request"""

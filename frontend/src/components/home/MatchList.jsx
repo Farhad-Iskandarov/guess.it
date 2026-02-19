@@ -1,8 +1,9 @@
 import { useState, useCallback, memo, useEffect, useRef } from 'react';
-import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio } from 'lucide-react';
+import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction } from '@/services/predictions';
+import { addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -120,6 +121,42 @@ const TeamCrest = memo(({ team }) => {
   );
 });
 TeamCrest.displayName = 'TeamCrest';
+
+// ============ Favorite Heart Button ============
+const FavoriteHeart = memo(({ teamId, teamName, teamCrest, isFavorite, onToggle, isAuthenticated }) => {
+  const [animating, setAnimating] = useState(false);
+
+  if (!isAuthenticated) return null;
+
+  const handleClick = async (e) => {
+    e.stopPropagation();
+    setAnimating(true);
+    try {
+      await onToggle(teamId, teamName, teamCrest, !isFavorite);
+    } catch {
+      // error handled by parent
+    }
+    setTimeout(() => setAnimating(false), 300);
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex-shrink-0 p-0.5 rounded-full hover:bg-muted/50 transition-colors"
+      data-testid={`fav-heart-${teamId}`}
+      aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+    >
+      <Heart
+        className={`w-3.5 h-3.5 transition-all duration-200 ${
+          isFavorite
+            ? 'text-red-500 fill-red-500'
+            : 'text-muted-foreground/40 hover:text-red-400'
+        } ${animating ? 'scale-125' : 'scale-100'}`}
+      />
+    </button>
+  );
+});
+FavoriteHeart.displayName = 'FavoriteHeart';
 
 // ============ Vote Button ============
 const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disabled, locked }) => {
@@ -304,6 +341,9 @@ const MatchRow = memo(({
   onAdvance,
   isLoading,
   prevScores,
+  favoriteTeamIds,
+  onToggleFavorite,
+  isAuthenticated,
 }) => {
   const displayedSelection = currentSelection !== undefined ? currentSelection : savedPrediction;
   const isLocked = match.predictionLocked;
@@ -321,11 +361,16 @@ const MatchRow = memo(({
 
   const isCurrentSaved = savedPrediction && savedPrediction === displayedSelection;
   const hasUnsavedChanges = savedPrediction && displayedSelection && savedPrediction !== displayedSelection;
+  const hasSavedPrediction = !!savedPrediction;
 
   return (
     <div
-      className={`match-row-card bg-card/50 hover:bg-card rounded-xl border overflow-hidden ${
-        match.status === 'LIVE' ? 'live-match-card' : 'border-border/50 hover:border-border'
+      className={`match-row-card rounded-xl border overflow-hidden ${
+        match.status === 'LIVE'
+          ? 'live-match-card'
+          : hasSavedPrediction
+            ? 'bg-emerald-500/[0.06] border-emerald-500/25 hover:border-emerald-500/40'
+            : 'bg-card/50 hover:bg-card border-border/50 hover:border-border'
       }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
@@ -367,6 +412,14 @@ const MatchRow = memo(({
               <span className="text-sm md:text-base font-medium text-foreground truncate">
                 {match.homeTeam.name}
               </span>
+              <FavoriteHeart
+                teamId={match.homeTeam.id}
+                teamName={match.homeTeam.name}
+                teamCrest={match.homeTeam.crest}
+                isFavorite={favoriteTeamIds?.has(match.homeTeam.id)}
+                onToggle={onToggleFavorite}
+                isAuthenticated={isAuthenticated}
+              />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-away">2</span>
@@ -374,6 +427,14 @@ const MatchRow = memo(({
               <span className="text-sm md:text-base font-medium text-foreground truncate">
                 {match.awayTeam.name}
               </span>
+              <FavoriteHeart
+                teamId={match.awayTeam.id}
+                teamName={match.awayTeam.name}
+                teamCrest={match.awayTeam.crest}
+                isFavorite={favoriteTeamIds?.has(match.awayTeam.id)}
+                onToggle={onToggleFavorite}
+                isAuthenticated={isAuthenticated}
+              />
             </div>
           </div>
           {/* Center: Score */}
@@ -402,11 +463,27 @@ const MatchRow = memo(({
                 <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-home">1</span>
                 <TeamCrest team={match.homeTeam} />
                 <span className="text-xs font-medium text-foreground truncate">{match.homeTeam.name}</span>
+                <FavoriteHeart
+                  teamId={match.homeTeam.id}
+                  teamName={match.homeTeam.name}
+                  teamCrest={match.homeTeam.crest}
+                  isFavorite={favoriteTeamIds?.has(match.homeTeam.id)}
+                  onToggle={onToggleFavorite}
+                  isAuthenticated={isAuthenticated}
+                />
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-away">2</span>
                 <TeamCrest team={match.awayTeam} />
                 <span className="text-xs font-medium text-foreground truncate">{match.awayTeam.name}</span>
+                <FavoriteHeart
+                  teamId={match.awayTeam.id}
+                  teamName={match.awayTeam.name}
+                  teamCrest={match.awayTeam.crest}
+                  isFavorite={favoriteTeamIds?.has(match.awayTeam.id)}
+                  onToggle={onToggleFavorite}
+                  isAuthenticated={isAuthenticated}
+                />
               </div>
             </div>
             <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
@@ -535,20 +612,26 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         return;
       }
 
+      // Optimistic update: immediately show as saved
+      const previousPrediction = savedPredictions[matchId];
+      if (onPredictionSaved) onPredictionSaved(matchId, selection);
+      setCurrentSelections((prev) => {
+        const next = { ...prev };
+        delete next[matchId];
+        return next;
+      });
+
       setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
       try {
         const result = await savePrediction(matchId, selection);
-        setCurrentSelections((prev) => {
-          const next = { ...prev };
-          delete next[matchId];
-          return next;
-        });
-        if (onPredictionSaved) onPredictionSaved(matchId, selection);
         toast.success(result.is_new ? 'Prediction saved!' : 'Prediction updated!', {
           description: `You predicted: ${selection === 'home' ? 'Home Win (1)' : selection === 'draw' ? 'Draw (X)' : 'Away Win (2)'}`,
           duration: 2000,
         });
       } catch (error) {
+        // Revert optimistic update on failure
+        if (onPredictionSaved) onPredictionSaved(matchId, previousPrediction || null);
+        setCurrentSelections((prev) => ({ ...prev, [matchId]: selection }));
         toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
       } finally {
         setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
@@ -577,16 +660,59 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
   // Filter only for live filter
   const displayMatches = activeLeague === 'live' ? matches.filter((m) => m.status === 'LIVE') : matches;
 
+  // Separate live matches for the dedicated section (only when showing "all" or specific league, not "live" filter)
+  const liveMatches = activeLeague !== 'live' ? displayMatches.filter((m) => m.status === 'LIVE') : [];
+  const nonLiveMatches = activeLeague !== 'live' ? displayMatches.filter((m) => m.status !== 'LIVE') : displayMatches;
+
   return (
     <>
       <div className="mt-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">All Matches</h3>
+        {/* Live Matches Section */}
+        {liveMatches.length > 0 && (
+          <div className="mb-8" data-testid="live-matches-section">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                </span>
+                <h3 className="text-lg font-semibold text-foreground" data-testid="live-section-title">Live Matches</h3>
+              </div>
+              <span className="text-xs text-muted-foreground">({liveMatches.length})</span>
+            </div>
+            <div
+              className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
+              data-testid="live-match-list-container"
+              data-view-mode={viewMode}
+            >
+              {liveMatches.map((match) => (
+                <MatchRow
+                  key={match.id}
+                  match={match}
+                  currentSelection={currentSelections[match.id]}
+                  savedPrediction={savedPredictions[match.id]}
+                  onSelectPrediction={handleSelectPrediction}
+                  onGuessIt={handleGuessIt}
+                  onRefresh={handleRefresh}
+                  onAdvance={handleAdvance}
+                  isLoading={loadingMatches[match.id]}
+                  prevScores={prevScores}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* All Matches Section */}
+        <h3 className="text-lg font-semibold text-foreground mb-4">
+          {activeLeague === 'live' ? 'Live Matches' : 'All Matches'}
+        </h3>
         <div
           className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
           data-testid="match-list-container"
           data-view-mode={viewMode}
         >
-          {displayMatches.map((match) => (
+          {nonLiveMatches.map((match) => (
             <MatchRow
               key={match.id}
               match={match}
@@ -601,7 +727,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
             />
           ))}
         </div>
-        {displayMatches.length === 0 && (
+        {nonLiveMatches.length === 0 && liveMatches.length === 0 && (
           <div className="text-center py-8 text-muted-foreground" data-testid="no-matches-in-list">
             No matches to display for this filter.
           </div>
