@@ -59,21 +59,32 @@ HeaderIconButton.displayName = 'HeaderIconButton';
 // =========== Level Popover ===========
 const LevelPopover = memo(({ userLevel, userPoints }) => {
   const [open, setOpen] = useState(false);
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
 
   return (
-    <div className="relative hidden sm:block">
+    <div className="relative" ref={popoverRef}>
       <button
         onClick={() => setOpen(prev => !prev)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-secondary border border-border hover:border-primary/40 hover:bg-secondary/80 transition-all duration-200 cursor-pointer"
+        className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-secondary border border-border hover:border-primary/40 hover:bg-secondary/80 transition-all duration-200 cursor-pointer"
         data-testid="header-level-badge"
       >
         <Trophy className="w-3.5 h-3.5 text-amber-400" />
-        <span className="text-xs font-semibold text-foreground">Level {userLevel}</span>
+        <span className="text-xs font-semibold text-foreground whitespace-nowrap">Level {userLevel}</span>
       </button>
       {open && (
         <div
-          className="absolute top-full right-0 mt-2 z-50 w-48 bg-popover border border-border rounded-xl shadow-xl p-4 animate-in fade-in-0 zoom-in-95 duration-150"
+          className="absolute top-full right-0 mt-2 z-50 w-48 bg-popover border border-border rounded-xl shadow-xl p-4 level-popover-enter"
           data-testid="level-popover"
         >
           <div className="flex flex-col items-center gap-2">
@@ -357,8 +368,8 @@ const GlobalSearch = ({ onMatchSelect }) => {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Search Input */}
-      <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5 min-w-[260px] md:min-w-[320px] border border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
+      {/* Search Input — full-width overlay on mobile */}
+      <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5 w-[180px] sm:w-[240px] md:min-w-[320px] border border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
         <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         <input
           ref={inputRef}
@@ -366,7 +377,7 @@ const GlobalSearch = ({ onMatchSelect }) => {
           value={query}
           onChange={handleInputChange}
           placeholder="Search teams..."
-          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none min-w-0"
           data-testid="search-input"
         />
         {isSearching && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin flex-shrink-0" />}
@@ -382,7 +393,7 @@ const GlobalSearch = ({ onMatchSelect }) => {
       {/* Dropdown */}
       {(query.length >= 2 || hasSearched) && (
         <div
-          className="absolute top-full right-0 mt-2 w-[340px] md:w-[400px] max-h-[480px] overflow-y-auto rounded-xl bg-card border border-border shadow-lg shadow-black/20 z-[100] scrollbar-hide"
+          className="absolute top-full right-0 mt-2 w-[calc(100vw-2rem)] sm:w-[340px] md:w-[400px] max-h-[480px] overflow-y-auto rounded-xl bg-card border border-border shadow-lg shadow-black/20 z-[100] scrollbar-hide"
           data-testid="search-dropdown"
         >
           {/* Loading */}
@@ -497,11 +508,15 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
             {/* Global Search */}
             <GlobalSearch onMatchSelect={handleMatchSelect} />
 
-            {/* Auth icons */}
+            {/* Auth icons — hide on small screens */}
             {isAuthenticated && (
               <>
-                <HeaderIconButton icon={Mail} badge={notifications?.messages} onClick={() => handleFeatureClick('Messages')} tooltip="Messages" testId="header-messages" />
-                <HeaderIconButton icon={Users} badge={notifications?.friends} onClick={() => handleFeatureClick('Friends')} tooltip="Friend Requests" testId="header-friends" />
+                <span className="hidden sm:inline-flex">
+                  <HeaderIconButton icon={Mail} badge={notifications?.messages} onClick={() => handleFeatureClick('Messages')} tooltip="Messages" testId="header-messages" />
+                </span>
+                <span className="hidden sm:inline-flex">
+                  <HeaderIconButton icon={Users} badge={notifications?.friends} onClick={() => handleFeatureClick('Friends')} tooltip="Friend Requests" testId="header-friends" />
+                </span>
                 <HeaderIconButton icon={Bell} badge={notifications?.alerts} onClick={() => handleFeatureClick('Notifications')} tooltip="Notifications" testId="header-notifications" />
               </>
             )}
@@ -529,14 +544,14 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
 
             {/* Login/Register */}
             {!isAuthenticated && (
-              <div className="flex items-center gap-2 ml-2">
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" onClick={handleLoginClick} data-testid="header-login">
-                  <LogIn className="w-4 h-4 mr-2 hidden sm:inline" />
-                  <span>Login</span>
+              <div className="flex items-center gap-1 sm:gap-2 ml-1 sm:ml-2">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground px-2 sm:px-3" onClick={handleLoginClick} data-testid="header-login">
+                  <LogIn className="w-4 h-4 mr-1 sm:mr-2 hidden sm:inline" />
+                  <span className="text-xs sm:text-sm">Login</span>
                 </Button>
-                <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleRegisterClick} data-testid="header-register">
-                  <UserPlus className="w-4 h-4 mr-2 hidden sm:inline" />
-                  <span>Register</span>
+                <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground px-2 sm:px-3" onClick={handleRegisterClick} data-testid="header-register">
+                  <UserPlus className="w-4 h-4 mr-1 sm:mr-2 hidden sm:inline" />
+                  <span className="text-xs sm:text-sm">Register</span>
                 </Button>
               </div>
             )}

@@ -9,12 +9,13 @@ import { LeagueFilters } from '@/components/home/LeagueFilters';
 import { MatchList } from '@/components/home/MatchList';
 import { useAuth } from '@/lib/AuthContext';
 import { getMyPredictions, savePrediction } from '@/services/predictions';
+import { getFavoriteClubs, addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
 import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches } from '@/services/matches';
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Loader2, Wifi, WifiOff, LayoutGrid, List } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart } from 'lucide-react';
 
 // League filters - maps to competition codes
 const leagueFilters = [
@@ -28,7 +29,7 @@ const leagueFilters = [
   { id: 'FL1', name: 'Ligue 1', active: false },
 ];
 
-const tabs = [
+const baseTabs = [
   { id: 'top-matches', name: 'Top Matches', icon: 'fire' },
   { id: 'popular', name: 'Popular', active: true },
   { id: 'top-live', name: 'Top Live' },
@@ -65,8 +66,17 @@ export const HomePage = () => {
   // Saved predictions from backend
   const [savedPredictions, setSavedPredictions] = useState({});
 
+  // Favorites state
+  const [favoriteTeamIds, setFavoriteTeamIds] = useState(new Set());
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+
   // Real authentication from AuthContext
   const { user, isAuthenticated, logout } = useAuth();
+
+  // Build tabs: add Favorite tab only when authenticated
+  const tabs = isAuthenticated
+    ? [...baseTabs, { id: 'favorite', name: 'Favorite', icon: 'heart' }]
+    : baseTabs;
 
   // Location for highlight from search navigation
   const location = useLocation();
@@ -218,8 +228,57 @@ export const HomePage = () => {
     fetchPredictions();
   }, [isAuthenticated]);
 
+  // Fetch favorite clubs when authenticated
+  useEffect(() => {
+    const fetchFavorites = async () => {
+      if (isAuthenticated) {
+        try {
+          const data = await getFavoriteClubs();
+          const ids = new Set((data.favorites || []).map(f => f.team_id));
+          setFavoriteTeamIds(ids);
+          setFavoritesLoaded(true);
+        } catch (error) {
+          console.error('Failed to fetch favorites:', error);
+          setFavoritesLoaded(true);
+        }
+      } else {
+        setFavoriteTeamIds(new Set());
+        setFavoritesLoaded(false);
+        // If user logs out while on Favorite tab, switch away
+        if (activeTab === 'favorite') setActiveTab('popular');
+      }
+    };
+    fetchFavorites();
+  }, [isAuthenticated]);
+
+  // Toggle favorite handler
+  const handleToggleFavorite = useCallback(async (teamId, teamName, teamCrest, shouldAdd) => {
+    try {
+      if (shouldAdd) {
+        await addFavoriteClub(teamId, teamName, teamCrest);
+        setFavoriteTeamIds(prev => new Set([...prev, teamId]));
+        toast.success('Added to favorites', { duration: 2000 });
+      } else {
+        await removeFavoriteClub(teamId);
+        setFavoriteTeamIds(prev => {
+          const next = new Set(prev);
+          next.delete(teamId);
+          return next;
+        });
+        toast.success('Removed from favorites', { duration: 2000 });
+      }
+    } catch (error) {
+      toast.error('Failed to update favorites', { description: error.message, duration: 3000 });
+      throw error;
+    }
+  }, []);
+
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
+    // When switching to favorite tab, reset league to 'all' to show all matches
+    if (tabId === 'favorite') {
+      setActiveLeague('all');
+    }
   }, []);
 
   const handleLeagueChange = useCallback((leagueId) => {
@@ -267,7 +326,7 @@ export const HomePage = () => {
       />
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 flex-1">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1">
         {/* Promo Banner */}
         <PromoBanner slides={mockBannerSlides} />
 
@@ -350,7 +409,7 @@ export const HomePage = () => {
         )}
 
         {/* No Matches */}
-        {!isLoadingMatches && !matchError && matches.length === 0 && (
+        {!isLoadingMatches && !matchError && matches.length === 0 && activeTab !== 'favorite' && (
           <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="no-matches">
             <p className="text-lg text-foreground font-medium">No matches found</p>
             <p className="text-sm text-muted-foreground">
@@ -361,8 +420,52 @@ export const HomePage = () => {
           </div>
         )}
 
-        {/* Match Content */}
-        {matches.length > 0 && (
+        {/* Favorite Tab Content */}
+        {activeTab === 'favorite' && isAuthenticated && (
+          <>
+            {(() => {
+              const favoriteMatches = matches.filter(m =>
+                favoriteTeamIds.has(m.homeTeam.id) || favoriteTeamIds.has(m.awayTeam.id)
+              );
+              if (favoriteTeamIds.size === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-empty">
+                    <Heart className="w-12 h-12 text-muted-foreground/30" />
+                    <p className="text-lg text-foreground font-medium">No favorite clubs yet</p>
+                    <p className="text-sm text-muted-foreground text-center max-w-md">
+                      Tap the heart icon next to any club name in a match card to add it to your favorites.
+                    </p>
+                  </div>
+                );
+              }
+              if (favoriteMatches.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-no-matches">
+                    <Heart className="w-12 h-12 text-red-500/30" />
+                    <p className="text-lg text-foreground font-medium">No matches for your favorites</p>
+                    <p className="text-sm text-muted-foreground text-center max-w-md">
+                      None of your favorite clubs have upcoming matches right now. Check back later!
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <MatchList
+                  matches={favoriteMatches}
+                  savedPredictions={savedPredictions}
+                  onPredictionSaved={handlePredictionSaved}
+                  activeLeague={activeLeague}
+                  viewMode={viewMode}
+                  favoriteTeamIds={favoriteTeamIds}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              );
+            })()}
+          </>
+        )}
+
+        {/* Match Content (non-favorite tabs) */}
+        {matches.length > 0 && activeTab !== 'favorite' && (
           <>
             {/* Full Match List */}
             <MatchList
@@ -371,6 +474,8 @@ export const HomePage = () => {
               onPredictionSaved={handlePredictionSaved}
               activeLeague={activeLeague}
               viewMode={viewMode}
+              favoriteTeamIds={favoriteTeamIds}
+              onToggleFavorite={handleToggleFavorite}
             />
           </>
         )}

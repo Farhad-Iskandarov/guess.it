@@ -51,16 +51,16 @@ const ScoreDisplay = memo(({ score, status, prevScore, matchMinute }) => {
   const hasScore = status !== 'NOT_STARTED' && !(score.home === null && score.away === null);
 
   return (
-    <div className="score-block flex flex-col items-center justify-center" data-testid="score-display">
+    <div className={`${hasScore ? 'score-block' : 'px-2'} flex flex-col items-center justify-center flex-shrink-0`} data-testid="score-display">
       {/* Match minute above score for LIVE matches */}
       {isLive && matchMinute ? (
         <span className="text-[11px] font-semibold text-red-400 tabular-nums mb-0.5" data-testid="score-minute">
           {matchMinute}
         </span>
-      ) : (
+      ) : hasScore ? (
         /* Invisible placeholder to keep vertical alignment consistent */
         <span className="text-[11px] mb-0.5 invisible">00'</span>
-      )}
+      ) : null}
       {hasScore ? (
         <div className="flex items-center gap-1.5">
           <span
@@ -80,7 +80,7 @@ const ScoreDisplay = memo(({ score, status, prevScore, matchMinute }) => {
           </span>
         </div>
       ) : (
-        <span className="text-sm font-medium text-muted-foreground">vs</span>
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">vs</span>
       )}
     </div>
   );
@@ -169,7 +169,7 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
       disabled={isLocked}
       data-selected={isSelected ? 'true' : 'false'}
       data-testid={`vote-btn-${type}`}
-      className={`flex flex-col items-center justify-center match-vote-btn px-2 md:px-3 py-2 rounded-lg border ${
+      className={`flex flex-col items-center justify-center match-vote-btn px-1.5 sm:px-2 md:px-3 py-1.5 sm:py-2 rounded-lg border ${
         isLocked
           ? 'opacity-40 cursor-not-allowed bg-muted border-border/30'
           : isSelected
@@ -178,18 +178,18 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
       }`}
       style={{ transition: 'background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease' }}
     >
-      <div className="flex items-center gap-1 mb-0.5">
-        <span className={`text-sm md:text-base font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+      <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5">
+        <span className={`text-xs sm:text-sm md:text-base font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
           {labels[type]}
         </span>
         {isSelected && !isLocked && (
-          <span className="flex items-center justify-center w-3 h-3 md:w-4 md:h-4 rounded bg-primary/20">
-            <TrendingUp className="w-2 h-2 md:w-3 md:h-3 text-primary" />
+          <span className="flex items-center justify-center w-3 h-3 sm:w-4 sm:h-4 rounded bg-primary/20">
+            <TrendingUp className="w-2 h-2 sm:w-3 sm:h-3 text-primary" />
           </span>
         )}
       </div>
-      <span className="text-sm md:text-base font-bold text-foreground">{votes.toLocaleString()}</span>
-      <span className={`text-xs md:text-sm ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+      <span className="text-xs sm:text-sm md:text-base font-bold text-foreground">{votes.toLocaleString()}</span>
+      <span className={`text-[10px] sm:text-xs md:text-sm ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
         {percentage}%
       </span>
     </button>
@@ -221,7 +221,7 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
       disabled={isDisabled}
       data-testid="guess-it-btn"
       className={`
-        relative match-action-btn h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
+        relative match-action-btn h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
         ${state.isLocked
           ? 'bg-muted border-2 border-border text-muted-foreground cursor-not-allowed'
           : state.isSaved
@@ -232,19 +232,19 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
       `}
       style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
     >
-      <div className="flex flex-col items-center justify-center gap-1">
+      <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
         {state.isLocked ? (
-          <Lock className="w-5 h-5" />
+          <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
         ) : isLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
         ) : state.showCheck ? (
-          <Check className="w-5 h-5" />
+          <Check className="w-4 h-4 sm:w-5 sm:h-5" />
         ) : state.showUpdate ? (
-          <RefreshCw className="w-5 h-5" />
+          <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
         ) : (
-          <span className="text-lg font-bold">G</span>
+          <span className="text-base sm:text-lg font-bold">G</span>
         )}
-        <span className="text-xs md:text-sm font-semibold">{state.text}</span>
+        <span className="text-[10px] sm:text-xs md:text-sm font-semibold">{state.text}</span>
       </div>
     </Button>
   );
@@ -259,16 +259,16 @@ const RemoveButton = memo(({ onClick, disabled, hasSelection }) => (
     variant="outline"
     data-testid="remove-prediction-btn"
     className={`
-      relative match-action-btn-sm h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
+      relative match-action-btn-sm h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
       border-2 border-muted-foreground/30 hover:border-destructive/50
       bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive
       ${!hasSelection ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105'}
     `}
     style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
   >
-    <div className="flex flex-col items-center justify-center gap-1">
-      <Trash2 className="w-5 h-5" />
-      <span className="text-xs md:text-sm font-semibold">Remove</span>
+    <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
+      <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+      <span className="text-[10px] sm:text-xs md:text-sm font-semibold">Remove</span>
     </div>
   </Button>
 ));
@@ -282,7 +282,7 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
     variant="outline"
     data-testid="advance-prediction-btn"
     className={`
-      relative match-action-btn-sm h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
+      relative match-action-btn-sm h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
       border-2 border-amber-500/30 hover:border-amber-500
       bg-gradient-to-br from-amber-500/5 to-orange-500/10 
       hover:from-amber-500/20 hover:to-orange-500/20
@@ -291,9 +291,9 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
     `}
     style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
   >
-    <div className="flex flex-col items-center justify-center gap-1">
-      <Sparkles className="w-5 h-5" />
-      <span className="text-xs md:text-sm font-semibold">Advance</span>
+    <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
+      <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+      <span className="text-[10px] sm:text-xs md:text-sm font-semibold">Advance</span>
     </div>
   </Button>
 ));
@@ -377,10 +377,10 @@ const MatchRow = memo(({
       style={{ contain: 'layout style', transition: 'background-color 0.2s ease, border-color 0.2s ease' }}
     >
       {/* Match Meta - shared between both views */}
-      <div className="match-row-meta flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="match-row-meta flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-muted-foreground flex-wrap">
         <StatusBadge status={match.status} statusDetail={match.statusDetail} />
-        <span className="match-row-datetime">{match.dateTime}</span>
-        <span className="text-border">|</span>
+        <span className="match-row-datetime whitespace-nowrap">{match.dateTime}</span>
+        <span className="text-border hidden sm:inline">|</span>
         <span className="truncate">{match.competition}</span>
       </div>
 
@@ -405,7 +405,7 @@ const MatchRow = memo(({
       <div className="match-row-list-layout">
         <div className="flex items-center gap-3 md:gap-4">
           {/* Left: Team names */}
-          <div className="flex flex-col gap-2 min-w-0 flex-1">
+          <div className="flex flex-col gap-0 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-home">1</span>
               <TeamCrest team={match.homeTeam} />
@@ -421,6 +421,11 @@ const MatchRow = memo(({
                 isAuthenticated={isAuthenticated}
               />
             </div>
+            {match.status === 'NOT_STARTED' && (
+              <div className="flex items-center justify-center py-0.5">
+                <span className="text-[11px] font-bold text-muted-foreground/60 uppercase tracking-widest" data-testid="vs-label">vs</span>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-away">2</span>
               <TeamCrest team={match.awayTeam} />
@@ -437,8 +442,10 @@ const MatchRow = memo(({
               />
             </div>
           </div>
-          {/* Center: Score */}
-          <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
+          {/* Center: Score (only when match has started) */}
+          {match.status !== 'NOT_STARTED' && (
+            <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
+          )}
           {/* Right: Vote buttons + Action buttons */}
           <div className="flex items-center gap-1 md:gap-2">
             <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
@@ -458,7 +465,7 @@ const MatchRow = memo(({
         <div className="space-y-2.5">
           {/* Teams + Score row */}
           <div className="flex items-center">
-            <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+            <div className="flex flex-col gap-0 min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-home">1</span>
                 <TeamCrest team={match.homeTeam} />
@@ -472,6 +479,11 @@ const MatchRow = memo(({
                   isAuthenticated={isAuthenticated}
                 />
               </div>
+              {match.status === 'NOT_STARTED' && (
+                <div className="flex items-center justify-center py-0.5">
+                  <span className="text-[11px] font-bold text-muted-foreground/60 uppercase tracking-widest" data-testid="vs-label">vs</span>
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-away">2</span>
                 <TeamCrest team={match.awayTeam} />
@@ -486,9 +498,12 @@ const MatchRow = memo(({
                 />
               </div>
             </div>
-            <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
+            {match.status !== 'NOT_STARTED' && (
+              <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
+            )}
           </div>
-          <div className="flex items-center gap-1.5">
+          {/* Vote + Action buttons — stacked on mobile */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
             <div className="flex items-center gap-1 flex-1">
               <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
               <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
@@ -504,7 +519,7 @@ const MatchRow = memo(({
       </div>
 
       {/* Footer Stats - shared */}
-      <div className="match-row-footer flex items-center gap-3 pt-2.5 border-t border-border/30">
+      <div className="match-row-footer flex items-center gap-2 sm:gap-3 pt-2 sm:pt-2.5 border-t border-border/30 flex-wrap text-[10px] sm:text-xs">
         <span className="text-muted-foreground">
           Total votes: <span className="text-foreground font-medium">{match.totalVotes.toLocaleString()}</span>
         </span>
@@ -530,7 +545,7 @@ const MatchRow = memo(({
 MatchRow.displayName = 'MatchRow';
 
 // ============ Main MatchList ============
-export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid' }) => {
+export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid', favoriteTeamIds, onToggleFavorite }) => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -666,17 +681,17 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
 
   return (
     <>
-      <div className="mt-6">
+      <div className="mt-4 sm:mt-6">
         {/* Live Matches Section */}
         {liveMatches.length > 0 && (
-          <div className="mb-8" data-testid="live-matches-section">
-            <div className="flex items-center gap-2 mb-4">
+          <div className="mb-6 sm:mb-8" data-testid="live-matches-section">
+            <div className="flex items-center gap-2 mb-3 sm:mb-4">
               <div className="flex items-center gap-1.5">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
                 </span>
-                <h3 className="text-lg font-semibold text-foreground" data-testid="live-section-title">Live Matches</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-foreground" data-testid="live-section-title">Live Matches</h3>
               </div>
               <span className="text-xs text-muted-foreground">({liveMatches.length})</span>
             </div>
@@ -697,6 +712,9 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
                   onAdvance={handleAdvance}
                   isLoading={loadingMatches[match.id]}
                   prevScores={prevScores}
+                  favoriteTeamIds={favoriteTeamIds}
+                  onToggleFavorite={onToggleFavorite}
+                  isAuthenticated={isAuthenticated}
                 />
               ))}
             </div>
@@ -704,7 +722,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         )}
 
         {/* All Matches Section */}
-        <h3 className="text-lg font-semibold text-foreground mb-4">
+        <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">
           {activeLeague === 'live' ? 'Live Matches' : 'All Matches'}
         </h3>
         <div
@@ -724,6 +742,9 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               onAdvance={handleAdvance}
               isLoading={loadingMatches[match.id]}
               prevScores={prevScores}
+              favoriteTeamIds={favoriteTeamIds}
+              onToggleFavorite={onToggleFavorite}
+              isAuthenticated={isAuthenticated}
             />
           ))}
         </div>

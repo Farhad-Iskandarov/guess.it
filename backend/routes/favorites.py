@@ -17,7 +17,7 @@ def get_db(request: Request) -> AsyncIOMotorDatabase:
 
 
 async def get_current_user(request: Request, db: AsyncIOMotorDatabase):
-    session_id = request.cookies.get("session_id")
+    session_id = request.cookies.get("session_token")
     if not session_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
     session = await validate_session(db, session_id)

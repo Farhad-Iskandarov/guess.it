@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -37,17 +37,18 @@ SlideContent.displayName = 'SlideContent';
 const NavButton = memo(({ direction, onClick }) => (
   <button
     onClick={onClick}
-    className="absolute top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white z-20"
+    className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/40 hover:bg-black/60 active:bg-black/70 text-white z-20"
     style={{
-      [direction === 'prev' ? 'left' : 'right']: '1rem',
+      [direction === 'prev' ? 'left' : 'right']: '0.5rem',
       transition: 'background-color 0.2s ease',
     }}
     aria-label={`${direction === 'prev' ? 'Previous' : 'Next'} slide`}
+    data-testid={`banner-${direction}`}
   >
     {direction === 'prev' ? (
-      <ChevronLeft className="w-5 h-5" />
+      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
     ) : (
-      <ChevronRight className="w-5 h-5" />
+      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
     )}
   </button>
 ));
@@ -101,11 +102,57 @@ export const PromoBanner = ({ slides }) => {
     setTimeout(() => setIsAutoPlaying(true), 10000);
   }, [slides.length]);
 
+  // Touch / Swipe / Mouse drag support for carousel
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+
+  const handleTouchStart = useCallback((e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleTouchEnd = useCallback((e) => {
+    if (touchStartX.current === null) return;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const deltaX = endX - touchStartX.current;
+    const deltaY = endY - touchStartY.current;
+    // Trigger swipe if horizontal > 40px and larger than vertical
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) nextSlide();
+      else prevSlide();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }, [nextSlide, prevSlide]);
+
+  const handleMouseDown = useCallback((e) => {
+    touchStartX.current = e.clientX;
+    touchStartY.current = e.clientY;
+  }, []);
+
+  const handleMouseUp = useCallback((e) => {
+    if (touchStartX.current === null) return;
+    const deltaX = e.clientX - touchStartX.current;
+    const deltaY = e.clientY - touchStartY.current;
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) nextSlide();
+      else prevSlide();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  }, [nextSlide, prevSlide]);
+
   return (
     <div
-      className="relative w-full overflow-hidden rounded-xl"
+      className="relative w-full overflow-hidden rounded-xl select-none"
       data-theme-independent="true"
-      style={{ height: '405px' }}
+      data-testid="promo-banner"
+      style={{ height: '405px', cursor: 'grab', touchAction: 'pan-y' }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
     >
       {/* Fixed-height container for all slides */}
       <div className="promo-banner-slides" style={{ position: 'relative', width: '100%', height: '100%' }}>

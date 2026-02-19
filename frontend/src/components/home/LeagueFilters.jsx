@@ -2,7 +2,7 @@ import { Check, ChevronDown } from 'lucide-react';
 
 export const LeagueFilters = ({ leagues, activeLeague, onLeagueChange }) => {
   return (
-    <div className="flex items-center gap-3 py-4 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-2 sm:gap-3 py-3 sm:py-4 overflow-x-auto scrollbar-hide pr-4">
       {leagues.map((league) => {
         const isActive = activeLeague === league.id;
         const isSpecial = league.id === 'azerbaijan-league';
@@ -11,7 +11,7 @@ export const LeagueFilters = ({ leagues, activeLeague, onLeagueChange }) => {
           <button
             key={league.id}
             onClick={() => onLeagueChange(league.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0 ${
               isActive
                 ? 'bg-primary text-primary-foreground shadow-glow'
                 : isSpecial

@@ -10,6 +10,24 @@ A real-time football prediction platform powered by live data from [Football-Dat
 
 ---
 
+> **IMPORTANT — READ BEFORE CLONING / DEPLOYING**
+>
+> This project requires a **Football-Data.org API key** to display matches, scores, and live data. Without this key, the app will show **"No matches found"** on the main page.
+>
+> **Setup after cloning:**
+> 1. Get a free API token at [https://www.football-data.org/client/register](https://www.football-data.org/client/register)
+> 2. Add it to `/app/backend/.env`:
+>    ```
+>    FOOTBALL_API_KEY="your_api_token_here"
+>    ```
+> 3. Restart the backend: `sudo supervisorctl restart backend`
+>
+> The API uses the `X-Auth-Token` HTTP header internally. Free tier allows **10 requests/minute** and includes: Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Champions League, World Cup, and European Championship.
+>
+> **Without this key, you will NOT see any matches, scores, live data, or predictions.**
+
+---
+
 ## Table of Contents
 
 - [Project Overview](#project-overview)
@@ -83,6 +101,13 @@ Predictions are automatically locked **10 minutes before kick-off**, and fully d
 - Unique nickname system (required after registration)
 - Session-based authentication (httpOnly cookies, 7-day expiry)
 - Nickname availability checker with suggestions
+
+### Favorite Clubs
+- Heart icon toggle on team names in match cards
+- "Favorite" tab shows only matches involving favorited teams
+- Favorites stored per-user in MongoDB, persist across sessions
+- Auth-gated: only visible to signed-in users
+- Animated heart toggle with scale bounce effect
 
 ### Real-Time Updates
 - WebSocket connection at `/api/ws/matches`
@@ -159,6 +184,7 @@ Predictions are automatically locked **10 minutes before kick-off**, and fully d
 │   │   ├── __init__.py
 │   │   ├── auth.py             # Auth routes (register, login, OAuth, nickname)
 │   │   ├── predictions.py      # Prediction CRUD routes
+│   │   ├── favorites.py        # Favorite clubs CRUD routes
 │   │   └── football.py         # Football API proxy, WebSocket, polling
 │   └── services/
 │       ├── __init__.py
@@ -186,7 +212,8 @@ Predictions are automatically locked **10 minutes before kick-off**, and fully d
 │       │   └── use-toast.js        # Toast notification hook
 │       ├── services/
 │       │   ├── matches.js      # Football API client (fetch, search)
-│       │   └── predictions.js  # Prediction API client (save, get, delete)
+│       │   ├── predictions.js  # Prediction API client (save, get, delete)
+│       │   └── favorites.js    # Favorites API client (get, add, remove)
 │       ├── data/
 │       │   └── mockData.js     # Banner slides, static content
 │       ├── pages/
@@ -682,3 +709,134 @@ Football data provided by [Football-Data.org](https://www.football-data.org/).
 - `frontend/src/components/layout/Header.jsx` — Level/Points badge in header and dropdown menu
 - `frontend/src/pages/MyPredictionsPage.jsx` — Level/Points display, Points card clickable filter, per-prediction points display
 
+---
+
+### 2026-02-19 (Session 6) — Header Level Fix & Favorite Clubs
+
+#### Header Level Display Fix
+
+- **Renamed "Lv.0" to "Level 0"**: The level badge now displays the full text "Level 0" instead of the abbreviated "Lv.0"
+- **Level dropdown popup**: Clicking the Level badge opens a clean dropdown showing:
+  - Trophy icon (amber color)
+  - "Level 0" text (bold)
+  - "0 pts" with lightning bolt icon (green primary)
+- **Layout fix**: Level badge is now properly inside the same container as the user avatar. Previously it was a separate block element; now it's inline with the avatar dropdown in `UserDropdownMenu`
+- **Mobile responsive**: Removed `hidden sm:block` class — Level badge is now visible on all screen sizes (was previously hidden on mobile)
+- **Smooth animation**: Added CSS-based open/close animation for the dropdown:
+  - Open: scale(0.92→1) + fade-in with cubic-bezier easing (0.18s)
+  - Close: scale(1→0.92) + fade-out (0.12s)
+  - Transform origin: top-right (aligned with badge position)
+- **Click-outside close**: Dropdown closes when clicking outside (proper `mousedown` event listener with cleanup)
+
+**Modified files:**
+- `frontend/src/components/layout/Header.jsx` — Rewrote `LevelPopover` component: removed `hidden sm:block`, added `useRef`+`useEffect` for click-outside, CSS-based animation classes
+- `frontend/src/App.css` — Added `.level-popover-open`, `.level-popover-closed` animation classes
+
+#### Favorite Clubs Feature
+
+**New "Favorite" tab:**
+- Added "Favorite" tab to the `TabsSection` alongside Top Matches, Popular, Top Live, Soon
+- Tab includes a red heart icon that fills when active
+- **Auth-gated**: Tab only appears when user is authenticated (hidden for guests)
+- When user logs out while on Favorite tab, automatically switches to "Popular"
+
+**Heart icon on clubs:**
+- Small heart button next to each team name in match cards (both grid and list views)
+- Only visible when user is authenticated
+- Click to add team to favorites (heart fills red with scale animation)
+- Click again to remove from favorites (heart becomes outline)
+- Animation: 0.3s scale bounce on toggle (1→1.35→1)
+- Does not break card layout
+
+**Favorite section behavior:**
+- Shows matches where at least one team is in user's favorite clubs list
+- Uses the same match card design as other tabs
+- Filters from already-loaded match data (no extra API calls)
+- Real-time updates still work
+
+**Empty states:**
+- No favorite clubs: Shows heart icon + "No favorite clubs yet" + instruction text
+- No matches for favorites: Shows heart icon + "No matches for your favorites" message
+- Both states have fade-in animation
+
+**Backend (already existed, bug fixed):**
+- `GET /api/favorites/clubs` — Returns user's favorite clubs
+- `POST /api/favorites/clubs` — Add club to favorites (duplicate prevention)
+- `DELETE /api/favorites/clubs/{team_id}` — Remove club from favorites
+- **Bug fix**: Fixed session cookie name mismatch (`session_id` → `session_token`) in `routes/favorites.py`
+
+**Database schema — Favorites Collection (`favorites`):**
+
+| Field | Type | Description |
+|-------|------|------------|
+| `user_id` | String | Reference to user |
+| `team_id` | Integer | Football-Data.org team ID |
+| `team_name` | String | Team display name |
+| `team_crest` | String | Team crest/logo URL |
+| `created_at` | String (ISO) | When favorited |
+
+**Persistence strategy:**
+- Favorites stored per-user in MongoDB `favorites` collection
+- Frontend fetches favorites on auth state change
+- Local state: `Set<team_id>` for O(1) lookup in match filtering
+- Cache: 5-minute TTL in `services/favorites.js`
+- No duplicate entries (checked server-side before insert)
+
+**Modified files:**
+- `frontend/src/pages/HomePage.jsx` — Added favorites state, fetch on auth, `handleToggleFavorite`, "Favorite" tab with filtering logic, pass favorites to MatchList
+- `frontend/src/components/home/TabsSection.jsx` — Added Heart icon import, renders heart icon for `tab.icon === 'heart'`, added `data-testid` on tabs
+- `frontend/src/components/home/MatchList.jsx` — Accepts `favoriteTeamIds` and `onToggleFavorite` props, passes them to MatchRow components
+- `frontend/src/App.css` — Added `.fav-heart-animate`, `.favorite-empty-state` CSS animations, restored full match-list CSS styles
+- `backend/routes/favorites.py` — Fixed cookie name from `session_id` to `session_token`
+
+
+---
+
+### 2026-02-19 (Session 7) — Mobile Responsiveness Fix
+
+#### Issues Fixed
+
+**Header (mobile):**
+- Search bar: Reduced width from `min-w-[260px]` to `w-[180px]` on mobile, preventing overflow and element squeezing
+- Auth icons (Messages, Friends): Hidden on small screens (`hidden sm:inline-flex`), only Notifications visible
+- Login/Register buttons: Smaller text (`text-xs`) and tighter spacing on mobile
+- Search dropdown: Uses `w-[calc(100vw-2rem)]` on mobile for full-width results
+
+**Tabs Section (mobile):**
+- Reduced gap from `gap-6` to `gap-3` on mobile → `gap-5 sm` → `gap-6 md`
+- Tabs are now horizontally scrollable with `overflow-x-auto scrollbar-hide`
+- Each tab has `whitespace-nowrap flex-shrink-0` to prevent wrapping
+- "View All" button hidden on mobile (`hidden sm:flex`)
+- Font size: `text-sm` on mobile → `text-base` on desktop
+
+**League Filters (mobile):**
+- Smaller padding: `px-3 py-1.5` on mobile → `px-4 py-2` on desktop
+- Smaller font: `text-xs` on mobile → `text-sm` on desktop
+- Added `pr-4` right padding to prevent last chip from being clipped
+- Added `flex-shrink-0` on each chip to prevent squeezing
+
+**Match Cards (mobile):**
+- Vote buttons (1, X, 2) and Action buttons (GuessIt/Advance/Remove) now stack vertically on mobile using `flex-col sm:flex-row`
+- Button heights: `h-[56px]` on mobile → `h-[72px] sm` → `h-[84px] md`
+- Button text: `text-[10px]` on mobile → `text-xs sm` → `text-sm md`
+- Icons: `w-4 h-4` on mobile → `w-5 h-5` on sm+
+- Score block: `60px` wide on mobile → `80px` on sm+
+- Meta row: `text-[11px]` on mobile → `text-sm` on sm+, pipe separator hidden on mobile
+- Footer stats: `text-[10px]` on mobile → `text-xs` on sm+, `flex-wrap` added
+
+**Main Page Container:**
+- Padding: `px-3 py-4` on mobile → `px-4 py-6` on sm+
+
+#### Breakpoint Strategy
+- `< 640px` (mobile): Stacked buttons, smaller text, compact spacing
+- `640px–768px` (sm): Inline buttons, standard text, normal spacing
+- `768px+` (md): 2-column grid for match cards
+- `1024px+` (lg/desktop): Full layout with all header icons
+
+#### Modified Files
+- `frontend/src/components/layout/Header.jsx` — Search bar width, auth icon visibility, button sizing
+- `frontend/src/components/home/TabsSection.jsx` — Gap, scroll, font size, View All hidden on mobile
+- `frontend/src/components/home/LeagueFilters.jsx` — Padding, font size, right padding
+- `frontend/src/components/home/MatchList.jsx` — Button stacking, heights, font sizes, meta/footer sizing
+- `frontend/src/App.css` — Score block responsive width, match card responsive CSS (padding, meta, footer, vote/action button min-widths)
+- `frontend/src/pages/HomePage.jsx` — Container padding

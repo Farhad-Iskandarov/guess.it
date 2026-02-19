@@ -151,10 +151,11 @@ async def list_matches(
     - competition: Competition code (PL, CL, SA, etc.)
     - status: LIVE, FINISHED, etc.
     """
-    # Default: today + next 7 days if no dates provided
+    # Default: yesterday + next 7 days if no dates provided
+    # Include yesterday to show recently finished matches with final scores
     if not date_from and not date_to and not status:
         today = datetime.now(timezone.utc)
-        date_from = today.strftime("%Y-%m-%d")
+        date_from = (today - timedelta(days=1)).strftime("%Y-%m-%d")
         date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
 
     matches = await get_matches(db, date_from, date_to, competition, status)

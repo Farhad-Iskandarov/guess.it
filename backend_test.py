@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 
 class GuessItAPITester:
-    def __init__(self, base_url="https://guess-it-copy-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://full-clone-1.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.session_token = None
         self.user_id = None
@@ -768,6 +768,184 @@ class GuessItAPITester:
             self.log_test("Predictions Save - No Points Effect", False, f"Exception: {str(e)}")
             return False, {}
 
+    def test_football_matches_team_ids(self):
+        """Test that /api/football/matches returns team objects with integer 'id' fields"""
+        success, response = self.run_test(
+            "Football Matches - Team IDs Present",
+            "GET",
+            "/api/football/matches",
+            200
+        )
+        
+        if not success:
+            return False, response
+        
+        try:
+            matches = response.get('matches', [])
+            if not matches:
+                self.log_test("Football Matches - Team IDs Validation", False, "No matches available to validate team IDs")
+                return False, response
+            
+            # Check first match for team ID structure
+            first_match = matches[0]
+            home_team = first_match.get('homeTeam', {})
+            away_team = first_match.get('awayTeam', {})
+            
+            # Check if team IDs exist and are integers
+            home_id = home_team.get('id')
+            away_id = away_team.get('id')
+            
+            issues = []
+            if home_id is None:
+                issues.append("homeTeam.id is missing/null")
+            elif not isinstance(home_id, int):
+                issues.append(f"homeTeam.id is not integer (got {type(home_id).__name__}: {home_id})")
+            
+            if away_id is None:
+                issues.append("awayTeam.id is missing/null")
+            elif not isinstance(away_id, int):
+                issues.append(f"awayTeam.id is not integer (got {type(away_id).__name__}: {away_id})")
+            
+            if issues:
+                self.log_test("Football Matches - Team IDs Validation", False, f"Team ID issues: {'; '.join(issues)}", {"sample_match": first_match})
+                return False, response
+            
+            self.log_test("Football Matches - Team IDs Validation", True, f"Team IDs valid: home={home_id}, away={away_id}", {"sample_match": first_match})
+            return True, response
+            
+        except Exception as e:
+            self.log_test("Football Matches - Team IDs Validation", False, f"Exception parsing response: {str(e)}")
+            return False, {}
+
+    def test_favorites_full_workflow(self):
+        """Test full favorites workflow: Register → Login → Add favorite → Get favorites → Remove favorite"""
+        print("💖 Testing Favorites Full Workflow")
+        
+        # Create a session to maintain cookies
+        session = requests.Session()
+        headers = {'Content-Type': 'application/json'}
+        
+        # Step 1: Register a new user
+        test_email = f"favorites_test_{int(time.time())}@example.com"
+        test_password = "FavoritesTest123!"
+        
+        print(f"1️⃣ Registering user: {test_email}")
+        register_response = session.post(f"{self.base_url}/api/auth/register", json={
+            "email": test_email,
+            "password": test_password,
+            "confirm_password": test_password,
+            "name": "Favorites Tester"
+        }, headers=headers, timeout=10)
+        
+        if register_response.status_code != 200:
+            self.log_test("Favorites Workflow - Register", False, f"Registration failed: {register_response.status_code}")
+            return False
+        
+        print(f"✅ User registered successfully")
+        
+        # Step 2: Login with the new user
+        print(f"2️⃣ Logging in user: {test_email}")
+        login_response = session.post(f"{self.base_url}/api/auth/login", json={
+            "email": test_email,
+            "password": test_password
+        }, headers=headers, timeout=10)
+        
+        if login_response.status_code != 200:
+            self.log_test("Favorites Workflow - Login", False, f"Login failed: {login_response.status_code}")
+            return False
+            
+        print(f"✅ User logged in successfully")
+        
+        # Step 3: Add Liverpool FC to favorites (team_id=64)
+        print(f"3️⃣ Adding Liverpool FC to favorites...")
+        add_favorite_response = session.post(f"{self.base_url}/api/favorites/clubs", json={
+            "team_id": 64,
+            "team_name": "Liverpool FC", 
+            "team_crest": "https://crests.football-data.org/64.png"
+        }, headers=headers, timeout=10)
+        
+        if add_favorite_response.status_code != 200:
+            try:
+                error_data = add_favorite_response.json()
+                self.log_test("Favorites Workflow - Add Favorite", False, f"Failed to add favorite (status {add_favorite_response.status_code})", error_data)
+            except:
+                self.log_test("Favorites Workflow - Add Favorite", False, f"Failed to add favorite: {add_favorite_response.status_code} {add_favorite_response.text[:200]}")
+            return False
+            
+        print(f"✅ Liverpool FC added to favorites")
+        
+        # Step 4: Get favorites to confirm it was added
+        print(f"4️⃣ Retrieving favorites list...")
+        get_favorites_response = session.get(f"{self.base_url}/api/favorites/clubs", headers=headers, timeout=10)
+        
+        if get_favorites_response.status_code != 200:
+            self.log_test("Favorites Workflow - Get Favorites", False, f"Failed to get favorites: {get_favorites_response.status_code}")
+            return False
+        
+        try:
+            favorites_data = get_favorites_response.json()
+            favorites = favorites_data.get('favorites', [])
+            
+            # Check if Liverpool FC is in the favorites
+            liverpool_found = False
+            for fav in favorites:
+                if fav.get('team_id') == 64 and fav.get('team_name') == 'Liverpool FC':
+                    liverpool_found = True
+                    break
+            
+            if not liverpool_found:
+                self.log_test("Favorites Workflow - Verify Addition", False, f"Liverpool FC not found in favorites list", favorites_data)
+                return False
+                
+            print(f"✅ Liverpool FC found in favorites list ({len(favorites)} total)")
+            
+        except Exception as e:
+            self.log_test("Favorites Workflow - Parse Favorites", False, f"Failed to parse favorites: {str(e)}")
+            return False
+        
+        # Step 5: Remove Liverpool FC from favorites
+        print(f"5️⃣ Removing Liverpool FC from favorites...")
+        remove_favorite_response = session.delete(f"{self.base_url}/api/favorites/clubs/64", headers=headers, timeout=10)
+        
+        if remove_favorite_response.status_code != 200:
+            self.log_test("Favorites Workflow - Remove Favorite", False, f"Failed to remove favorite: {remove_favorite_response.status_code}")
+            return False
+            
+        print(f"✅ Liverpool FC removed from favorites")
+        
+        # Step 6: Verify removal by getting favorites again
+        print(f"6️⃣ Verifying removal...")
+        final_favorites_response = session.get(f"{self.base_url}/api/favorites/clubs", headers=headers, timeout=10)
+        
+        if final_favorites_response.status_code != 200:
+            self.log_test("Favorites Workflow - Final Get Favorites", False, f"Failed to get final favorites: {final_favorites_response.status_code}")
+            return False
+        
+        try:
+            final_favorites_data = final_favorites_response.json()
+            final_favorites = final_favorites_data.get('favorites', [])
+            
+            # Check that Liverpool FC is NOT in the favorites
+            liverpool_still_there = False
+            for fav in final_favorites:
+                if fav.get('team_id') == 64:
+                    liverpool_still_there = True
+                    break
+            
+            if liverpool_still_there:
+                self.log_test("Favorites Workflow - Verify Removal", False, "Liverpool FC still in favorites after removal", final_favorites_data)
+                return False
+                
+            print(f"✅ Liverpool FC successfully removed ({len(final_favorites)} favorites remaining)")
+            
+            # SUCCESS! All workflow steps passed
+            self.log_test("💖 Favorites Full Workflow", True, f"Complete workflow successful: Add → Get → Remove Liverpool FC (team_id=64)")
+            return True
+            
+        except Exception as e:
+            self.log_test("Favorites Workflow - Parse Final Favorites", False, f"Failed to parse final favorites: {str(e)}")
+            return False
+
     def run_all_tests(self):
         """Run all backend tests"""
         print("=" * 60)
@@ -824,6 +1002,11 @@ class GuessItAPITester:
         self.test_football_competitions() 
         self.test_football_matches_today()
         self.test_football_matches_live()
+
+        # Bug Fix Tests - Team IDs and Favorites
+        print("📌 Testing Bug Fixes: Team IDs & Favorites...")
+        self.test_football_matches_team_ids()
+        self.test_favorites_full_workflow()
 
         # Print summary
         print("=" * 60)

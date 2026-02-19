@@ -255,6 +255,7 @@ def _transform_match(match_data: dict, vote_counts: dict = None) -> dict:
     return {
         "id": match_id,
         "homeTeam": {
+            "id": home_team.get("id"),
             "name": home_team.get("name", "Unknown"),
             "shortName": home_team.get("tla", home_team.get("shortName", "UNK")),
             "flag": None,
@@ -262,6 +263,7 @@ def _transform_match(match_data: dict, vote_counts: dict = None) -> dict:
             "crest": home_team.get("crest"),
         },
         "awayTeam": {
+            "id": away_team.get("id"),
             "name": away_team.get("name", "Unknown"),
             "shortName": away_team.get("tla", away_team.get("shortName", "UNK")),
             "flag": None,
