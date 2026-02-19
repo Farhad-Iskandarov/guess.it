@@ -59,6 +59,7 @@ class UserResponse(BaseModel):
     picture: Optional[str] = None
     auth_provider: str
     nickname_set: bool
+    nickname_changed: bool = False  # New field for one-time nickname change rule
     created_at: datetime
     points: int = 0
     level: int = 0

@@ -1,12 +1,16 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
+import { FriendsProvider } from "@/lib/FriendsContext";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { ChooseNicknamePage } from "@/pages/ChooseNicknamePage";
 import { AuthCallback } from "@/pages/AuthCallback";
 import { MyPredictionsPage } from "@/pages/MyPredictionsPage";
+import { ProfilePage } from "@/pages/ProfilePage";
+import { SettingsPage } from "@/pages/SettingsPage";
+import { FriendsPage } from "@/pages/FriendsPage";
 import { useState, useEffect, useRef } from "react";
 
 // ============ Initial Loading Screen ============
@@ -141,6 +145,9 @@ function AppRouter() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/choose-nickname" element={<ChooseNicknamePage />} />
       <Route path="/my-predictions" element={<ProtectedRoute><MyPredictionsPage /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -180,7 +187,9 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppShell />
+        <FriendsProvider>
+          <AppShell />
+        </FriendsProvider>
       </AuthProvider>
     </ThemeProvider>
   );

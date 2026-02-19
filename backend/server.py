@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -17,6 +18,8 @@ from routes.auth import router as auth_router
 from routes.predictions import router as predictions_router
 from routes.football import router as football_router, manager as ws_manager, start_polling, stop_polling
 from routes.favorites import router as favorites_router
+from routes.settings import router as settings_router
+from routes.friends import router as friends_router, friend_manager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -86,9 +89,16 @@ api_router.include_router(auth_router)
 api_router.include_router(predictions_router)
 api_router.include_router(football_router)
 api_router.include_router(favorites_router)
+api_router.include_router(settings_router)
+api_router.include_router(friends_router)
 
 # Include the router in the main app
 app.include_router(api_router)
+
+# Create uploads directory and mount static files for avatars
+UPLOAD_DIR = ROOT_DIR / 'uploads' / 'avatars'
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/api/uploads/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
 
 app.add_middleware(
     CORSMiddleware,
@@ -120,6 +130,38 @@ async def websocket_matches(websocket: WebSocket):
         await ws_manager.disconnect(websocket)
     except Exception:
         await ws_manager.disconnect(websocket)
+
+
+# WebSocket endpoint for friend notifications
+@app.websocket("/api/ws/friends/{user_id}")
+async def websocket_friends(websocket: WebSocket, user_id: str):
+    """WebSocket for real-time friend notifications"""
+    # Validate user_id matches the authenticated user
+    session_token = websocket.cookies.get("session_token")
+    if not session_token:
+        await websocket.close(code=4001, reason="Not authenticated")
+        return
+    
+    # Validate session
+    session = await db.user_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+    
+    if not session or session.get("user_id") != user_id:
+        await websocket.close(code=4003, reason="Invalid session")
+        return
+    
+    await friend_manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        await friend_manager.disconnect(websocket, user_id)
+    except Exception:
+        await friend_manager.disconnect(websocket, user_id)
 
 
 @app.on_event("startup")

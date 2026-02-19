@@ -840,3 +840,309 @@ Football data provided by [Football-Data.org](https://www.football-data.org/).
 - `frontend/src/components/home/MatchList.jsx` — Button stacking, heights, font sizes, meta/footer sizing
 - `frontend/src/App.css` — Score block responsive width, match card responsive CSS (padding, meta, footer, vote/action button min-widths)
 - `frontend/src/pages/HomePage.jsx` — Container padding
+
+---
+
+### 2026-02-19 (Session 8) — Profile & Settings Pages
+
+#### New Features
+
+**Profile Page (`/profile`):**
+- Modern user profile displaying:
+  - Profile header with animated avatar, level badge, and gradient background
+  - Level progress bar with points-to-next-level indicator
+  - Join date
+  - Settings and Logout buttons
+- Stats grid: Predictions count, Correct, Wrong, Points (clickable)
+- Recent Activity section with latest 5 predictions
+- Favorite Teams section with remove capability
+- Achievements system with 6 badges:
+  - First Prediction: Make your first prediction
+  - On Fire: Get 5 correct predictions
+  - Champion: Reach Level 5
+  - Veteran: Make 50 predictions
+  - Perfectionist: Achieve 80% accuracy (min 10 predictions)
+  - Fan: Add 3 favorite teams
+- Performance section with circular win rate chart
+- Fully responsive (mobile + desktop)
+
+**Settings Page (`/settings`):**
+- Modern account settings with 4 sections:
+
+**1. Profile Picture Section:**
+- Upload profile photo (JPG, PNG, WebP)
+- Preview before saving
+- Replace existing photo
+- Remove photo option
+- File validation: max 2MB, magic byte verification
+- Stored in `/app/backend/uploads/avatars/`
+- Served via `/api/uploads/avatars/{filename}`
+
+**2. Account Information Section:**
+- **Email Change** (email users only):
+  - Requires current password confirmation
+  - Validates email format
+  - Prevents duplicate emails
+  - Google users see "Email is managed by Google" notice
+- **Nickname Change** (ONE TIME ONLY):
+  - After initial nickname set, users get ONE free change
+  - Warning banner: "You can only change your nickname once. Choose wisely!"
+  - After change: `nickname_changed = true` in database
+  - Button disabled permanently after use
+  - Server-side enforcement (cannot bypass via API)
+
+**3. Security Section:**
+- Change password form with:
+  - Current password verification
+  - New password with strength requirements (8+ chars, uppercase, lowercase, digit)
+  - Confirm new password
+  - Password visibility toggle
+  - Clear validation messages
+- Google users see "Secured by Google" notice
+
+**4. Backend Validation:**
+- All settings operations require authentication
+- Password verification for email change
+- One-time nickname rule enforced server-side
+- File upload validates magic bytes, not just extensions
+- Proper error responses with user-friendly messages
+
+#### Database Schema Changes
+
+**Users Collection — New Fields:**
+
+| Field | Type | Description |
+|-------|------|------------|
+| `nickname_changed` | Boolean | `true` after one-time nickname change used |
+| `picture` | String | Avatar URL (local upload path or Google OAuth URL) |
+
+#### API Endpoints — Settings Routes (`/api/settings/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|------------|
+| `/api/settings/profile` | GET | Get user settings profile data |
+| `/api/settings/email` | POST | Change email (requires password) |
+| `/api/settings/password` | POST | Change password |
+| `/api/settings/nickname` | POST | Change nickname (one-time) |
+| `/api/settings/avatar` | POST | Upload profile picture |
+| `/api/settings/avatar` | DELETE | Remove profile picture |
+| `/api/settings/nickname/status` | GET | Check nickname change status |
+
+#### Security Implementation
+
+**Password Change:**
+```python
+# Verify current password
+if not verify_password(data.current_password, user["password_hash"]):
+    raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+# Check new password is different
+if verify_password(data.new_password, user["password_hash"]):
+    raise HTTPException(status_code=400, detail="New password must be different")
+```
+
+**One-Time Nickname Rule:**
+```python
+# Check if nickname was already changed
+if user.get("nickname_changed", False):
+    raise HTTPException(
+        status_code=400,
+        detail="You have already used your one-time nickname change."
+    )
+
+# After successful change
+await db.users.update_one(
+    {"user_id": user["user_id"]},
+    {"$set": {"nickname": new_nickname, "nickname_changed": True}}
+)
+```
+
+**Avatar Upload Validation:**
+```python
+# Validate magic bytes (not just extension)
+image_signatures = {
+    b'\xff\xd8\xff': 'jpg',
+    b'\x89PNG\r\n\x1a\n': 'png',
+    b'RIFF': 'webp'  # WebP starts with RIFF
+}
+
+# Validate file size (2MB max)
+if len(contents) > 2 * 1024 * 1024:
+    raise HTTPException(status_code=400, detail="File too large")
+```
+
+#### Modified Files
+
+**Backend:**
+- `backend/routes/settings.py` — New file with all settings API routes
+- `backend/server.py` — Added settings router, static file serving for avatars
+- `backend/models/auth.py` — Added `nickname_changed` field to UserResponse
+
+**Frontend:**
+- `frontend/src/pages/ProfilePage.jsx` — New profile page
+- `frontend/src/pages/SettingsPage.jsx` — New settings page
+- `frontend/src/App.js` — Added `/profile` and `/settings` routes
+- `frontend/src/components/layout/Header.jsx` — Profile and Settings links in dropdown
+
+
+---
+
+### 2026-02-19 (Session 9) — Real-Time Friendship System
+
+#### New Features
+
+**Friends Page (`/friends`):**
+- Complete friend management system with three tabs:
+  - **Friends Tab**: Shows all accepted friends with remove option
+  - **Incoming Tab**: Shows pending friend requests with accept/decline buttons
+  - **Sent Tab**: Shows outgoing requests with cancel option
+- User search by nickname (partial match, case-insensitive)
+- Search results show relationship status: Friends, Pending, Add Friend
+- Real-time updates via WebSocket
+
+**Friend Request System:**
+- Send friend request by searching nickname
+- Accept incoming requests (both users become friends)
+- Decline incoming requests (status changes to declined)
+- Cancel sent requests (request is deleted)
+- Remove existing friends (friendship deleted)
+
+**Real-Time Notifications (WebSocket):**
+- WebSocket endpoint: `/api/ws/friends/{user_id}`
+- Events:
+  - `friend_request_received`: New incoming request
+  - `friend_request_accepted`: Someone accepted your request
+  - `friend_added`: You accepted a request
+  - `friend_request_declined`: Request was declined
+  - `friend_request_cancelled`: Request was cancelled
+  - `friend_removed`: Friend was removed
+- Badge on header Friends icon shows pending request count
+- Updates without page refresh
+
+**Profile Page Friends Section:**
+- Shows up to 4 friends with avatars
+- Displays friend's nickname, level, and points
+- "View all" button navigates to Friends page
+
+#### Database Schema Changes
+
+**New Collections:**
+
+**friend_requests:**
+```javascript
+{
+  request_id: "freq_xxxx",       // Unique request ID
+  sender_id: "user_xxxx",        // User who sent the request
+  receiver_id: "user_xxxx",      // User who receives the request
+  status: "pending",             // "pending", "accepted", "declined"
+  created_at: "ISO date",
+  accepted_at: "ISO date",       // When accepted (optional)
+  declined_at: "ISO date"        // When declined (optional)
+}
+```
+
+**friendships:**
+```javascript
+{
+  friendship_id: "friend_xxxx",  // Unique friendship ID
+  user_a: "user_xxxx",           // First user
+  user_b: "user_xxxx",           // Second user
+  created_at: "ISO date"
+}
+```
+
+#### API Endpoints — Friends Routes (`/api/friends/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|------------|
+| `/api/friends/search?q=` | GET | Search users by nickname |
+| `/api/friends/request` | POST | Send friend request |
+| `/api/friends/requests/pending` | GET | Get incoming/outgoing pending requests |
+| `/api/friends/requests/count` | GET | Get pending incoming count (for badge) |
+| `/api/friends/request/{id}/accept` | POST | Accept friend request |
+| `/api/friends/request/{id}/decline` | POST | Decline friend request |
+| `/api/friends/request/{id}/cancel` | POST | Cancel sent friend request |
+| `/api/friends/list` | GET | Get friends list |
+| `/api/friends/{user_id}` | DELETE | Remove friend |
+
+#### Real-Time Architecture
+
+**WebSocket Connection:**
+```javascript
+// Connect to friend notifications WebSocket
+const ws = new WebSocket(`wss://domain/api/ws/friends/${userId}`);
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  switch (data.type) {
+    case 'friend_request_received':
+      // Update incoming requests list and badge count
+      break;
+    case 'friend_request_accepted':
+      // Add new friend to friends list
+      break;
+    // etc.
+  }
+};
+```
+
+**FriendsContext (React):**
+- Global state for pending count, requests, and friends
+- WebSocket connection managed by context
+- Auto-reconnect on disconnect
+- Cache invalidation on state changes
+
+#### Security Validation
+
+**Friend Request Rules (Server-Side):**
+```python
+# Cannot send to self
+if target_user["user_id"] == user["user_id"]:
+    raise HTTPException(status_code=400, detail="Cannot send request to yourself")
+
+# Cannot send if already friends
+if existing_friendship:
+    raise HTTPException(status_code=400, detail="Already friends")
+
+# Cannot send if pending request exists
+if existing_request:
+    raise HTTPException(status_code=400, detail="Request already pending")
+```
+
+**Request Actions:**
+- Only receiver can accept/decline
+- Only sender can cancel
+- Status must be "pending" for actions
+
+#### Modified Files
+
+**Backend:**
+- `backend/routes/friends.py` — New file with all friends API routes and WebSocket manager
+- `backend/server.py` — Added friends router and `/api/ws/friends/{user_id}` endpoint
+
+**Frontend:**
+- `frontend/src/pages/FriendsPage.jsx` — New friends management page
+- `frontend/src/lib/FriendsContext.js` — New context for friends state
+- `frontend/src/services/friends.js` — New API service for friends
+- `frontend/src/pages/ProfilePage.jsx` — Added friends section
+- `frontend/src/components/layout/Header.jsx` — Friends icon with badge count
+- `frontend/src/App.js` — Added FriendsProvider and /friends route
+
+
+---
+
+### 2026-02-19 (Session 10) — Header Level Badge Enhancement
+
+#### UI Changes
+
+**Level Badge in Header:**
+- Increased badge size for better visibility:
+  - Trophy icon: `w-4 h-4` on mobile, `w-5 h-5` on desktop
+  - Text: `text-sm` on mobile, `text-base` on desktop
+  - Padding: `px-3 py-1.5` on mobile, `px-3.5 py-2` on desktop
+  - Border radius: `rounded-xl` for modern look
+- Added compact line-height (`leading-[0.5rem]`) for tighter text layout
+
+#### Modified Files
+
+- `frontend/src/components/layout/Header.jsx` — Updated LevelPopover component styling

@@ -4,6 +4,7 @@ import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
+import { useFriends } from '@/lib/FriendsContext';
 import { searchMatches } from '@/services/matches';
 import {
   Tooltip,
@@ -76,11 +77,11 @@ const LevelPopover = memo(({ userLevel, userPoints }) => {
     <div className="relative" ref={popoverRef}>
       <button
         onClick={() => setOpen(prev => !prev)}
-        className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-secondary border border-border hover:border-primary/40 hover:bg-secondary/80 transition-all duration-200 cursor-pointer"
+        className="flex items-center gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-secondary border border-border hover:border-primary/40 hover:bg-secondary/80 transition-all duration-200 cursor-pointer"
         data-testid="header-level-badge"
       >
-        <Trophy className="w-3.5 h-3.5 text-amber-400" />
-        <span className="text-xs font-semibold text-foreground whitespace-nowrap">Level {userLevel}</span>
+        <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+        <span className="text-sm sm:text-base font-semibold text-foreground whitespace-nowrap leading-[0.5rem]">Level {userLevel}</span>
       </button>
       {open && (
         <div
@@ -145,9 +146,9 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
             </div>
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-pointer">Profile</DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/profile')} data-testid="nav-profile">Profile</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
-          <DropdownMenuItem className="cursor-pointer">Settings</DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/settings')} data-testid="nav-settings">Settings</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
             Log out
@@ -436,10 +437,25 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Get pending friend request count
+  let friendRequestCount = 0;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { pendingCount } = useFriends();
+    friendRequestCount = pendingCount;
+  } catch {
+    // FriendsContext not available (not authenticated)
+    friendRequestCount = 0;
+  }
 
   const handleFeatureClick = useCallback((feature) => {
-    console.log(`Navigating to ${feature}`);
-  }, []);
+    if (feature === 'Friends') {
+      navigate('/friends');
+    } else {
+      console.log(`Navigating to ${feature}`);
+    }
+  }, [navigate]);
 
   const handleLoginClick = useCallback(() => {
     if (onLogin) onLogin();
@@ -515,7 +531,7 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, notif
                   <HeaderIconButton icon={Mail} badge={notifications?.messages} onClick={() => handleFeatureClick('Messages')} tooltip="Messages" testId="header-messages" />
                 </span>
                 <span className="hidden sm:inline-flex">
-                  <HeaderIconButton icon={Users} badge={notifications?.friends} onClick={() => handleFeatureClick('Friends')} tooltip="Friend Requests" testId="header-friends" />
+                  <HeaderIconButton icon={Users} badge={friendRequestCount} onClick={() => handleFeatureClick('Friends')} tooltip="Friend Requests" testId="header-friends" />
                 </span>
                 <HeaderIconButton icon={Bell} badge={notifications?.alerts} onClick={() => handleFeatureClick('Notifications')} tooltip="Notifications" testId="header-notifications" />
               </>
