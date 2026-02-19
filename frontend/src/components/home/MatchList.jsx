@@ -1,5 +1,5 @@
 import { useState, useCallback, memo, useEffect, useRef } from 'react';
-import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, RotateCcw, Sparkles, Lock, Radio } from 'lucide-react';
+import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction } from '@/services/predictions';
@@ -214,13 +214,13 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
 });
 GuessItButton.displayName = 'GuessItButton';
 
-// ============ Refresh Button ============
-const RefreshButton = memo(({ onClick, disabled, hasSelection }) => (
+// ============ Remove Button ============
+const RemoveButton = memo(({ onClick, disabled, hasSelection }) => (
   <Button
     onClick={onClick}
     disabled={disabled || !hasSelection}
     variant="outline"
-    data-testid="refresh-prediction-btn"
+    data-testid="remove-prediction-btn"
     className={`
       relative match-action-btn-sm h-[72px] md:h-[84px] rounded-xl font-bold text-sm md:text-base
       border-2 border-muted-foreground/30 hover:border-destructive/50
@@ -230,12 +230,12 @@ const RefreshButton = memo(({ onClick, disabled, hasSelection }) => (
     style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
   >
     <div className="flex flex-col items-center justify-center gap-1">
-      <RotateCcw className="w-5 h-5" />
-      <span className="text-xs md:text-sm font-semibold">Refresh</span>
+      <Trash2 className="w-5 h-5" />
+      <span className="text-xs md:text-sm font-semibold">Remove</span>
     </div>
   </Button>
 ));
-RefreshButton.displayName = 'RefreshButton';
+RemoveButton.displayName = 'RemoveButton';
 
 // ============ Advance Button ============
 const AdvanceButton = memo(({ onClick, disabled }) => (
@@ -387,7 +387,7 @@ const MatchRow = memo(({
           <div className="flex items-center gap-1 md:gap-2">
             <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} />
             <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
-            <RefreshButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
+            <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
           </div>
         </div>
       </div>
@@ -420,7 +420,7 @@ const MatchRow = memo(({
             <div className="flex items-center gap-1 flex-shrink-0">
               <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} />
               <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
-              <RefreshButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
+              <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
             </div>
           </div>
         </div>

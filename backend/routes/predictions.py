@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 
 from models.prediction import (
@@ -211,7 +211,7 @@ async def get_my_predictions_detailed(
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     """Get all predictions for the current user, enriched with match data from Football API."""
-    from services.football_api import get_matches
+    from services.football_api import get_matches, _api_get, _transform_match
 
     user = await get_current_user(request, db)
     user_id = user["user_id"]
@@ -225,13 +225,27 @@ async def get_my_predictions_detailed(
     if not predictions:
         return {"predictions": [], "total": 0, "summary": {"correct": 0, "wrong": 0, "pending": 0}}
 
-    # Fetch current matches from API (cached)
+    # Fetch matches with standard date range (today + 7 days, same as homepage)
+    now = datetime.now(timezone.utc)
+    date_from = now.strftime("%Y-%m-%d")
+    date_to = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+
     try:
-        all_matches = await get_matches(db)
+        all_matches = await get_matches(db, date_from=date_from, date_to=date_to)
     except Exception:
         all_matches = []
 
     match_map = {m["id"]: m for m in all_matches}
+
+    # For any predicted matches not found in the bulk fetch, fetch individually by ID
+    missing_ids = [p["match_id"] for p in predictions if p["match_id"] not in match_map]
+    for mid in missing_ids:
+        try:
+            data = await _api_get(f"/matches/{mid}")
+            if data and "id" in data:
+                match_map[mid] = _transform_match(data)
+        except Exception:
+            pass
 
     results = []
     correct = 0

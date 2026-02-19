@@ -1,36 +1,47 @@
-# GuessIt - Football Prediction Platform
+# GuessIt - Football Prediction Platform (Duplicate)
 
 ## Original Problem Statement
-Clone the existing GuessIt project from https://github.com/Farhad-Iskandarov/guess.it exactly as-is with zero modifications. Then fix UI performance issues and apply visual improvements to live match cards.
+Create a full copy (duplicate) of the existing GuessIt project from https://github.com/Farhad-Iskandarov/guess.it and set it up for editing.
 
 ## Architecture
 - **Frontend**: React 19 + Tailwind CSS 3.4 + Shadcn/UI + Radix UI + Lucide React
-- **Build Tool**: CRACO
+- **Build Tool**: CRACO (Create React App Configuration Override)
 - **Backend**: FastAPI (Python) + Motor (async MongoDB driver)
-- **Database**: MongoDB
+- **Database**: MongoDB (DB: guessit)
 - **Auth**: Email/password (bcrypt) + Google OAuth (Emergent Auth) + httpOnly session cookies
-- **Football Data**: Football-Data.org v4 API (free tier)
-- **Real-Time**: WebSocket with 30s polling fallback
+- **Football Data**: Football-Data.org v4 API (free tier, key: configured)
+- **Real-Time**: WebSocket with 30s polling + 60s fallback
 
 ## What's Been Implemented
-- [2026-02-18] Full project clone from GitHub - 100% identical copy
-- [2026-02-18] Added real Football-Data.org API key - live matches loading
-- [2026-02-18] Fixed banner carousel layout shaking (opacity transitions, fixed 405px height, 4.5rem padding-left)
-- [2026-02-18] Fixed Grid/List toggle performance (CSS-based switch, memoized MatchRow)
-- [2026-02-18] Live match card improvements:
-  - Larger score font (text-2xl horizontal) with match minute above score
-  - Subtle glow animation (live-glow 3s ease-in-out) instead of aggressive flash
-  - Compact "Match is live" banner (w-fit, not full card width)
-  - Slow icon pulse (live-pulse-icon) instead of fast animate-pulse
-- [2026-02-18] Logo click behavior: Navigates to homepage + smooth scroll to top (Header + Footer)
-- [2026-02-18] README updated with API token info and changelog
+- [2026-02-19] Full project clone from GitHub — 100% identical copy
+- [2026-02-19] Environment configured: FOOTBALL_API_KEY, MONGO_URL, DB_NAME=guessit
+- [2026-02-19] Removed TopMatchesCards section from HomePage (user request)
+- [2026-02-19] Bug Fix: My Predictions "Match data unavailable" — fixed with individual match ID lookups
+- [2026-02-19] Refresh → Remove on main page: Changed button text/icon, deletes prediction from DB
+- [2026-02-19] Predictions page: Added search input for filtering by club name
+- [2026-02-19] Predictions page: Fixed Header bug — now shows user menu when authenticated
+- [2026-02-19] Predictions page: Added "vs" between home and away team names
+- [2026-02-19] Predictions page: Added Edit/Submit and Remove for upcoming matches only
+  - Edit opens inline vote selector (1/X/2) with Submit/Cancel
+  - Submit calls savePrediction API and updates local state
+  - Remove calls deletePrediction API and removes card from list
+  - Summary cards update dynamically
+  - Finished/Live match cards have NO edit/remove (read-only)
 
 ## Testing Results
-- Iteration 7: 96.4% (initial clone)
-- Iteration 8: 93% (banner + toggle fixes)
-- Iteration 9: 95% (live card improvements, logo behavior) - all 15 tests passed
+- Iteration 1: 92% (initial clone)
+- Iteration 2: 96% (match data bug fix)
+- Iteration 3: 95% (Remove btn, search, header, vs)
+- Iteration 4: 98% (Edit/Submit/Remove on predictions page)
 
-## Backlog
-- P1: Leaderboard system, user profiles
-- P2: Push notifications, friend system, advanced predictions
-- P3: PWA support, newsletter, historical stats
+## Prioritized Backlog
+### P0 (Done)
+- Exact clone, TopMatchesCards removed, match data bug fixed
+- Remove button, search, header fix, vs text
+- Edit/Submit/Remove for upcoming predictions
+
+### P1 (Future)
+- Leaderboard system, user profiles, match result comparison
+
+### P2 (Future)
+- Push notifications, friend system, advanced predictions

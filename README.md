@@ -511,3 +511,32 @@ daniel
 This project is for educational and personal use.
 
 Football data provided by [Football-Data.org](https://www.football-data.org/).
+
+---
+
+## Changelog (Post-Clone Updates)
+
+### Bug Fixes
+- **My Predictions — "Match data unavailable"**: Fixed `/api/predictions/me/detailed` endpoint. Root cause: `get_matches()` was called without date parameters, and Football-Data.org's 10-day max range limit caused empty results. Fix uses standard date range + individual `/matches/{id}` lookups for any missing matches.
+- **Header authentication bug on Predictions page**: Predictions page now passes `user`, `isAuthenticated`, and `onLogout` props to `<Header />`. Previously it rendered `<Header />` without auth props, causing Login/Register to always show even when the user was logged in.
+
+### UI Updates
+- **Refresh → Remove button (Main Page)**: Renamed "Refresh" button to "Remove" with a `Trash2` icon on all match cards. The `handleRefresh` function already called `deletePrediction()` — now the UI correctly reflects its purpose (deleting the user's prediction from the database).
+- **Removed TopMatchesCards section (Main Page)**: Removed the duplicated preview match cards above "All Matches" — the component and its import were removed from `HomePage.jsx`.
+- **"vs" between team names (Predictions Page)**: Added italic "vs" text between home and away team rows in each prediction card for clearer match identification.
+
+### New Features
+- **Search on Predictions Page**: Added a search input at the top of the My Predictions page. Users can search by club name (home or away). Filtering is instant (no page reload), with a clear button and "No matches found" empty state when no results match.
+- **Edit & Submit predictions (Predictions Page)**: For upcoming matches (`NOT_STARTED` status), an "Edit" button opens an inline vote selector (`1 Home` / `X Draw` / `2 Away`) with the current pick highlighted. Clicking "Submit" saves the updated prediction via API. "Cancel" exits without changes. Finished/live matches remain read-only.
+- **Remove predictions (Predictions Page)**: For upcoming matches, a "Remove" button deletes the prediction from MongoDB and removes the card from the list instantly. Summary cards (Total, Pending) update dynamically.
+- **Grid/List view toggle (Predictions Page)**: Added the same Grid/List toggle design from the main page. Grid view shows prediction cards in a responsive 2-column layout; List view shows a compact single-row layout. Preference is persisted in `localStorage`. Smooth transitions, no page reload, fully responsive, does not break existing filtering or search.
+
+### New/Modified Components
+- `MyPredictionsPage.jsx` — Major rewrite: added search, edit/remove, view toggle, authenticated header
+- `MatchList.jsx` — `RefreshButton` renamed to `RemoveButton` with `Trash2` icon
+- `HomePage.jsx` — Removed `TopMatchesCards` import and rendering
+
+### Structural Changes
+- Backend `routes/predictions.py` — Enhanced `/me/detailed` endpoint with wider date range + individual match fetching
+- No new pages or routes added
+- No framework or library changes

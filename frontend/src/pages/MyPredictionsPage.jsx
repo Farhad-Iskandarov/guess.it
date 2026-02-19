@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
+import { savePrediction, deletePrediction } from '@/services/predictions';
+import { toast } from 'sonner';
 import {
   Trophy, Clock, CheckCircle2, XCircle, AlertCircle,
-  Radio, ArrowRight, Filter, TrendingUp, Calendar
+  Radio, ArrowRight, Filter, TrendingUp, Calendar, Search, X,
+  Pencil, Trash2, Check, Loader2, LayoutGrid, List
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -131,9 +134,39 @@ const PredictionBadge = memo(({ prediction, result }) => {
 });
 PredictionBadge.displayName = 'PredictionBadge';
 
+// ============ Edit Vote Button ============
+const EditVoteButton = memo(({ type, isSelected, onClick }) => {
+  const labels = { home: '1', draw: 'X', away: '2' };
+  const fullLabels = { home: 'Home', draw: 'Draw', away: 'Away' };
+
+  return (
+    <button
+      onClick={() => onClick(type)}
+      data-testid={`edit-vote-${type}`}
+      className={`flex flex-col items-center justify-center px-4 py-2 rounded-lg border-2 transition-all duration-200 ${
+        isSelected
+          ? 'bg-primary/20 border-primary text-primary shadow-glow ring-1 ring-primary/30'
+          : 'bg-card border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5'
+      }`}
+    >
+      <span className={`text-lg font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>{labels[type]}</span>
+      <span className="text-[10px]">{fullLabels[type]}</span>
+    </button>
+  );
+});
+EditVoteButton.displayName = 'EditVoteButton';
+
 // ============ Prediction Card ============
-const PredictionCard = memo(({ data, index }) => {
+const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove }) => {
   const { prediction, match, result, created_at } = data;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSelection, setEditSelection] = useState(prediction);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const isUpcoming = match && match.status === 'NOT_STARTED';
+  const canEdit = isUpcoming && !match.predictionLocked;
+  const isList = viewMode === 'list';
 
   if (!match) {
     return (
@@ -166,101 +199,275 @@ const PredictionCard = memo(({ data, index }) => {
       votedDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : '';
 
+  const handleStartEdit = () => {
+    setEditSelection(prediction);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditSelection(prediction);
+    setIsEditing(false);
+  };
+
+  const handleSubmitEdit = async () => {
+    if (editSelection === prediction) {
+      setIsEditing(false);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await onEdit(data.match_id, editSelection);
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setIsRemoving(true);
+    try {
+      await onRemove(data.match_id);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const predLabels = { home: '1', draw: 'X', away: '2' };
+
   return (
     <div
-      className={`prediction-card bg-card ${bgAccent[result]} rounded-xl border overflow-hidden ${borderColor[result]}`}
+      className={`prediction-card bg-card ${bgAccent[result]} rounded-xl border overflow-hidden ${borderColor[result]} ${isEditing ? 'ring-1 ring-primary/30' : ''}`}
       data-testid={`prediction-card-${index}`}
       style={{
         animationDelay: `${index * 60}ms`,
         transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
       }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px -8px rgba(0,0,0,0.2)'; }}
+      onMouseEnter={e => { if (!isEditing) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px -8px rgba(0,0,0,0.2)'; }}}
       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ''; }}
     >
-      {/* Top meta bar */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-2">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <StatusBadge status={match.status} matchMinute={match.matchMinute} />
-          <span>{match.dateTime}</span>
-          <span className="text-border">|</span>
-          <span className="truncate">{match.competition}</span>
-        </div>
-        {result === 'correct' && (
-          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Correct
-          </span>
-        )}
-        {result === 'wrong' && (
-          <span className="flex items-center gap-1 text-xs font-semibold text-red-400">
-            <XCircle className="w-3.5 h-3.5" /> Wrong
-          </span>
-        )}
-      </div>
-
-      {/* Match content */}
-      <div className="px-5 py-3">
-        <div className="flex items-center gap-4">
-          {/* Teams */}
-          <div className="flex flex-col gap-2.5 flex-1 min-w-0">
-            <div className="flex items-center gap-2.5">
-              <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">1</span>
-              <TeamCrest team={match.homeTeam} />
-              <span className="text-sm font-medium text-foreground truncate">{match.homeTeam.name}</span>
+      {/* ======= LIST VIEW ======= */}
+      {isList && !isEditing && (
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-3">
+            {/* Status + Meta */}
+            <div className="flex items-center gap-2 flex-shrink-0 min-w-[180px]">
+              <StatusBadge status={match.status} matchMinute={match.matchMinute} />
+              <span className="text-xs text-muted-foreground truncate">{match.competition}</span>
             </div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">2</span>
-              <TeamCrest team={match.awayTeam} />
-              <span className="text-sm font-medium text-foreground truncate">{match.awayTeam.name}</span>
-            </div>
-          </div>
 
-          {/* Score */}
-          <div className="score-block flex flex-col items-center justify-center">
-            {match.status === 'LIVE' && match.matchMinute ? (
-              <span className="text-xs font-semibold text-red-400 tabular-nums mb-1">{match.matchMinute}</span>
-            ) : (
-              <span className="text-xs mb-1 invisible">00'</span>
-            )}
-            {match.score.home !== null ? (
-              <div className="flex items-center gap-1.5 text-2xl font-bold tabular-nums">
-                <span className="text-foreground">{match.score.home}</span>
-                <span className="text-muted-foreground/50 text-lg">-</span>
-                <span className="text-foreground">{match.score.away}</span>
+            {/* Teams row */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <TeamCrest team={match.homeTeam} />
+                <span className="text-sm font-medium text-foreground truncate">{match.homeTeam.name}</span>
               </div>
-            ) : (
-              <span className="text-sm font-medium text-muted-foreground">vs</span>
+              <span className="text-xs text-muted-foreground/60 font-medium flex-shrink-0 px-1">vs</span>
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <TeamCrest team={match.awayTeam} />
+                <span className="text-sm font-medium text-foreground truncate">{match.awayTeam.name}</span>
+              </div>
+            </div>
+
+            {/* Score */}
+            <div className="flex-shrink-0 w-12 text-center">
+              {match.score.home !== null ? (
+                <span className="text-base font-bold tabular-nums text-foreground">{match.score.home} - {match.score.away}</span>
+              ) : (
+                <span className="text-sm text-muted-foreground/40 font-medium">-</span>
+              )}
+            </div>
+
+            {/* Pick */}
+            <PredictionBadge prediction={prediction} result={result} />
+
+            {/* Actions */}
+            {canEdit && (
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  onClick={handleStartEdit}
+                  data-testid={`edit-prediction-${data.match_id}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 hover:border-primary/40 transition-all"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit
+                </button>
+                <button
+                  onClick={handleRemove}
+                  disabled={isRemoving}
+                  data-testid={`remove-prediction-${data.match_id}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all disabled:opacity-50"
+                >
+                  {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  Remove
+                </button>
+              </div>
+            )}
+            {result === 'correct' && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400 flex-shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Correct
+              </span>
+            )}
+            {result === 'wrong' && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-red-400 flex-shrink-0">
+                <XCircle className="w-3.5 h-3.5" /> Wrong
+              </span>
             )}
           </div>
+        </div>
+      )}
 
-          {/* User prediction */}
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Your Pick</span>
-            <PredictionBadge prediction={prediction} result={result} />
+      {/* ======= GRID VIEW (or editing in list) ======= */}
+      {(!isList || isEditing) && (
+        <>
+          {/* Top meta bar */}
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <StatusBadge status={match.status} matchMinute={match.matchMinute} />
+              <span>{match.dateTime}</span>
+              <span className="text-border">|</span>
+              <span className="truncate">{match.competition}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {result === 'correct' && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Correct
+                </span>
+              )}
+              {result === 'wrong' && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-red-400">
+                  <XCircle className="w-3.5 h-3.5" /> Wrong
+                </span>
+              )}
+              {canEdit && !isEditing && (
+                <div className="flex items-center gap-1.5 ml-2">
+                  <button
+                    onClick={handleStartEdit}
+                    data-testid={`edit-prediction-${data.match_id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 hover:border-primary/40 transition-all"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleRemove}
+                    disabled={isRemoving}
+                    data-testid={`remove-prediction-${data.match_id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all disabled:opacity-50"
+                  >
+                    {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-t border-border/30 bg-muted/20">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Calendar className="w-3 h-3" />
-          <span>Voted on: {votedStr}</span>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>Total votes: <span className="text-foreground font-medium">{match.totalVotes}</span></span>
-        </div>
-      </div>
+          {/* Match content */}
+          <div className="px-5 py-3">
+            <div className="flex items-center gap-4">
+              {/* Teams with vs */}
+              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">1</span>
+                  <TeamCrest team={match.homeTeam} />
+                  <span className="text-sm font-medium text-foreground truncate">{match.homeTeam.name}</span>
+                </div>
+                <div className="flex items-center gap-2.5 pl-[22px]">
+                  <span className="text-xs font-medium text-muted-foreground/60 italic">vs</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">2</span>
+                  <TeamCrest team={match.awayTeam} />
+                  <span className="text-sm font-medium text-foreground truncate">{match.awayTeam.name}</span>
+                </div>
+              </div>
+
+              {/* Score */}
+              <div className="score-block flex flex-col items-center justify-center">
+                {match.status === 'LIVE' && match.matchMinute ? (
+                  <span className="text-xs font-semibold text-red-400 tabular-nums mb-1">{match.matchMinute}</span>
+                ) : (
+                  <span className="text-xs mb-1 invisible">00'</span>
+                )}
+                {match.score.home !== null ? (
+                  <div className="flex items-center gap-1.5 text-2xl font-bold tabular-nums">
+                    <span className="text-foreground">{match.score.home}</span>
+                    <span className="text-muted-foreground/50 text-lg">-</span>
+                    <span className="text-foreground">{match.score.away}</span>
+                  </div>
+                ) : (
+                  <span className="text-lg font-bold text-muted-foreground/40">-</span>
+                )}
+              </div>
+
+              {/* User prediction */}
+              {!isEditing && (
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Your Pick</span>
+                  <PredictionBadge prediction={prediction} result={result} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Edit Mode */}
+          {isEditing && (
+            <div className="px-5 pb-3" data-testid={`edit-panel-${data.match_id}`}>
+              <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Change your prediction</p>
+                <div className="flex items-center gap-2 mb-4">
+                  <EditVoteButton type="home" isSelected={editSelection === 'home'} onClick={setEditSelection} />
+                  <EditVoteButton type="draw" isSelected={editSelection === 'draw'} onClick={setEditSelection} />
+                  <EditVoteButton type="away" isSelected={editSelection === 'away'} onClick={setEditSelection} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleSubmitEdit}
+                    disabled={isSaving}
+                    data-testid={`submit-edit-${data.match_id}`}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-9 text-sm"
+                  >
+                    {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    {editSelection !== prediction ? 'Submit' : 'No Change'}
+                  </Button>
+                  <Button
+                    onClick={handleCancelEdit}
+                    variant="outline"
+                    data-testid={`cancel-edit-${data.match_id}`}
+                    className="text-muted-foreground h-9 text-sm"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-5 py-2.5 border-t border-border/30 bg-muted/20">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Calendar className="w-3 h-3" />
+              <span>Voted on: {votedStr}</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>Total votes: <span className="text-foreground font-medium">{match.totalVotes}</span></span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 });
 PredictionCard.displayName = 'PredictionCard';
 
 // ============ Empty State ============
-const EmptyState = memo(({ filter }) => {
+const EmptyState = memo(({ filter, isSearch }) => {
   const navigate = useNavigate();
-  const message = filter === 'all'
-    ? "You haven't made any predictions yet."
-    : `No ${filter} predictions found.`;
+  const message = isSearch
+    ? 'No matches found'
+    : filter === 'all'
+      ? "You haven't made any predictions yet."
+      : `No ${filter} predictions found.`;
 
   return (
     <div
@@ -268,20 +475,28 @@ const EmptyState = memo(({ filter }) => {
       data-testid="empty-state"
     >
       <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center mb-6">
-        <Trophy className="w-10 h-10 text-muted-foreground/50" />
+        {isSearch ? (
+          <Search className="w-10 h-10 text-muted-foreground/50" />
+        ) : (
+          <Trophy className="w-10 h-10 text-muted-foreground/50" />
+        )}
       </div>
       <h3 className="text-lg font-semibold text-foreground mb-2">{message}</h3>
       <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-        Start predicting match outcomes and track your accuracy here.
+        {isSearch
+          ? 'Try searching with a different team name.'
+          : 'Start predicting match outcomes and track your accuracy here.'}
       </p>
-      <Button
-        onClick={() => navigate('/')}
-        className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
-        data-testid="explore-matches-btn"
-      >
-        Explore Matches
-        <ArrowRight className="w-4 h-4" />
-      </Button>
+      {!isSearch && (
+        <Button
+          onClick={() => navigate('/')}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+          data-testid="explore-matches-btn"
+        >
+          Explore Matches
+          <ArrowRight className="w-4 h-4" />
+        </Button>
+      )}
     </div>
   );
 });
@@ -318,7 +533,7 @@ const LoadingSkeleton = () => (
 
 // ============ Main Page ============
 export const MyPredictionsPage = () => {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
   const [predictions, setPredictions] = useState([]);
   const [summary, setSummary] = useState({ correct: 0, wrong: 0, pending: 0 });
@@ -326,6 +541,15 @@ export const MyPredictionsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('guessit-predictions-view')) || 'grid';
+  });
+
+  const handleViewModeChange = useCallback((mode) => {
+    setViewMode(mode);
+    localStorage.setItem('guessit-predictions-view', mode);
+  }, []);
 
   const fetchPredictions = useCallback(async () => {
     setIsLoading(true);
@@ -360,15 +584,70 @@ export const MyPredictionsPage = () => {
     }
   }, [authLoading, isAuthenticated, fetchPredictions, navigate]);
 
-  // Filter predictions
-  const filtered = predictions.filter(p => {
-    if (activeFilter === 'all') return true;
-    if (!p.match) return false;
-    if (activeFilter === 'live') return p.match.status === 'LIVE';
-    if (activeFilter === 'upcoming') return p.match.status === 'NOT_STARTED';
-    if (activeFilter === 'finished') return p.match.status === 'FINISHED';
-    return true;
-  });
+  // Edit prediction handler
+  const handleEditPrediction = useCallback(async (matchId, newPrediction) => {
+    try {
+      await savePrediction(matchId, newPrediction);
+      // Update local state
+      setPredictions(prev => prev.map(p =>
+        p.match_id === matchId ? { ...p, prediction: newPrediction } : p
+      ));
+      toast.success('Prediction updated!', {
+        description: `Changed to: ${newPrediction === 'home' ? 'Home Win (1)' : newPrediction === 'draw' ? 'Draw (X)' : 'Away Win (2)'}`,
+        duration: 2000,
+      });
+    } catch (err) {
+      toast.error('Failed to update prediction', { description: err.message, duration: 3000 });
+      throw err;
+    }
+  }, []);
+
+  // Remove prediction handler
+  const handleRemovePrediction = useCallback(async (matchId) => {
+    try {
+      await deletePrediction(matchId);
+      // Remove from local state
+      setPredictions(prev => prev.filter(p => p.match_id !== matchId));
+      setTotal(prev => prev - 1);
+      setSummary(prev => ({ ...prev, pending: Math.max(0, prev.pending - 1) }));
+      toast.success('Prediction removed', {
+        description: 'Your prediction has been deleted.',
+        duration: 2000,
+      });
+    } catch (err) {
+      toast.error('Failed to remove prediction', { description: err.message, duration: 3000 });
+      throw err;
+    }
+  }, []);
+
+  // Filter + search predictions
+  const filtered = useMemo(() => {
+    let result = predictions;
+
+    // Status filter
+    if (activeFilter !== 'all') {
+      result = result.filter(p => {
+        if (!p.match) return false;
+        if (activeFilter === 'live') return p.match.status === 'LIVE';
+        if (activeFilter === 'upcoming') return p.match.status === 'NOT_STARTED';
+        if (activeFilter === 'finished') return p.match.status === 'FINISHED';
+        return true;
+      });
+    }
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(p => {
+        if (!p.match) return false;
+        const homeName = p.match.homeTeam?.name?.toLowerCase() || '';
+        const awayName = p.match.awayTeam?.name?.toLowerCase() || '';
+        return homeName.includes(q) || awayName.includes(q);
+      });
+    }
+
+    return result;
+  }, [predictions, activeFilter, searchQuery]);
 
   const filterCounts = {
     all: predictions.length,
@@ -377,9 +656,18 @@ export const MyPredictionsPage = () => {
     finished: predictions.filter(p => p.match?.status === 'FINISHED').length,
   };
 
+  const handleLogout = useCallback(async () => {
+    await logout();
+    navigate('/');
+  }, [logout, navigate]);
+
   return (
     <div className="min-h-screen bg-background" data-testid="my-predictions-page">
-      <Header />
+      <Header
+        user={user}
+        isAuthenticated={isAuthenticated}
+        onLogout={handleLogout}
+      />
       <main className="container mx-auto px-4 md:px-6 py-8 max-w-5xl">
         {/* Page title */}
         <div className="mb-8">
@@ -426,14 +714,70 @@ export const MyPredictionsPage = () => {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Search + Filters */}
         {!isLoading && total > 0 && (
-          <div className="flex items-center gap-2 mb-6 flex-wrap" data-testid="filter-section">
-            <Filter className="w-4 h-4 text-muted-foreground mr-1" />
-            <FilterTab label="All" value="all" active={activeFilter === 'all'} count={filterCounts.all} onClick={setActiveFilter} />
-            <FilterTab label="Live" value="live" active={activeFilter === 'live'} count={filterCounts.live} onClick={setActiveFilter} />
-            <FilterTab label="Upcoming" value="upcoming" active={activeFilter === 'upcoming'} count={filterCounts.upcoming} onClick={setActiveFilter} />
-            <FilterTab label="Finished" value="finished" active={activeFilter === 'finished'} count={filterCounts.finished} onClick={setActiveFilter} />
+          <div className="space-y-4 mb-6">
+            {/* Search */}
+            <div className="relative" data-testid="predictions-search">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by club name..."
+                className="w-full pl-10 pr-10 py-2.5 rounded-lg bg-card border border-border/50 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
+                data-testid="predictions-search-input"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="predictions-search-clear"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Filters + View Toggle */}
+            <div className="flex items-center justify-between gap-2 flex-wrap" data-testid="filter-section">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Filter className="w-4 h-4 text-muted-foreground mr-1" />
+                <FilterTab label="All" value="all" active={activeFilter === 'all'} count={filterCounts.all} onClick={setActiveFilter} />
+                <FilterTab label="Live" value="live" active={activeFilter === 'live'} count={filterCounts.live} onClick={setActiveFilter} />
+                <FilterTab label="Upcoming" value="upcoming" active={activeFilter === 'upcoming'} count={filterCounts.upcoming} onClick={setActiveFilter} />
+                <FilterTab label="Finished" value="finished" active={activeFilter === 'finished'} count={filterCounts.finished} onClick={setActiveFilter} />
+              </div>
+              {/* View Toggle */}
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-secondary border border-border" data-testid="predictions-view-toggle">
+                <button
+                  onClick={() => handleViewModeChange('grid')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                    viewMode === 'grid'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                  data-testid="predictions-view-toggle-grid"
+                  aria-label="Grid view"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Grid</span>
+                </button>
+                <button
+                  onClick={() => handleViewModeChange('list')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                    viewMode === 'list'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                  data-testid="predictions-view-toggle-list"
+                  aria-label="List view"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">List</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -448,11 +792,26 @@ export const MyPredictionsPage = () => {
             <Button onClick={fetchPredictions} variant="outline">Try Again</Button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState filter={activeFilter} />
+          <EmptyState filter={activeFilter} isSearch={!!searchQuery.trim()} />
         ) : (
-          <div className="space-y-3" data-testid="predictions-list">
+          <div
+            className={`predictions-list-container transition-all duration-300 ${
+              viewMode === 'grid'
+                ? 'grid grid-cols-1 md:grid-cols-2 gap-3'
+                : 'space-y-3'
+            }`}
+            data-testid="predictions-list"
+            data-view-mode={viewMode}
+          >
             {filtered.map((pred, i) => (
-              <PredictionCard key={pred.prediction_id} data={pred} index={i} />
+              <PredictionCard
+                key={pred.prediction_id}
+                data={pred}
+                index={i}
+                viewMode={viewMode}
+                onEdit={handleEditPrediction}
+                onRemove={handleRemovePrediction}
+              />
             ))}
           </div>
         )}

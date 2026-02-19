@@ -5,7 +5,7 @@ import { Footer } from '@/components/layout/Footer';
 import { PromoBanner } from '@/components/home/PromoBanner';
 import { TabsSection } from '@/components/home/TabsSection';
 import { LeagueFilters } from '@/components/home/LeagueFilters';
-import { TopMatchesCards } from '@/components/home/TopMatchesCards';
+
 import { MatchList } from '@/components/home/MatchList';
 import { useAuth } from '@/lib/AuthContext';
 import { getMyPredictions, savePrediction } from '@/services/predictions';
@@ -348,14 +348,6 @@ export const HomePage = () => {
         {/* Match Content */}
         {matches.length > 0 && (
           <>
-            {/* Top Featured Cards */}
-            <TopMatchesCards
-              matches={matches}
-              savedPredictions={savedPredictions}
-              onPredictionSaved={handlePredictionSaved}
-              viewMode={viewMode}
-            />
-
             {/* Full Match List */}
             <MatchList
               matches={matches}

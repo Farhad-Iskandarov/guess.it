@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 
 class GuessItAPITester:
-    def __init__(self, base_url="https://guess-it-staging.preview.emergentagent.com"):
+    def __init__(self, base_url="https://guess-it-duplicate.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.session_token = None
         self.user_id = None
@@ -331,6 +331,143 @@ class GuessItAPITester:
             self.log_test("Predictions Me Detailed - With Auth", False, f"Exception: {str(e)}")
             return False, {}
 
+    def test_full_prediction_workflow_bug_fix(self):
+        """
+        Test the specific bug fix: Register user → Login → Make prediction → Check /api/predictions/me/detailed 
+        returns match data (not null) for predicted matches
+        """
+        print("🐛 Testing Bug Fix: My Predictions Match Data")
+        
+        # Create a session to maintain cookies
+        session = requests.Session()
+        headers = {'Content-Type': 'application/json'}
+        
+        # Step 1: Register a new user
+        test_email = f"bugfix_test_{int(time.time())}@example.com"
+        test_password = "BugFixTest123!"
+        
+        print(f"1️⃣ Registering user: {test_email}")
+        register_response = session.post(f"{self.base_url}/api/auth/register", json={
+            "email": test_email,
+            "password": test_password,
+            "confirm_password": test_password,
+            "name": "Bug Fix Tester"
+        }, headers=headers, timeout=10)
+        
+        if register_response.status_code != 200:
+            self.log_test("Bug Fix Test - Register", False, f"Registration failed: {register_response.status_code}")
+            return False
+        
+        print(f"✅ User registered successfully")
+        
+        # Step 2: Login with the new user
+        print(f"2️⃣ Logging in user: {test_email}")
+        login_response = session.post(f"{self.base_url}/api/auth/login", json={
+            "email": test_email,
+            "password": test_password
+        }, headers=headers, timeout=10)
+        
+        if login_response.status_code != 200:
+            self.log_test("Bug Fix Test - Login", False, f"Login failed: {login_response.status_code}")
+            return False
+            
+        print(f"✅ User logged in successfully")
+        
+        # Step 3: Get available matches to predict on
+        print(f"3️⃣ Fetching available matches...")
+        matches_response = session.get(f"{self.base_url}/api/football/matches", headers=headers, timeout=15)
+        
+        if matches_response.status_code != 200:
+            self.log_test("Bug Fix Test - Get Matches", False, f"Failed to get matches: {matches_response.status_code}")
+            return False
+        
+        try:
+            matches_data = matches_response.json()
+            matches = matches_data.get('matches', [])
+            
+            if not matches:
+                self.log_test("Bug Fix Test - No Matches", False, "No matches available to predict on")
+                return False
+                
+            # Get the first available match
+            test_match = matches[0]
+            match_id = test_match['id']
+            print(f"✅ Found {len(matches)} matches. Using match ID: {match_id} ({test_match.get('homeTeam', {}).get('name', 'Unknown')} vs {test_match.get('awayTeam', {}).get('name', 'Unknown')})")
+            
+        except Exception as e:
+            self.log_test("Bug Fix Test - Parse Matches", False, f"Failed to parse matches: {str(e)}")
+            return False
+        
+        # Step 4: Make a prediction on this match
+        print(f"4️⃣ Making prediction on match {match_id}...")
+        prediction_response = session.post(f"{self.base_url}/api/predictions", json={
+            "match_id": match_id,
+            "prediction": "home"
+        }, headers=headers, timeout=10)
+        
+        if prediction_response.status_code not in [200, 201]:
+            self.log_test("Bug Fix Test - Make Prediction", False, f"Failed to make prediction: {prediction_response.status_code}")
+            return False
+            
+        print(f"✅ Prediction made successfully")
+        
+        # Step 5: Test /api/predictions/me/detailed to ensure it returns match data
+        print(f"5️⃣ Testing /api/predictions/me/detailed endpoint...")
+        detailed_response = session.get(f"{self.base_url}/api/predictions/me/detailed", headers=headers, timeout=15)
+        
+        if detailed_response.status_code != 200:
+            self.log_test("Bug Fix Test - Detailed Predictions", False, f"Failed to get detailed predictions: {detailed_response.status_code}")
+            return False
+        
+        try:
+            detailed_data = detailed_response.json()
+            predictions = detailed_data.get('predictions', [])
+            
+            if not predictions:
+                self.log_test("Bug Fix Test - No Predictions", False, "No predictions returned from detailed endpoint")
+                return False
+            
+            # Check if our prediction is there and has match data
+            found_prediction = None
+            for pred in predictions:
+                if pred.get('match_id') == match_id:
+                    found_prediction = pred
+                    break
+            
+            if not found_prediction:
+                self.log_test("Bug Fix Test - Prediction Not Found", False, f"Prediction for match {match_id} not found in detailed response")
+                return False
+            
+            # THE CORE BUG FIX TEST: Check if match data is present (not null)
+            match_data = found_prediction.get('match')
+            
+            if match_data is None:
+                self.log_test("🐛 BUG STILL EXISTS", False, f"Match data is null for match ID {match_id} - the bug fix didn't work!")
+                return False
+            
+            # Validate match data structure
+            required_match_fields = ['homeTeam', 'awayTeam', 'competition', 'dateTime', 'status', 'score']
+            missing_fields = [field for field in required_match_fields if field not in match_data]
+            
+            if missing_fields:
+                self.log_test("Bug Fix Test - Incomplete Match Data", False, f"Match data missing fields: {missing_fields}")
+                return False
+            
+            # Success! The bug fix is working
+            home_team = match_data.get('homeTeam', {}).get('name', 'Unknown')
+            away_team = match_data.get('awayTeam', {}).get('name', 'Unknown')
+            competition = match_data.get('competition', 'Unknown')
+            
+            self.log_test("🎉 BUG FIX VERIFIED", True, f"Match data properly returned! {home_team} vs {away_team} in {competition}")
+            print(f"✅ Match data includes: teams, competition, datetime, status, score")
+            print(f"✅ No more 'Match data unavailable' messages!")
+            
+            return True
+            
+        except Exception as e:
+            self.log_test("Bug Fix Test - Parse Response", False, f"Failed to parse detailed response: {str(e)}")
+            return False
+
     def test_football_matches(self):
         """Test football matches endpoint"""
         success, response = self.run_test(
@@ -401,13 +538,20 @@ class GuessItAPITester:
         self.test_predictions_detailed_without_auth()
         self.test_prediction_delete_without_auth()
         
-        # Test with authenticated user
-        print("📌 Testing My Predictions Feature...")
+        # Test the specific bug fix scenario
+        print("📌 Testing My Predictions Bug Fix...")
+        bug_fix_success = self.test_full_prediction_workflow_bug_fix()
+        if not bug_fix_success:
+            print("❌ Bug fix test failed - core functionality may be broken")
+        
+        # Test with authenticated user (if exists)
+        print("📌 Testing My Predictions Feature (legacy test)...")
         auth_success, auth_response = self.test_auth_with_test_credentials()
         if auth_success:
             self.test_predictions_me_detailed_with_auth()
         else:
-            self.log_test("My Predictions Tests", False, "Could not authenticate test user")
+            # This is expected for fresh deployments
+            print("ℹ️  Predefined test user not found (expected for fresh deployment)")
 
         # Football endpoints
         print("📌 Testing Football Endpoints...")
