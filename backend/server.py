@@ -22,6 +22,7 @@ from routes.settings import router as settings_router
 from routes.friends import router as friends_router, friend_manager
 from routes.messages import router as messages_router, chat_manager, notification_manager
 from routes.notifications import router as notifications_router
+from routes.admin import router as admin_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -95,6 +96,7 @@ api_router.include_router(settings_router)
 api_router.include_router(friends_router)
 api_router.include_router(messages_router)
 api_router.include_router(notifications_router)
+api_router.include_router(admin_router)
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -265,6 +267,14 @@ async def startup_event():
     await db.notifications.create_index([("user_id", 1), ("read", 1)])
     await db.favorite_matches.create_index([("user_id", 1), ("match_id", 1)], unique=True)
     await db.favorite_matches.create_index([("user_id", 1), ("created_at", -1)])
+    # Admin panel indexes
+    await db.admin_audit_log.create_index([("timestamp", -1)])
+    await db.admin_audit_log.create_index([("admin_id", 1)])
+    await db.reported_messages.create_index([("reported_at", -1)])
+    await db.pinned_matches.create_index([("match_id", 1)], unique=True)
+    await db.hidden_matches.create_index([("match_id", 1)], unique=True)
+    await db.users.create_index([("role", 1)])
+    await db.users.create_index([("is_banned", 1)])
     start_polling(db)
 
 

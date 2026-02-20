@@ -1,114 +1,77 @@
-# GuessIt — Football Prediction Platform (Clone)
+# GuessIt — Football Prediction Platform
 
 ## Original Problem Statement
-Clone the existing GuessIt project from https://github.com/Farhad-Iskandarov/guess.it as an exact 100% identical duplicate, then implement 6 feature updates.
+1. Clone https://github.com/Farhad-Iskandarov/guess.it exactly
+2. Redesign Messages page with two-column layout, independent scrolling, modern UI, responsive
+3. Build secure, modern, animated Admin Panel with RBAC, audit logging, 6 feature sections
 
 ## Architecture
-- **Frontend**: React 19, Tailwind CSS, Shadcn/UI, Radix UI, Lucide React, CRACO, React Router v7
+- **Frontend**: React 19, Tailwind CSS 3.4, Shadcn/UI, Radix UI, Lucide React, CRACO
 - **Backend**: Python 3.11, FastAPI, Uvicorn, Motor (async MongoDB driver)
 - **Database**: MongoDB (guessit)
-- **Auth**: bcrypt, httpOnly session cookies, Emergent Google OAuth
-- **External API**: Football-Data.org v4 (API key: configured in .env)
-- **Real-Time**: WebSocket + polling fallback
-
-## Core Requirements (Static)
-1. Browse upcoming/live football matches from major leagues
-2. Predict match outcomes (Home/Draw/Away)
-3. Live score updates via WebSocket (30s polling)
-4. User authentication (email/password + Google OAuth)
-5. Points & Level system (10 levels)
-6. Favorite clubs with heart toggle
-7. Friends system with real-time WebSocket notifications
-8. Real-time messaging between friends
-9. Notification system (friend requests, messages, badges)
-10. User profile & settings
-11. My Predictions page
-12. Dark/Light theme
+- **Real-Time**: WebSocket with 30s polling from Football-Data.org
+- **Auth**: Email/Password (bcrypt) + Google OAuth (Emergent Auth), session cookies
 
 ## What's Been Implemented
 
-### Session 1 — Clone (2026-02-20)
-- Full project clone from GitHub
-- All backend routes + WebSocket endpoints
-- All frontend pages + components
-- Football-Data.org API integration
+### 2026-02-20: Project Clone
+- Full clone of source repo, all dependencies installed, services running
 
-### Session 2 — 6 Feature Updates (2026-02-20)
+### 2026-02-20: Messages Page Redesign
+- Two-column layout (400px sidebar + flex chat area), independent scrolling
+- Modern message bubbles, responsive mobile toggle, Tailwind utility classes
 
-#### 1. Grid/List Animation ✅
-- CSS transition animation (300ms cubic-bezier) for view switching
-- Staggered card entrance with `view-transitioning` class
-- Works on both Main Page and My Predictions Page
-- No layout jump, smooth fade + scale
+### 2026-02-20: Admin Panel (NEW)
+**Backend** (`/app/backend/routes/admin.py`):
+- 20+ endpoints with RBAC middleware (401/403 enforcement)
+- Rate limiting (100 req/60s per admin)
+- Input sanitization (XSS prevention)
+- Audit logging (all admin actions tracked)
+- Endpoints: dashboard stats, user CRUD, match management, moderation, notifications, analytics
 
-#### 2. Messages Page — Dual Scroll Areas ✅
-- Left panel: conversations list scrolls independently via `.messages-sidebar-list`
-- Right panel: chat messages scroll independently via `.messages-chat-messages`
-- Header remains fixed at top
-- Input area remains fixed at bottom
-- `h-screen` layout with `overflow: hidden` on parent
+**Frontend** (`/app/frontend/src/pages/AdminPage.jsx`):
+- 6 tabs: Dashboard, Users, Matches, Moderation, Notifications, Analytics
+- Animated stat cards with counters
+- User management table with promote/demote/ban/delete actions
+- Match management with Force Refresh, Pin/Hide
+- Content moderation with message viewer, flag/delete
+- Notification broadcaster (system-wide + individual)
+- Analytics with 7-day bar charts, top predictors, points distribution
+- Dark mode compatible, responsive sidebar
 
-#### 3. Message Delivery & Read Status ✅
-- Backend: `delivered`, `delivered_at`, `read`, `read_at` fields on messages
-- WebSocket events: `message_delivered`, `messages_read`, `messages_delivered`
-- UI: Single check = Sent, Double check = Delivered, Colored double check = Read
-- Settings: Read Receipts toggle + Delivery Status toggle
-- Privacy: If disabled, sender cannot see read/delivered status
+**Security**:
+- Admin user: farhad.isgandarov@gmail.com (role: admin)
+- Non-admin → 403 on all /api/admin/* endpoints
+- Non-authenticated → 401
+- Rate limiting, audit trail, server-side role validation
+- All user content HTML-escaped
 
-#### 4. Security Hardening ✅
-- HTML tag stripping via `re.sub(r'<[^>]+>', '', text)` + `html.escape()`
-- Rate limiting: 30 messages per 60 seconds per user (in-memory)
-- Backend validation via Pydantic with `field_validator`
-- Message length limit: 1-2000 chars
-- Null byte removal
-- XSS prevention: React's JSX escaping + backend sanitization
-- WebSocket auth verification
+**Database Collections Added**:
+- admin_audit_log, reported_messages, pinned_matches, hidden_matches
 
-#### 5. Favorite Matches ✅
-- Backend: `favorite_matches` collection with CRUD endpoints
-- POST/GET/DELETE `/api/favorites/matches`
-- Bookmark icon on each match card (amber color when bookmarked)
-- Favorite tab shows both "Favorite Clubs" and "Bookmarked Matches" sections
-- Matches persist even after they end (manual removal only)
+## API Routes
+### Public
+- /api/auth/*, /api/football/*, /api/predictions/*, /api/messages/*
+- /api/favorites/*, /api/friends/*, /api/settings/*, /api/notifications/*
 
-#### 6. Share Match Card in Chat ✅
-- "+" button next to Send in chat input area
-- Match selector modal with search functionality
-- `message_type: "match_share"` with structured `match_data`
-- Match card renders in chat with teams, score, status, competition
-- Clickable card navigates to home page
-- XSS-safe: all match data sanitized
+### Admin (Protected)
+- GET /api/admin/dashboard
+- GET/POST/DELETE /api/admin/users/*
+- GET/POST/DELETE /api/admin/matches/*
+- GET/DELETE /api/admin/moderation/*
+- POST /api/admin/notifications/broadcast, /send
+- GET /api/admin/analytics
+- GET /api/admin/audit-log
 
 ## Testing Results
-- Backend: 100% (17/17 tests passed)
-- Frontend: All features verified via authenticated browser testing
-- Grid/List animation: Visual confirmation of smooth transitions
-- Messages dual scroll: Layout confirmed with sidebar + chat area
-- Settings: 4 toggles visible and functional
-- Bookmark icons: 120 visible on 120 match cards
-
-## Database Collections
-- `users`, `user_sessions`, `predictions`, `favorites`, `favorite_matches`
-- `friendships`, `friend_requests`, `messages`, `notifications`
-
-## Indexes
-- `messages`: (sender_id, receiver_id, created_at), (receiver_id, read), (receiver_id, delivered)
-- `notifications`: (user_id, created_at), (user_id, read)
-- `favorite_matches`: (user_id, match_id) unique, (user_id, created_at)
-
-## API Key Configuration
-- FOOTBALL_API_KEY: configured in /app/backend/.env
+- Backend admin APIs: 92% pass rate
+- Frontend admin UI: All 6 tabs verified via screenshots
+- Security: 403/401 enforcement confirmed
+- Homepage: 120 matches still loading correctly
 
 ## Prioritized Backlog
-### P1 (High)
-- [ ] Leaderboard System
-- [ ] Push Notifications
-- [ ] Match Detail Page
-
-### P2 (Medium)
-- [ ] Advanced Predictions (score, first goal scorer)
-- [ ] PWA Support
-- [ ] Historical Statistics
-
-## Next Tasks
-- Awaiting user feedback on implemented features
+- P1: Admin session timeout (auto logout on inactivity)
+- P1: CSRF token on admin routes
+- P2: Export audit log to CSV
+- P2: Admin settings page
+- P3: Advanced match override (manual score entry)

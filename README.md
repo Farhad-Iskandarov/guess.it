@@ -488,16 +488,72 @@ Frontend ← WebSocket ← Backend ← Football-Data.org
 ## Future Improvements
 
 - **Leaderboard System**: Track prediction accuracy, weekly/monthly rankings
-- **User Profiles**: Prediction history, accuracy stats, badges
 - **Match Result Comparison**: Show correct/incorrect after match ends
 - **Push Notifications**: Alert users about goal events and prediction deadlines
-- **Friend System**: Add friends, view their predictions, private leagues
 - **Countdown Timer**: Show "Predictions close in X hours" for urgency
 - **Advanced Predictions**: Score prediction, first goal scorer, etc.
 - **Historical Statistics**: Past match data, head-to-head records
 - **Newsletter System**: Weekly prediction summaries via email
 - **PWA Support**: Installable app with offline capabilities
 - **Sort & Filter**: Sort matches by popularity, kick-off time, live-first
+
+---
+
+## Admin Panel
+
+### Access
+- **Route**: `/admin` (protected, admin role required)
+- **Super Admin**: Set via database `role: "admin"` field on user document
+- Non-admin users see "Access Denied" (403)
+- Admin link visible in user dropdown menu for admin users only
+
+### Features
+| Section | Capabilities |
+|---------|-------------|
+| **Dashboard** | Total users, online users, matches, predictions, messages, friendships, notifications, system health, recent audit log |
+| **User Management** | Search, view details, promote/demote admin, ban/unban, delete user, reset points |
+| **Match Management** | View all matches, force refresh from API, pin/unpin, hide matches |
+| **Content Moderation** | View recent messages, delete messages, flag suspicious users, reported messages |
+| **Notifications** | Broadcast system-wide notification, send to specific user |
+| **Analytics** | Daily active users chart (7d), predictions per day (7d), top predictors, points distribution |
+
+### Security
+- Role-based access control (RBAC) — server-side verification on every request
+- Rate limiting (100 requests/60 seconds per admin)
+- Input sanitization (XSS prevention, HTML escaping)
+- Audit logging — all admin actions stored with admin ID, action, target, timestamp
+- Session-based auth with cookie validation
+- Cannot ban/delete/demote yourself (self-protection)
+- Cannot ban/delete other admins without demoting first
+
+### API Routes
+All admin endpoints under `/api/admin/*`:
+- `GET /dashboard` — Stats overview
+- `GET /users` — Paginated user list (search, filters)
+- `GET/POST/DELETE /users/{id}/*` — User actions
+- `GET /matches` — Match list with admin controls
+- `POST /matches/refresh` — Force API refresh
+- `POST /matches/{id}/pin` — Toggle pin
+- `DELETE /matches/{id}` — Hide match
+- `GET /moderation/messages` — Recent messages
+- `DELETE /moderation/messages/{id}` — Delete message
+- `POST /moderation/users/{id}/flag` — Flag user
+- `GET /moderation/reported` — Reported messages
+- `POST /notifications/broadcast` — Send to all
+- `POST /notifications/send` — Send to user
+- `GET /analytics` — Charts data
+- `GET /audit-log` — Admin action history
+
+---
+
+## Messaging Behavior After Friend Removal
+
+### Rules
+1. **When a friend is removed**: Chat history is **preserved**. Messages are never deleted when a friendship ends.
+2. **Messaging restriction**: If two users are no longer friends, they **cannot send new messages**. The input is disabled with a notice: *"You are no longer friends. Send a friend request to continue messaging."*
+3. **Re-friending**: When a friend request is re-accepted, messaging resumes using the **existing conversation** — no duplicate conversations, no history loss.
+4. **WebSocket enforcement**: Message sending is blocked server-side if users are not friends.
+5. **Backend validation**: Friendship status is checked on every send attempt — frontend cannot bypass this.
 
 ---
 

@@ -236,7 +236,10 @@ async def login_email(
         picture=user.get("picture"),
         auth_provider=user.get("auth_provider", "email"),
         nickname_set=user.get("nickname_set", False),
-        created_at=created_at
+        created_at=created_at,
+        points=user.get("points", 0),
+        level=user.get("level", 0),
+        role=user.get("role")
     )
     
     requires_nickname = not user.get("nickname_set", False)
@@ -501,7 +504,8 @@ async def get_current_user(
         nickname_changed=user.get("nickname_changed", False),
         created_at=created_at,
         points=user.get("points", 0),
-        level=user.get("level", 0)
+        level=user.get("level", 0),
+        role=user.get("role")
     )
 
 @router.post("/logout")

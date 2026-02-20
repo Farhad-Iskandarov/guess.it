@@ -128,6 +128,25 @@ def stop_polling():
         _polling_task.cancel()
 
 
+# ==================== Admin Helpers ====================
+_last_fetched_matches = []
+
+def get_cached_matches():
+    """Return last fetched matches for admin panel"""
+    return list(_last_fetched_matches)
+
+async def force_fetch_matches(db):
+    """Force fetch all matches from API"""
+    global _last_fetched_matches
+    today = datetime.now(timezone.utc)
+    date_from = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+    date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    matches = await get_matches(db, date_from, date_to)
+    _last_fetched_matches = matches
+    return len(matches)
+
+
+
 # ==================== REST Endpoints ====================
 
 @router.get("/competitions")
@@ -159,6 +178,10 @@ async def list_matches(
         date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
 
     matches = await get_matches(db, date_from, date_to, competition, status)
+    # Cache for admin panel
+    global _last_fetched_matches
+    if not competition and not status:
+        _last_fetched_matches = matches
     return {
         "matches": matches,
         "total": len(matches),

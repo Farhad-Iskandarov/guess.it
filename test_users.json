@@ -1,0 +1,16 @@
+{
+  "user_a": {
+    "email": "usera1771591061@example.com",
+    "password": "TestPass123!",
+    "nickname": "usera1771591061",
+    "session_token": "token_b44efc6c6b624175a54003acd60b6a7768f01839",
+    "user_id": "user_2e900108f2a3"
+  },
+  "user_b": {
+    "email": "userb1771591061@example.com",
+    "password": "TestPass123!",
+    "nickname": "userb1771591061",
+    "session_token": "token_c51f8f0944e043759fc1399b6ad87ea841aba103",
+    "user_id": "user_2a1210710a3c"
+  }
+}

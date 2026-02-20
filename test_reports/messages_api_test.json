@@ -1,0 +1,40 @@
+{
+  "summary": {
+    "tests_run": 5,
+    "tests_passed": 3,
+    "success_rate": 60.0,
+    "timestamp": "2026-02-20T12:19:34.443957"
+  },
+  "results": [
+    {
+      "test": "User Registration + Nickname",
+      "success": true,
+      "details": "User ID: user_05b19b43191a",
+      "timestamp": "2026-02-20T12:19:33.962734"
+    },
+    {
+      "test": "Messages Conversations",
+      "success": true,
+      "details": "Conversations: 0, Unread: 0",
+      "timestamp": "2026-02-20T12:19:34.071948"
+    },
+    {
+      "test": "Messages Unread Count",
+      "success": true,
+      "details": "Unread count: 0",
+      "timestamp": "2026-02-20T12:19:34.188807"
+    },
+    {
+      "test": "Chat WebSocket Endpoint Accessibility",
+      "success": false,
+      "details": "Unexpected status: 200",
+      "timestamp": "2026-02-20T12:19:34.303621"
+    },
+    {
+      "test": "Matches WebSocket Endpoint Accessibility",
+      "success": false,
+      "details": "Unexpected status: 200",
+      "timestamp": "2026-02-20T12:19:34.443207"
+    }
+  ]
+}

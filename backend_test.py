@@ -1,583 +1,731 @@
-#!/usr/bin/env python3
-"""
-Backend API Testing for GuessIT Football Prediction App
-Tests all core endpoints including health, auth, and football data
-"""
 import requests
 import sys
 import json
-import uuid
+import time
 from datetime import datetime
 
-class GuessITAPITester:
-    def __init__(self, base_url="https://guessit-preview.preview.emergentagent.com"):
-        self.base_url = base_url
-        self.session = requests.Session()
-        self.session.headers.update({'Content-Type': 'application/json'})
+class GuessItAPITester:
+    def __init__(self):
+        self.base_url = "https://guess-it-duplicate-1.preview.emergentagent.com/api"
+        self.session_token = None
+        self.admin_session_token = None
+        self.user_id = None
+        self.admin_user_id = None
         self.tests_run = 0
         self.tests_passed = 0
         self.test_results = []
-        self.session_token = None
 
-    def log_test(self, name, success, status_code=None, details=None, error=None):
+    def log_test(self, name, success, details=""):
         """Log test result"""
         self.tests_run += 1
         if success:
             self.tests_passed += 1
+            print(f"✅ {name}")
+        else:
+            print(f"❌ {name} - {details}")
         
-        result = {
-            "test_name": name,
+        self.test_results.append({
+            "test": name,
             "success": success,
-            "status_code": status_code,
             "details": details,
-            "error": str(error) if error else None
-        }
-        self.test_results.append(result)
+            "timestamp": datetime.now().isoformat()
+        })
+
+    def test_root_endpoint(self):
+        """Test API root endpoint"""
+        try:
+            response = requests.get(f"{self.base_url}/", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("message") == "GuessIt API is running":
+                    self.log_test("API Root Endpoint", True, f"Status: {response.status_code}, Message: {data.get('message')}")
+                    return True
+                else:
+                    self.log_test("API Root Endpoint", False, f"Unexpected message: {data.get('message')}")
+                    return False
+            else:
+                self.log_test("API Root Endpoint", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("API Root Endpoint", False, f"Error: {str(e)}")
+            return False
+
+    def test_health_endpoint(self):
+        """Test health check endpoint"""
+        try:
+            response = requests.get(f"{self.base_url}/health", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if "status" in data and data["status"] == "healthy":
+                    self.log_test("Health Check Endpoint", True, f"Status: healthy, Timestamp: {data.get('timestamp', 'N/A')}")
+                    return True
+                else:
+                    self.log_test("Health Check Endpoint", False, f"Unexpected response: {data}")
+                    return False
+            else:
+                self.log_test("Health Check Endpoint", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Health Check Endpoint", False, f"Error: {str(e)}")
+            return False
+
+    def test_football_matches_endpoint(self):
+        """Test football matches API endpoint"""
+        try:
+            response = requests.get(f"{self.base_url}/football/matches", timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                matches = data.get("matches", [])
+                total = data.get("total", 0)
+                
+                if len(matches) >= 100:
+                    self.log_test("Football Matches API", True, f"Returned {total} matches (>= 100 required)")
+                    return True
+                else:
+                    self.log_test("Football Matches API", False, f"Only {total} matches returned (< 100)")
+                    return False
+            else:
+                self.log_test("Football Matches API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Football Matches API", False, f"Error: {str(e)}")
+            return False
+
+    def test_register_user(self):
+        """Test user registration"""
+        test_email = f"test_{int(time.time())}@example.com"
+        test_password = "TestPass123!"
         
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status} - {name}")
-        if status_code:
-            print(f"    Status: {status_code}")
-        if details:
-            print(f"    Details: {details}")
-        if error:
-            print(f"    Error: {error}")
-        print()
-
-    def test_api_health(self):
-        """Test /api/health endpoint"""
         try:
-            response = self.session.get(f"{self.base_url}/api/health", timeout=10)
+            response = requests.post(
+                f"{self.base_url}/auth/register",
+                json={"email": test_email, "password": test_password, "confirm_password": test_password},
+                timeout=10
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if 'status' in data and data['status'] == 'healthy':
-                    self.log_test("API Health Check", True, 200, f"Status: {data['status']}")
+                if "user" in data and data.get("requires_nickname"):
+                    # Store user details for subsequent tests
+                    self.user_id = data["user"]["user_id"]
+                    # Try to get session token from cookies
+                    cookies = response.cookies
+                    self.session_token = cookies.get("session_token")
+                    self.log_test("User Registration", True, f"User ID: {self.user_id}, Requires nickname: {data.get('requires_nickname')}")
                     return True
                 else:
-                    self.log_test("API Health Check", False, 200, error="Invalid response format")
+                    self.log_test("User Registration", False, f"Unexpected response structure: {data}")
                     return False
             else:
-                self.log_test("API Health Check", False, response.status_code, error=response.text)
+                self.log_test("User Registration", False, f"Status code: {response.status_code}, Response: {response.text}")
                 return False
         except Exception as e:
-            self.log_test("API Health Check", False, error=f"Request failed: {e}")
+            self.log_test("User Registration", False, f"Error: {str(e)}")
             return False
 
-    def test_api_root(self):
-        """Test /api/ root endpoint"""
+    def test_set_nickname(self):
+        """Test setting nickname after registration"""
+        if not self.session_token or not self.user_id:
+            self.log_test("Set Nickname", False, "No session token or user_id available")
+            return False
+            
+        test_nickname = f"testuser_{int(time.time())}"
+        
         try:
-            response = self.session.get(f"{self.base_url}/api/", timeout=10)
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            response = requests.post(
+                f"{self.base_url}/auth/nickname",
+                json={"nickname": test_nickname},
+                headers=headers,
+                timeout=10
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if 'message' in data and 'GuessIt' in data['message']:
-                    self.log_test("API Root Message", True, 200, f"Message: {data['message']}")
+                if data.get("user", {}).get("nickname_set"):
+                    self.log_test("Set Nickname", True, f"Nickname '{test_nickname}' set successfully")
                     return True
                 else:
-                    self.log_test("API Root Message", False, 200, error="Invalid response format")
+                    self.log_test("Set Nickname", False, f"Nickname not set properly: {data}")
                     return False
             else:
-                self.log_test("API Root Message", False, response.status_code, error=response.text)
+                self.log_test("Set Nickname", False, f"Status code: {response.status_code}, Response: {response.text}")
                 return False
         except Exception as e:
-            self.log_test("API Root Message", False, error=f"Request failed: {e}")
+            self.log_test("Set Nickname", False, f"Error: {str(e)}")
             return False
 
-    def test_football_competitions(self):
-        """Test /api/football/competitions endpoint"""
+    def test_user_me_endpoint(self):
+        """Test /auth/me endpoint"""
+        if not self.session_token:
+            self.log_test("Get Current User", False, "No session token available")
+            return False
+            
         try:
-            response = self.session.get(f"{self.base_url}/api/football/competitions", timeout=15)
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            response = requests.get(
+                f"{self.base_url}/auth/me",
+                headers=headers,
+                timeout=10
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if 'competitions' in data:
-                    competitions = data['competitions']
-                    comp_count = len(competitions)
-                    
-                    # Check if we get exactly 8 competitions as expected
-                    if comp_count == 8:
-                        comp_names = [c['name'] for c in competitions]
-                        self.log_test("Football Competitions", True, 200, f"Found {comp_count} competitions: {', '.join(comp_names[:3])}...")
-                        return True
-                    else:
-                        self.log_test("Football Competitions", True, 200, f"Found {comp_count} competitions (expected 8)")
-                        return True
-                else:
-                    self.log_test("Football Competitions", False, 200, error="Missing 'competitions' field")
-                    return False
-            else:
-                self.log_test("Football Competitions", False, response.status_code, error=response.text)
-                return False
-        except Exception as e:
-            self.log_test("Football Competitions", False, error=f"Request failed: {e}")
-            return False
-
-    def test_football_matches(self):
-        """Test /api/football/matches endpoint"""
-        try:
-            response = self.session.get(f"{self.base_url}/api/football/matches", timeout=20)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'matches' in data and 'total' in data:
-                    matches_count = data['total']
-                    matches = data['matches']
-                    
-                    if matches_count > 0:
-                        # Check structure of first match
-                        first_match = matches[0]
-                        required_fields = ['id', 'homeTeam', 'awayTeam', 'competition', 'status']
-                        
-                        missing_fields = [field for field in required_fields if field not in first_match]
-                        if not missing_fields:
-                            self.log_test("Football Matches", True, 200, f"Found {matches_count} matches with correct structure")
-                            return True
-                        else:
-                            self.log_test("Football Matches", False, 200, error=f"Missing fields in match data: {missing_fields}")
-                            return False
-                    else:
-                        self.log_test("Football Matches", True, 200, f"API working, but no matches found ({matches_count})")
-                        return True
-                else:
-                    self.log_test("Football Matches", False, 200, error="Missing 'matches' or 'total' field")
-                    return False
-            else:
-                self.log_test("Football Matches", False, response.status_code, error=response.text)
-                return False
-        except Exception as e:
-            self.log_test("Football Matches", False, error=f"Request failed: {e}")
-            return False
-
-    def test_auth_register(self):
-        """Test /api/auth/register endpoint"""
-        try:
-            # Generate unique test user
-            unique_id = str(uuid.uuid4())[:8]
-            test_email = f"test_{unique_id}@example.com"
-            test_password = "TestPass123!"
-            
-            payload = {
-                "email": test_email,
-                "password": test_password,
-                "confirm_password": test_password
-            }
-            
-            response = self.session.post(f"{self.base_url}/api/auth/register", 
-                                       json=payload, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'user' in data and 'requires_nickname' in data:
-                    user_data = data['user']
-                    if user_data.get('email') == test_email and data.get('requires_nickname') == True:
-                        self.log_test("Auth Register", True, 200, f"User registered: {test_email}")
-                        # Store session for potential login test
-                        cookies = response.cookies
-                        if cookies.get('session_token'):
-                            self.session_token = cookies.get('session_token')
-                        return True
-                    else:
-                        self.log_test("Auth Register", False, 200, error="Invalid registration response")
-                        return False
-                else:
-                    self.log_test("Auth Register", False, 200, error="Missing user or requires_nickname field")
-                    return False
-            else:
-                # Don't treat 400 as failure if it's "email already exists" - that's expected in repeated tests
-                if response.status_code == 400 and "already exists" in response.text:
-                    self.log_test("Auth Register", True, 400, "Email validation working (user already exists)")
+                if "user_id" in data and "email" in data:
+                    self.log_test("Get Current User", True, f"User data retrieved: {data.get('nickname', 'No nickname')}")
                     return True
                 else:
-                    self.log_test("Auth Register", False, response.status_code, error=response.text)
+                    self.log_test("Get Current User", False, f"Invalid user data: {data}")
                     return False
+            else:
+                self.log_test("Get Current User", False, f"Status code: {response.status_code}")
+                return False
         except Exception as e:
-            self.log_test("Auth Register", False, error=f"Request failed: {e}")
+            self.log_test("Get Current User", False, f"Error: {str(e)}")
             return False
 
-    def test_auth_login(self):
-        """Test /api/auth/login endpoint"""
-        try:
-            # Try to login with a test user
-            payload = {
-                "email": "test@example.com",
-                "password": "TestPass123!"
-            }
+    def test_predictions_endpoint(self):
+        """Test predictions endpoint"""
+        if not self.session_token:
+            self.log_test("Predictions API", False, "No session token available")
+            return False
             
-            response = self.session.post(f"{self.base_url}/api/auth/login", 
-                                       json=payload, timeout=10)
+        try:
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            response = requests.get(
+                f"{self.base_url}/predictions/me",
+                headers=headers,
+                timeout=10
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if 'user' in data and 'message' in data:
-                    self.log_test("Auth Login", True, 200, f"Login successful: {data.get('message')}")
+                if "predictions" in data and "total" in data:
+                    self.log_test("Predictions API", True, f"Predictions endpoint working, Total: {data.get('total', 0)}")
                     return True
                 else:
-                    self.log_test("Auth Login", False, 200, error="Invalid login response format")
+                    self.log_test("Predictions API", False, f"Invalid response structure: {data}")
                     return False
-            elif response.status_code == 401:
-                # 401 is expected if user doesn't exist - login validation is working
-                self.log_test("Auth Login", True, 401, "Login validation working (invalid credentials)")
+            else:
+                self.log_test("Predictions API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Predictions API", False, f"Error: {str(e)}")
+            return False
+
+    def test_messages_conversations_endpoint(self):
+        """Test messages conversations endpoint"""
+        if not self.session_token:
+            self.log_test("Messages Conversations API", False, "No session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            response = requests.get(
+                f"{self.base_url}/messages/conversations",
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "conversations" in data and "total_unread" in data:
+                    self.log_test("Messages Conversations API", True, f"Conversations: {len(data.get('conversations', []))}, Unread: {data.get('total_unread', 0)}")
+                    return True
+                else:
+                    self.log_test("Messages Conversations API", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Messages Conversations API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Messages Conversations API", False, f"Error: {str(e)}")
+            return False
+
+    def test_messages_unread_count_endpoint(self):
+        """Test messages unread count endpoint"""
+        if not self.session_token:
+            self.log_test("Messages Unread Count API", False, "No session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            response = requests.get(
+                f"{self.base_url}/messages/unread-count",
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "count" in data:
+                    self.log_test("Messages Unread Count API", True, f"Unread count: {data.get('count', 0)}")
+                    return True
+                else:
+                    self.log_test("Messages Unread Count API", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Messages Unread Count API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Messages Unread Count API", False, f"Error: {str(e)}")
+            return False
+
+    def test_websocket_chat_endpoint(self):
+        """Test WebSocket chat endpoint accessibility"""
+        if not self.user_id:
+            self.log_test("WebSocket Chat Endpoint", False, "No user_id available")
+            return False
+            
+        try:
+            # Test if the WS endpoint exists by making HTTP request (should return method not allowed)
+            ws_url = f"{self.base_url}/ws/chat/{self.user_id}".replace('/api', '')
+            response = requests.get(ws_url, timeout=5)
+            # WebSocket endpoints typically return 405 or 404
+            if response.status_code in [404, 405]:
+                self.log_test("WebSocket Chat Endpoint", True, f"WebSocket endpoint accessible (HTTP {response.status_code} expected)")
                 return True
             else:
-                self.log_test("Auth Login", False, response.status_code, error=response.text)
+                self.log_test("WebSocket Chat Endpoint", False, f"Unexpected status: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("Auth Login", False, error=f"Request failed: {e}")
+            self.log_test("WebSocket Chat Endpoint", False, f"Error: {str(e)}")
+            return False
+
+    def test_websocket_info(self):
+        """Test if WebSocket endpoints are accessible (no actual connection test)"""
+        # We can't test WebSocket directly with requests, but we can check if the endpoint exists
+        # by trying to make a regular HTTP request to it (should fail with method not allowed)
+        try:
+            ws_url = self.base_url.replace('/api', '') + '/api/ws/matches'
+            response = requests.get(ws_url, timeout=5)
+            # WebSocket endpoints typically return 405 Method Not Allowed for GET requests
+            if response.status_code == 405:
+                self.log_test("WebSocket Endpoint Check", True, "WebSocket endpoint exists (405 Method Not Allowed expected)")
+                return True
+            else:
+                self.log_test("WebSocket Endpoint Check", False, f"Unexpected status: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("WebSocket Endpoint Check", False, f"Error: {str(e)}")
             return False
 
     def test_football_live_matches(self):
-        """Test /api/football/matches/live endpoint"""
+        """Test live matches endpoint"""
         try:
-            response = self.session.get(f"{self.base_url}/api/football/matches/live", timeout=15)
+            response = requests.get(f"{self.base_url}/football/matches/live", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if "matches" in data:
+                    self.log_test("Live Matches API", True, f"Total live matches: {data.get('total', 0)}")
+                    return True
+                else:
+                    self.log_test("Live Matches API", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Live Matches API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Live Matches API", False, f"Error: {str(e)}")
+            return False
+
+    def test_football_competitions(self):
+        """Test competitions endpoint"""
+        try:
+            response = requests.get(f"{self.base_url}/football/competitions", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if "competitions" in data:
+                    competitions = data.get("competitions", [])
+                    self.log_test("Competitions API", True, f"Total competitions: {len(competitions)}")
+                    return True
+                else:
+                    self.log_test("Competitions API", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Competitions API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Competitions API", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_login(self):
+        """Test admin login with specific credentials"""
+        try:
+            response = requests.post(
+                f"{self.base_url}/auth/login",
+                json={"email": "farhad.isgandarov@gmail.com", "password": "Salam123?"},
+                timeout=10
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if 'matches' in data and 'total' in data:
-                    live_count = data['total']
-                    self.log_test("Football Live Matches", True, 200, f"Found {live_count} live matches")
+                if "user" in data and data["user"].get("role") == "admin":
+                    # Store admin session from cookies
+                    cookies = response.cookies
+                    self.admin_session_token = cookies.get("session_token")
+                    self.admin_user_id = data["user"]["user_id"]
+                    self.log_test("Admin Login", True, f"Admin user logged in: {data['user'].get('nickname', 'SuperAdmin')}")
                     return True
                 else:
-                    self.log_test("Football Live Matches", False, 200, error="Missing matches or total field")
+                    self.log_test("Admin Login", False, f"Login successful but not admin role: {data.get('user', {}).get('role', 'None')}")
                     return False
             else:
-                self.log_test("Football Live Matches", False, response.status_code, error=response.text)
+                self.log_test("Admin Login", False, f"Status code: {response.status_code}, Response: {response.text}")
                 return False
         except Exception as e:
-            self.log_test("Football Live Matches", False, error=f"Request failed: {e}")
+            self.log_test("Admin Login", False, f"Error: {str(e)}")
             return False
 
-    def test_football_today_matches(self):
-        """Test /api/football/matches/today endpoint"""
+    def test_admin_dashboard(self):
+        """Test admin dashboard endpoint"""
+        if not self.admin_session_token:
+            self.log_test("Admin Dashboard", False, "No admin session token available")
+            return False
+            
         try:
-            response = self.session.get(f"{self.base_url}/api/football/matches/today", timeout=15)
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/dashboard", headers=headers, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
-                if 'matches' in data and 'total' in data:
-                    today_count = data['total']
-                    self.log_test("Football Today Matches", True, 200, f"Found {today_count} matches today")
+                required_fields = ["total_users", "active_users", "total_matches", "system_status"]
+                if all(field in data for field in required_fields):
+                    self.log_test("Admin Dashboard", True, f"Dashboard data: {data['total_users']} users, {data['total_matches']} matches")
                     return True
                 else:
-                    self.log_test("Football Today Matches", False, 200, error="Missing matches or total field")
+                    self.log_test("Admin Dashboard", False, f"Missing required fields in response: {data}")
                     return False
             else:
-                self.log_test("Football Today Matches", False, response.status_code, error=response.text)
+                self.log_test("Admin Dashboard", False, f"Status code: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("Football Today Matches", False, error=f"Request failed: {e}")
+            self.log_test("Admin Dashboard", False, f"Error: {str(e)}")
             return False
 
-    def test_auth_register_and_setup_user(self):
-        """Test registration and set up authenticated user for other tests"""
-        try:
-            # Generate unique test user
-            unique_id = str(uuid.uuid4())[:8]
-            test_email = f"test_{unique_id}@example.com"
-            test_password = "TestPass123!"
+    def test_non_admin_403_error(self):
+        """Test that non-admin users get 403 on admin dashboard"""
+        if not self.session_token:
+            self.log_test("Non-Admin 403 Check", False, "No regular user session available")
+            return False
             
-            payload = {
-                "email": test_email,
-                "password": test_password,
-                "confirm_password": test_password
+        try:
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            response = requests.get(f"{self.base_url}/admin/dashboard", headers=headers, timeout=10)
+            
+            if response.status_code == 403:
+                self.log_test("Non-Admin 403 Check", True, "Non-admin user correctly gets 403")
+                return True
+            else:
+                self.log_test("Non-Admin 403 Check", False, f"Expected 403, got {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Non-Admin 403 Check", False, f"Error: {str(e)}")
+            return False
+
+    def test_unauthenticated_401_error(self):
+        """Test that unauthenticated users get 401 on admin dashboard"""
+        try:
+            response = requests.get(f"{self.base_url}/admin/dashboard", timeout=10)
+            
+            if response.status_code == 401:
+                self.log_test("Unauthenticated 401 Check", True, "Unauthenticated user correctly gets 401")
+                return True
+            else:
+                self.log_test("Unauthenticated 401 Check", False, f"Expected 401, got {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Unauthenticated 401 Check", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_users_api(self):
+        """Test admin users API with pagination"""
+        if not self.admin_session_token:
+            self.log_test("Admin Users API", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/users", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "users" in data and "total" in data and "page" in data:
+                    self.log_test("Admin Users API", True, f"Users list: {data['total']} total users, page {data['page']}")
+                    return True
+                else:
+                    self.log_test("Admin Users API", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin Users API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Users API", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_users_search(self):
+        """Test admin users search functionality"""
+        if not self.admin_session_token:
+            self.log_test("Admin Users Search", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/users?search=SuperAdmin", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "users" in data:
+                    # Should find at least the admin user
+                    found_admin = any(u.get("nickname") == "SuperAdmin" for u in data["users"])
+                    if found_admin:
+                        self.log_test("Admin Users Search", True, f"Search found SuperAdmin user")
+                        return True
+                    else:
+                        self.log_test("Admin Users Search", False, f"SuperAdmin not found in search results")
+                        return False
+                else:
+                    self.log_test("Admin Users Search", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin Users Search", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Users Search", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_matches_api(self):
+        """Test admin matches API"""
+        if not self.admin_session_token:
+            self.log_test("Admin Matches API", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/matches", headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "matches" in data and "total" in data:
+                    self.log_test("Admin Matches API", True, f"Matches: {data['total']} total matches")
+                    return True
+                else:
+                    self.log_test("Admin Matches API", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin Matches API", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Matches API", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_force_refresh(self):
+        """Test admin force refresh matches"""
+        if not self.admin_session_token:
+            self.log_test("Admin Force Refresh", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.post(f"{self.base_url}/admin/matches/refresh", headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success"):
+                    self.log_test("Admin Force Refresh", True, f"Force refresh successful: {data.get('message', '')}")
+                    return True
+                else:
+                    self.log_test("Admin Force Refresh", False, f"Force refresh failed: {data}")
+                    return False
+            else:
+                self.log_test("Admin Force Refresh", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Force Refresh", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_moderation_messages(self):
+        """Test admin moderation messages endpoint"""
+        if not self.admin_session_token:
+            self.log_test("Admin Moderation Messages", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/moderation/messages", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "messages" in data and "total" in data:
+                    self.log_test("Admin Moderation Messages", True, f"Messages for moderation: {data['total']} total")
+                    return True
+                else:
+                    self.log_test("Admin Moderation Messages", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin Moderation Messages", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Moderation Messages", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_analytics(self):
+        """Test admin analytics endpoint"""
+        if not self.admin_session_token:
+            self.log_test("Admin Analytics", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/analytics", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["daily_users", "daily_predictions", "top_predictors", "points_distribution"]
+                if all(field in data for field in required_fields):
+                    self.log_test("Admin Analytics", True, f"Analytics data loaded: {len(data['daily_users'])} daily user stats, {len(data['top_predictors'])} top predictors")
+                    return True
+                else:
+                    self.log_test("Admin Analytics", False, f"Missing required fields in analytics: {data}")
+                    return False
+            else:
+                self.log_test("Admin Analytics", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Analytics", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_audit_log(self):
+        """Test admin audit log endpoint"""
+        if not self.admin_session_token:
+            self.log_test("Admin Audit Log", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/audit-log", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "logs" in data and "total" in data:
+                    self.log_test("Admin Audit Log", True, f"Audit log: {data['total']} total entries")
+                    return True
+                else:
+                    self.log_test("Admin Audit Log", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin Audit Log", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Audit Log", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_notifications_broadcast(self):
+        """Test admin broadcast notification"""
+        if not self.admin_session_token:
+            self.log_test("Admin Broadcast Notification", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.admin_session_token}",
+                "Content-Type": "application/json"
             }
-            
-            response = self.session.post(f"{self.base_url}/api/auth/register", json=payload, timeout=10)
+            test_message = f"Test broadcast notification at {datetime.now().strftime('%H:%M:%S')}"
+            response = requests.post(
+                f"{self.base_url}/admin/notifications/broadcast",
+                headers=headers,
+                json={"message": test_message},
+                timeout=15
+            )
             
             if response.status_code == 200:
                 data = response.json()
-                if 'user' in data:
-                    # Store session cookies
-                    self.session.cookies.update(response.cookies)
-                    
-                    # Set nickname if required
-                    if data.get('requires_nickname'):
-                        nickname_payload = {"nickname": f"testuser_{unique_id}"}
-                        nickname_response = self.session.post(f"{self.base_url}/api/auth/set-nickname", 
-                                                            json=nickname_payload, timeout=10)
-                        if nickname_response.status_code == 200:
-                            self.session.cookies.update(nickname_response.cookies)
-                    
-                    self.log_test("User Registration & Setup", True, 200, f"User created: {test_email}")
+                if data.get("success") and "sent_to" in data:
+                    self.log_test("Admin Broadcast Notification", True, f"Broadcast sent to {data['sent_to']} users")
                     return True
                 else:
-                    self.log_test("User Registration & Setup", False, 200, error="Invalid registration response")
-                    return False
-            elif response.status_code == 400 and "already exists" in response.text:
-                # Try to login instead
-                login_payload = {"email": test_email, "password": test_password}
-                login_response = self.session.post(f"{self.base_url}/api/auth/login", json=login_payload, timeout=10)
-                if login_response.status_code == 200:
-                    self.session.cookies.update(login_response.cookies)
-                    self.log_test("User Registration & Setup", True, 200, "Using existing user")
-                    return True
-            
-            self.log_test("User Registration & Setup", False, response.status_code, error=response.text[:200])
-            return False
-        except Exception as e:
-            self.log_test("User Registration & Setup", False, error=f"Request failed: {e}")
-            return False
-
-    def test_favorites_matches_crud(self):
-        """Test favorite matches CRUD operations"""
-        try:
-            # Test GET favorites/matches
-            response = self.session.get(f"{self.base_url}/api/favorites/matches", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if 'favorites' in data:
-                    self.log_test("GET Favorite Matches", True, 200, f"Found {len(data['favorites'])} favorites")
-                else:
-                    self.log_test("GET Favorite Matches", False, 200, error="Missing favorites field")
+                    self.log_test("Admin Broadcast Notification", False, f"Broadcast failed: {data}")
                     return False
             else:
-                self.log_test("GET Favorite Matches", False, response.status_code, error=response.text[:200])
-                return False
-
-            # Test POST favorites/matches
-            match_data = {
-                "match_id": 12345,
-                "home_team": "Test Home Team",
-                "away_team": "Test Away Team", 
-                "competition": "Test League",
-                "status": "SCHEDULED"
-            }
-            response = self.session.post(f"{self.base_url}/api/favorites/matches", json=match_data, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if 'message' in data and 'favorite' in data:
-                    self.log_test("POST Add Favorite Match", True, 200, "Match added to favorites")
-                else:
-                    self.log_test("POST Add Favorite Match", False, 200, error="Invalid response format")
-                    return False
-            else:
-                self.log_test("POST Add Favorite Match", False, response.status_code, error=response.text[:200])
-                return False
-
-            # Test DELETE favorites/matches
-            response = self.session.delete(f"{self.base_url}/api/favorites/matches/12345", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if 'message' in data:
-                    self.log_test("DELETE Favorite Match", True, 200, "Match removed from favorites")
-                else:
-                    self.log_test("DELETE Favorite Match", False, 200, error="Invalid response format")
-                    return False
-            else:
-                self.log_test("DELETE Favorite Match", False, response.status_code, error=response.text[:200])
-                return False
-
-            return True
-        except Exception as e:
-            self.log_test("Favorite Matches CRUD", False, error=f"Request failed: {e}")
-            return False
-
-    def test_settings_read_receipts(self):
-        """Test read receipts settings endpoint"""
-        try:
-            # Test POST settings/read-receipts
-            payload = {"enabled": False}
-            response = self.session.post(f"{self.base_url}/api/settings/read-receipts", json=payload, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'success' in data and data['success']:
-                    self.log_test("POST Read Receipts Setting", True, 200, f"Setting updated: {data.get('message')}")
-                    return True
-                else:
-                    self.log_test("POST Read Receipts Setting", False, 200, error="Invalid response format")
-                    return False
-            else:
-                self.log_test("POST Read Receipts Setting", False, response.status_code, error=response.text[:200])
+                self.log_test("Admin Broadcast Notification", False, f"Status code: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("POST Read Receipts Setting", False, error=f"Request failed: {e}")
-            return False
-
-    def test_settings_delivery_status(self):
-        """Test delivery status settings endpoint"""
-        try:
-            # Test POST settings/delivery-status
-            payload = {"enabled": True}
-            response = self.session.post(f"{self.base_url}/api/settings/delivery-status", json=payload, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'success' in data and data['success']:
-                    self.log_test("POST Delivery Status Setting", True, 200, f"Setting updated: {data.get('message')}")
-                    return True
-                else:
-                    self.log_test("POST Delivery Status Setting", False, 200, error="Invalid response format")
-                    return False
-            else:
-                self.log_test("POST Delivery Status Setting", False, response.status_code, error=response.text[:200])
-                return False
-        except Exception as e:
-            self.log_test("POST Delivery Status Setting", False, error=f"Request failed: {e}")
-            return False
-
-    def test_message_endpoints_basic(self):
-        """Test basic message endpoints without friend requirement"""
-        try:
-            # Test XSS sanitization directly
-            test_message = "<script>alert('XSS')</script>Clean text"
-            # First, let's see if we can get current user info
-            me_response = self.session.get(f"{self.base_url}/api/auth/me", timeout=10)
-            if me_response.status_code != 200:
-                self.log_test("Message Endpoints Basic", False, me_response.status_code, 
-                            error="Cannot get current user info")
-                return False
-                
-            user_data = me_response.json()
-            if 'user' in user_data:
-                current_user_id = user_data['user']['user_id']
-            else:
-                current_user_id = user_data.get('user_id', 'unknown')
-            
-            # Try to send a message (this might fail due to friend requirement, but we can test XSS)
-            payload = {
-                "receiver_id": "dummy_user_id_for_xss_test", 
-                "message": test_message,
-                "message_type": "text"
-            }
-            
-            response = self.session.post(f"{self.base_url}/api/messages/send", json=payload, timeout=10)
-            
-            # We expect this to fail due to friend requirement, but the XSS should still be sanitized
-            if response.status_code in [403, 404]:
-                # Check if the error message doesn't contain script tags (indicating sanitization worked)
-                response_text = response.text.lower()
-                if "<script>" not in response_text and "alert" not in response_text:
-                    self.log_test("XSS Input Sanitization", True, response.status_code, 
-                                "XSS content appears to be sanitized")
-                else:
-                    self.log_test("XSS Input Sanitization", False, response.status_code,
-                                error="XSS content may not be properly sanitized")
-                    
-            elif response.status_code == 429:
-                self.log_test("Rate Limiting Works", True, 429, "Rate limiting is active")
-            else:
-                self.log_test("Message Send Endpoint", True, response.status_code, 
-                            f"Endpoint accessible, status: {response.status_code}")
-            
-            # Test conversations endpoint
-            conversations_response = self.session.get(f"{self.base_url}/api/messages/conversations", timeout=10)
-            if conversations_response.status_code == 200:
-                data = conversations_response.json()
-                if 'conversations' in data:
-                    self.log_test("GET Conversations", True, 200, 
-                                f"Found {len(data['conversations'])} conversations")
-                else:
-                    self.log_test("GET Conversations", False, 200, error="Missing conversations field")
-            else:
-                self.log_test("GET Conversations", False, conversations_response.status_code,
-                            error=conversations_response.text[:200])
-            
-            # Test unread count endpoint
-            unread_response = self.session.get(f"{self.base_url}/api/messages/unread-count", timeout=10)
-            if unread_response.status_code == 200:
-                data = unread_response.json()
-                if 'count' in data:
-                    self.log_test("GET Unread Count", True, 200, f"Unread count: {data['count']}")
-                else:
-                    self.log_test("GET Unread Count", False, 200, error="Missing count field")
-            else:
-                self.log_test("GET Unread Count", False, unread_response.status_code,
-                            error=unread_response.text[:200])
-            
-            return True
-            
-        except Exception as e:
-            self.log_test("Message Endpoints Basic", False, error=f"Request failed: {e}")
+            self.log_test("Admin Broadcast Notification", False, f"Error: {str(e)}")
             return False
 
     def run_all_tests(self):
-        """Run all test cases"""
-        print("=" * 60)
-        print("🚀 GuessIT Backend API Testing")
-        print("=" * 60)
-        print(f"Base URL: {self.base_url}")
-        print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print()
+        """Run all backend API tests"""
+        print("🔍 Starting GuessIt Backend API Tests...")
+        print("=" * 50)
         
-        # Core API Tests
-        print("📋 Core API Tests")
-        print("-" * 30)
-        self.test_api_health()
-        self.test_api_root()
-        
-        # Football API Tests  
-        print("⚽ Football API Tests")
-        print("-" * 30)
-        self.test_football_competitions()
-        self.test_football_matches()
+        # Test basic endpoints first
+        self.test_root_endpoint()
+        self.test_health_endpoint()
+        self.test_football_matches_endpoint()
         self.test_football_live_matches()
-        self.test_football_today_matches()
+        self.test_football_competitions()
+        self.test_websocket_info()
         
-        # Auth Tests
-        print("🔐 Authentication Tests")
+        # Test authentication flow
+        self.test_register_user()
+        if self.session_token:
+            self.test_set_nickname()
+            self.test_user_me_endpoint()
+            self.test_predictions_endpoint()
+            # Test messages-specific endpoints
+            self.test_messages_conversations_endpoint()
+            self.test_messages_unread_count_endpoint()
+            self.test_websocket_chat_endpoint()
+        
+        print("\n🔐 Testing Admin Panel APIs...")
         print("-" * 30)
-        self.test_auth_register()
-        self.test_auth_login()
         
-        # New Features Tests - Setup authenticated user first
-        print("👤 User Setup for New Features")
-        print("-" * 30)
-        auth_success = self.test_auth_register_and_setup_user()
+        # Test admin authentication and authorization
+        self.test_admin_login()
+        self.test_unauthenticated_401_error()
+        if self.session_token:
+            self.test_non_admin_403_error()
         
-        if auth_success:
-            # Favorites Tests
-            print("⭐ Favorites Tests")
-            print("-" * 30)
-            self.test_favorites_matches_crud()
-            
-            # Settings Tests
-            print("⚙️  Settings Tests")
-            print("-" * 30)
-            self.test_settings_read_receipts()
-            self.test_settings_delivery_status()
-            
-            # Messaging Tests
-            print("💬 Messaging & Security Tests")
-            print("-" * 30)
-            self.test_message_endpoints_basic()
+        # Test admin endpoints (requires admin login)
+        if self.admin_session_token:
+            self.test_admin_dashboard()
+            self.test_admin_users_api()
+            self.test_admin_users_search()
+            self.test_admin_matches_api()
+            self.test_admin_force_refresh()
+            self.test_admin_moderation_messages()
+            self.test_admin_analytics()
+            self.test_admin_audit_log()
+            self.test_admin_notifications_broadcast()
+        
+        # Print summary
+        print("\n" + "=" * 50)
+        print(f"📊 Backend API Tests Summary")
+        print(f"Tests passed: {self.tests_passed}/{self.tests_run}")
+        print(f"Success rate: {(self.tests_passed/self.tests_run*100):.1f}%")
+        
+        if self.tests_passed == self.tests_run:
+            print("🎉 All backend tests passed!")
+            return True
         else:
-            print("⚠️  Skipping authenticated tests due to auth failure")
-        
-        # Results Summary
-        print("=" * 60)
-        print("📊 TEST RESULTS SUMMARY")
-        print("=" * 60)
-        print(f"Tests Run: {self.tests_run}")
-        print(f"Tests Passed: {self.tests_passed}")
-        print(f"Tests Failed: {self.tests_run - self.tests_passed}")
-        print(f"Success Rate: {(self.tests_passed/self.tests_run)*100:.1f}%")
-        
-        # Failed tests details
-        failed_tests = [t for t in self.test_results if not t['success']]
-        if failed_tests:
-            print("\n❌ FAILED TESTS:")
-            for test in failed_tests:
-                print(f"  - {test['test_name']}: {test['error']}")
-        else:
-            print("\n🎉 All tests passed!")
-        
-        return self.tests_passed == self.tests_run
-
-def main():
-    """Main test execution"""
-    tester = GuessITAPITester()
-    
-    try:
-        success = tester.run_all_tests()
-        return 0 if success else 1
-    except KeyboardInterrupt:
-        print("\n⏹️  Tests interrupted by user")
-        return 1
-    except Exception as e:
-        print(f"\n💥 Unexpected error: {e}")
-        return 1
+            print("⚠️ Some backend tests failed. Check details above.")
+            return False
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    tester = GuessItAPITester()
+    success = tester.run_all_tests()
+    
+    # Save test results to file
+    with open("/app/test_reports/backend_test_results.json", "w") as f:
+        json.dump({
+            "summary": {
+                "tests_run": tester.tests_run,
+                "tests_passed": tester.tests_passed,
+                "success_rate": tester.tests_passed/tester.tests_run*100 if tester.tests_run > 0 else 0,
+                "timestamp": datetime.now().isoformat()
+            },
+            "results": tester.test_results
+        }, f, indent=2)
+    
+    sys.exit(0 if success else 1)

@@ -13,6 +13,7 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { FriendsPage } from "@/pages/FriendsPage";
 import { MessagesPage } from "@/pages/MessagesPage";
+import { AdminPage } from "@/pages/AdminPage";
 import { GuestProfilePage } from "@/pages/GuestProfilePage";
 import { useState, useEffect, useRef } from "react";
 
@@ -153,6 +154,8 @@ function AppRouter() {
       <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><GuestProfilePage /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+      <Route path="/admin/*" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

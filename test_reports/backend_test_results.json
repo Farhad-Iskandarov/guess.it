@@ -1,0 +1,160 @@
+{
+  "summary": {
+    "tests_run": 25,
+    "tests_passed": 23,
+    "success_rate": 92.0,
+    "timestamp": "2026-02-20T13:02:23.999490"
+  },
+  "results": [
+    {
+      "test": "API Root Endpoint",
+      "success": true,
+      "details": "Status: 200, Message: GuessIt API is running",
+      "timestamp": "2026-02-20T13:02:16.358180"
+    },
+    {
+      "test": "Health Check Endpoint",
+      "success": true,
+      "details": "Status: healthy, Timestamp: 2026-02-20T13:02:16.449245+00:00",
+      "timestamp": "2026-02-20T13:02:16.471422"
+    },
+    {
+      "test": "Football Matches API",
+      "success": true,
+      "details": "Returned 120 matches (>= 100 required)",
+      "timestamp": "2026-02-20T13:02:20.754454"
+    },
+    {
+      "test": "Live Matches API",
+      "success": true,
+      "details": "Total live matches: 1",
+      "timestamp": "2026-02-20T13:02:20.872158"
+    },
+    {
+      "test": "Competitions API",
+      "success": true,
+      "details": "Total competitions: 8",
+      "timestamp": "2026-02-20T13:02:21.010032"
+    },
+    {
+      "test": "WebSocket Endpoint Check",
+      "success": false,
+      "details": "Unexpected status: 404",
+      "timestamp": "2026-02-20T13:02:21.134799"
+    },
+    {
+      "test": "User Registration",
+      "success": true,
+      "details": "User ID: user_8c3a8fcfba63, Requires nickname: True",
+      "timestamp": "2026-02-20T13:02:21.539874"
+    },
+    {
+      "test": "Set Nickname",
+      "success": true,
+      "details": "Nickname 'testuser_1771592541' set successfully",
+      "timestamp": "2026-02-20T13:02:21.684527"
+    },
+    {
+      "test": "Get Current User",
+      "success": true,
+      "details": "User data retrieved: testuser_1771592541",
+      "timestamp": "2026-02-20T13:02:21.782877"
+    },
+    {
+      "test": "Predictions API",
+      "success": true,
+      "details": "Predictions endpoint working, Total: 0",
+      "timestamp": "2026-02-20T13:02:21.887744"
+    },
+    {
+      "test": "Messages Conversations API",
+      "success": true,
+      "details": "Conversations: 0, Unread: 0",
+      "timestamp": "2026-02-20T13:02:22.033159"
+    },
+    {
+      "test": "Messages Unread Count API",
+      "success": true,
+      "details": "Unread count: 0",
+      "timestamp": "2026-02-20T13:02:22.145606"
+    },
+    {
+      "test": "WebSocket Chat Endpoint",
+      "success": false,
+      "details": "Unexpected status: 200",
+      "timestamp": "2026-02-20T13:02:22.291681"
+    },
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": "Admin user logged in: SuperAdmin",
+      "timestamp": "2026-02-20T13:02:22.668622"
+    },
+    {
+      "test": "Unauthenticated 401 Check",
+      "success": true,
+      "details": "Unauthenticated user correctly gets 401",
+      "timestamp": "2026-02-20T13:02:22.795483"
+    },
+    {
+      "test": "Non-Admin 403 Check",
+      "success": true,
+      "details": "Non-admin user correctly gets 403",
+      "timestamp": "2026-02-20T13:02:22.936097"
+    },
+    {
+      "test": "Admin Dashboard",
+      "success": true,
+      "details": "Dashboard data: 16 users, 120 matches",
+      "timestamp": "2026-02-20T13:02:23.040565"
+    },
+    {
+      "test": "Admin Users API",
+      "success": true,
+      "details": "Users list: 16 total users, page 1",
+      "timestamp": "2026-02-20T13:02:23.139402"
+    },
+    {
+      "test": "Admin Users Search",
+      "success": true,
+      "details": "Search found SuperAdmin user",
+      "timestamp": "2026-02-20T13:02:23.282393"
+    },
+    {
+      "test": "Admin Matches API",
+      "success": true,
+      "details": "Matches: 120 total matches",
+      "timestamp": "2026-02-20T13:02:23.385125"
+    },
+    {
+      "test": "Admin Force Refresh",
+      "success": true,
+      "details": "Force refresh successful: Refreshed 120 matches",
+      "timestamp": "2026-02-20T13:02:23.496064"
+    },
+    {
+      "test": "Admin Moderation Messages",
+      "success": true,
+      "details": "Messages for moderation: 21 total",
+      "timestamp": "2026-02-20T13:02:23.607413"
+    },
+    {
+      "test": "Admin Analytics",
+      "success": true,
+      "details": "Analytics data loaded: 7 daily user stats, 1 top predictors",
+      "timestamp": "2026-02-20T13:02:23.752935"
+    },
+    {
+      "test": "Admin Audit Log",
+      "success": true,
+      "details": "Audit log: 1 total entries",
+      "timestamp": "2026-02-20T13:02:23.865747"
+    },
+    {
+      "test": "Admin Broadcast Notification",
+      "success": true,
+      "details": "Broadcast sent to 16 users",
+      "timestamp": "2026-02-20T13:02:23.998601"
+    }
+  ]
+}

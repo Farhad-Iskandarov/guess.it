@@ -152,6 +152,14 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/messages')} data-testid="nav-messages">Messages</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/settings')} data-testid="nav-settings">Settings</DropdownMenuItem>
+          {user?.role === 'admin' && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer text-primary font-medium" onClick={() => nav('/admin')} data-testid="nav-admin">
+                Admin Panel
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
             Log out

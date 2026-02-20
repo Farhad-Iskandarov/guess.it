@@ -63,6 +63,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     points: int = 0
     level: int = 0
+    role: Optional[str] = None
 
 class NicknameSet(BaseModel):
     """Nickname selection request"""
