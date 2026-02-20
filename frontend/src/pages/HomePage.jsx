@@ -194,13 +194,14 @@ export const HomePage = () => {
           const data = await response.json();
           // Transform to match expected format
           const formattedBanners = data.banners.map(b => ({
+            id: b.banner_id,
             badge: b.title,
             headline: b.title,
             highlightedText: '',
             subtitle: b.subtitle || '',
             ctaText: b.button_text || 'Get Started',
             ctaLink: b.button_link || '/register',
-            backgroundImage: b.image_url?.startsWith('/') ? `${process.env.REACT_APP_BACKEND_URL}${b.image_url}` : b.image_url
+            image: b.image_url?.startsWith('/') ? `${process.env.REACT_APP_BACKEND_URL}${b.image_url}` : b.image_url
           }));
           setBannerSlides(formattedBanners.length > 0 ? formattedBanners : mockBannerSlides);
         } else {

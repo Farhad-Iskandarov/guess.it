@@ -23,6 +23,7 @@ from routes.friends import router as friends_router, friend_manager
 from routes.messages import router as messages_router, chat_manager, notification_manager
 from routes.notifications import router as notifications_router
 from routes.admin import router as admin_router
+from routes.public import router as public_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -97,6 +98,7 @@ api_router.include_router(friends_router)
 api_router.include_router(messages_router)
 api_router.include_router(notifications_router)
 api_router.include_router(admin_router)
+api_router.include_router(public_router)
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -110,6 +112,11 @@ app.mount("/api/uploads/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="
 BANNER_DIR = ROOT_DIR / 'uploads' / 'banners'
 BANNER_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/api/uploads/banners", StaticFiles(directory=str(BANNER_DIR)), name="banners")
+
+# Create news images directory and mount static files
+NEWS_DIR = ROOT_DIR / 'uploads' / 'news'
+NEWS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/api/uploads/news", StaticFiles(directory=str(NEWS_DIR)), name="news")
 
 app.add_middleware(
     CORSMiddleware,

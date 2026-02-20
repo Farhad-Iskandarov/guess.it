@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Twitter, 
@@ -11,8 +12,12 @@ import {
   HelpCircle,
   FileText,
   Shield,
-  Info
+  Info,
+  Loader2,
+  CheckCircle
 } from 'lucide-react';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 const FooterLogo = () => {
   const handleClick = (e) => {
@@ -71,6 +76,37 @@ const SocialIcon = ({ href, icon: Icon, label }) => (
 
 export const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const [subEmail, setSubEmail] = useState('');
+  const [subStatus, setSubStatus] = useState('idle'); // idle | loading | success | error
+  const [subMsg, setSubMsg] = useState('');
+
+  const handleSubscribe = async (e) => {
+    e.preventDefault();
+    if (!subEmail.trim()) return;
+    setSubStatus('loading');
+    try {
+      const res = await fetch(`${API_URL}/api/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: subEmail.trim() })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSubStatus('success');
+        setSubMsg(data.message || 'Subscribed successfully!');
+        setSubEmail('');
+        setTimeout(() => setSubStatus('idle'), 4000);
+      } else {
+        setSubStatus('error');
+        setSubMsg(data.detail || 'Failed to subscribe');
+        setTimeout(() => setSubStatus('idle'), 3000);
+      }
+    } catch {
+      setSubStatus('error');
+      setSubMsg('Something went wrong');
+      setTimeout(() => setSubStatus('idle'), 3000);
+    }
+  };
 
   return (
     <footer className="bg-card/80 border-t border-border mt-auto" data-testid="footer">
@@ -98,9 +134,9 @@ export const Footer = () => {
             <nav className="flex flex-col gap-3">
               <FooterLink to="/" icon={Home}>Home</FooterLink>
               <FooterLink to="/" icon={Calendar}>Matches</FooterLink>
-              <FooterLink to="/" icon={Trophy}>Leaderboard</FooterLink>
-              <FooterLink to="/" icon={Users}>Community</FooterLink>
-              <FooterLink to="/" icon={HelpCircle}>How It Works</FooterLink>
+              <FooterLink to="/leaderboard" icon={Trophy}>Leaderboard</FooterLink>
+              <FooterLink to="/news" icon={Users}>News</FooterLink>
+              <FooterLink to="/how-it-works" icon={HelpCircle}>How It Works</FooterLink>
             </nav>
           </div>
 
@@ -110,10 +146,10 @@ export const Footer = () => {
               Company
             </h4>
             <nav className="flex flex-col gap-3">
-              <FooterLink to="/" icon={Info}>About Us</FooterLink>
+              <FooterLink to="/about" icon={Info}>About Us</FooterLink>
               <FooterLink to="/" icon={FileText}>Terms of Service</FooterLink>
               <FooterLink to="/" icon={Shield}>Privacy Policy</FooterLink>
-              <FooterLink to="/" icon={Mail}>Contact</FooterLink>
+              <FooterLink to="/contact" icon={Mail}>Contact</FooterLink>
             </nav>
             
             {/* Disclaimer */}
@@ -137,27 +173,40 @@ export const Footer = () => {
               <SocialIcon href="https://facebook.com" icon={Facebook} label="Facebook" />
             </div>
             
-            {/* Newsletter Placeholder */}
+            {/* Newsletter */}
             <div className="space-y-2 mt-4">
               <p className="text-sm text-muted-foreground">
                 Stay updated with match predictions and community news.
               </p>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="Enter your email"
-                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-muted/50 border border-border focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
-                  disabled
-                />
-                <button
-                  className="px-4 py-2 text-sm font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors duration-200 disabled:opacity-50"
-                  disabled
-                  title="Coming soon"
-                >
-                  Subscribe
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground/60">Newsletter coming soon</p>
+              {subStatus === 'success' ? (
+                <div className="flex items-center gap-2 text-sm text-primary" data-testid="subscribe-success">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>{subMsg}</span>
+                </div>
+              ) : (
+                <form onSubmit={handleSubscribe} className="flex gap-2" data-testid="subscribe-form">
+                  <input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={subEmail}
+                    onChange={(e) => setSubEmail(e.target.value)}
+                    required
+                    className="flex-1 px-3 py-2 text-sm rounded-lg bg-muted/50 border border-border focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50"
+                    data-testid="subscribe-email-input"
+                  />
+                  <button
+                    type="submit"
+                    disabled={subStatus === 'loading'}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors duration-200 disabled:opacity-50"
+                    data-testid="subscribe-submit-btn"
+                  >
+                    {subStatus === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Subscribe'}
+                  </button>
+                </form>
+              )}
+              {subStatus === 'error' && (
+                <p className="text-xs text-red-400">{subMsg}</p>
+              )}
             </div>
           </div>
         </div>

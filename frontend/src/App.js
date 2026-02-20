@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { FriendsProvider } from "@/lib/FriendsContext";
@@ -14,13 +14,17 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { FriendsPage } from "@/pages/FriendsPage";
 import { MessagesPage } from "@/pages/MessagesPage";
 import { AdminPage } from "@/pages/AdminPage";
+import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { GuestProfilePage } from "@/pages/GuestProfilePage";
 import { HowItWorksPage } from "@/pages/HowItWorksPage";
 import { LeaderboardPage } from "@/pages/LeaderboardPage";
 import { AboutPage } from "@/pages/AboutPage";
 import { NewsPage } from "@/pages/NewsPage";
+import { NewsArticlePage } from "@/pages/NewsArticlePage";
 import { ContactPage } from "@/pages/ContactPage";
 import { useState, useEffect, useRef } from "react";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 
 // ============ Initial Loading Screen ============
 function InitialLoadingScreen({ onReady }) {
@@ -139,6 +143,56 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+// ============ Admin Route ============
+const AdminRoute = ({ children }) => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
+
+  if (isLoading) return null;
+
+  // Not authenticated at all — redirect to admin login
+  if (!isAuthenticated) {
+    return <Navigate to="/itguess/admin/login" replace />;
+  }
+
+  // Authenticated but not admin — show access denied
+  if (user?.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-[hsl(0,0%,6%)] flex items-center justify-center p-4" data-testid="admin-access-denied-page">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636-2.87L13.637 3.59a1.914 1.914 0 0 0-3.274 0z"/><path d="M12 17h.01"/></svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
+          <p className="text-sm text-zinc-500 mb-6">You do not have administrator privileges to access this area.</p>
+          <div className="flex flex-col gap-2">
+            <button onClick={() => navigate('/')} className="px-6 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium transition-colors" data-testid="go-home-btn">
+              Go to Homepage
+            </button>
+            <button onClick={() => navigate('/itguess/admin/login')} className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors" data-testid="admin-login-redirect-btn">
+              Sign in with Admin Account
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+};
+
+// ============ Public Layout (Header + Footer) ============
+const PublicLayout = ({ children }) => {
+  const { user, isAuthenticated } = useAuth();
+  return (
+    <>
+      <Header user={user} isAuthenticated={isAuthenticated} />
+      {children}
+      <Footer />
+    </>
+  );
+};
+
 // ============ App Router ============
 function AppRouter() {
   const location = useLocation();
@@ -159,13 +213,15 @@ function AppRouter() {
       <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><GuestProfilePage /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-      <Route path="/admin/*" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
-      <Route path="/how-it-works" element={<HowItWorksPage />} />
-      <Route path="/leaderboard" element={<LeaderboardPage />} />
-      <Route path="/about" element={<AboutPage />} />
-      <Route path="/news" element={<NewsPage />} />
-      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/itguess/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+      <Route path="/admin/*" element={<AdminRoute><AdminPage /></AdminRoute>} />
+      <Route path="/how-it-works" element={<PublicLayout><HowItWorksPage /></PublicLayout>} />
+      <Route path="/leaderboard" element={<PublicLayout><LeaderboardPage /></PublicLayout>} />
+      <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
+      <Route path="/news" element={<PublicLayout><NewsPage /></PublicLayout>} />
+      <Route path="/news/:articleId" element={<PublicLayout><NewsArticlePage /></PublicLayout>} />
+      <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

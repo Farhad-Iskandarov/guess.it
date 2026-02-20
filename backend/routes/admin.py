@@ -1277,3 +1277,286 @@ async def toggle_banner(banner_id: str, request: Request, db: AsyncIOMotorDataba
                           f"{'Activated' if new_status else 'Deactivated'} banner: {banner['title']}")
     return {"success": True, "is_active": new_status}
 
+
+
+# ==================== Subscriptions Management ====================
+
+@router.get("/subscriptions")
+async def list_subscriptions(request: Request, db: AsyncIOMotorDatabase = Depends(get_db),
+                             page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100)):
+    admin = await get_admin_user(request, db)
+    skip = (page - 1) * limit
+    subs = await db.subscriptions.find({}, {"_id": 0}).sort("subscribed_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.subscriptions.count_documents({})
+    return {"subscriptions": subs, "total": total, "page": page, "pages": (total + limit - 1) // limit}
+
+@router.delete("/subscriptions/{sub_id}")
+async def delete_subscription(sub_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    result = await db.subscriptions.delete_one({"sub_id": sub_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    await log_admin_action(db, admin["user_id"], "delete_subscription", sub_id, f"Deleted subscription: {sub_id}")
+    return {"success": True}
+
+# ==================== Contact Messages Management ====================
+
+@router.get("/contact-messages")
+async def list_contact_messages(request: Request, db: AsyncIOMotorDatabase = Depends(get_db),
+                                page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100)):
+    admin = await get_admin_user(request, db)
+    skip = (page - 1) * limit
+    msgs = await db.contact_messages.find({}, {"_id": 0}).sort("submitted_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.contact_messages.count_documents({})
+    unread = await db.contact_messages.count_documents({"read": False})
+    return {"messages": msgs, "total": total, "unread": unread, "page": page, "pages": (total + limit - 1) // limit}
+
+@router.put("/contact-messages/{msg_id}/flag")
+async def toggle_flag_message(msg_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    msg = await db.contact_messages.find_one({"msg_id": msg_id}, {"_id": 0})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    new_flag = not msg.get("flagged", False)
+    await db.contact_messages.update_one({"msg_id": msg_id}, {"$set": {"flagged": new_flag, "read": True}})
+    return {"success": True, "flagged": new_flag}
+
+@router.delete("/contact-messages/{msg_id}")
+async def delete_contact_message(msg_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    result = await db.contact_messages.delete_one({"msg_id": msg_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Message not found")
+    await log_admin_action(db, admin["user_id"], "delete_contact_msg", msg_id, f"Deleted contact message: {msg_id}")
+    return {"success": True}
+
+# ==================== Contact Settings Management ====================
+
+@router.get("/contact-settings")
+async def get_contact_settings_admin(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    settings = await db.contact_settings.find_one({"key": "contact_info"}, {"_id": 0})
+    if not settings:
+        return {"email_title": "Email Us", "email_address": "support@guessit.com",
+                "location_title": "Location", "location_address": "San Francisco, CA"}
+    return {"email_title": settings.get("email_title", "Email Us"),
+            "email_address": settings.get("email_address", "support@guessit.com"),
+            "location_title": settings.get("location_title", "Location"),
+            "location_address": settings.get("location_address", "San Francisco, CA")}
+
+@router.put("/contact-settings")
+async def update_contact_settings(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    body = await request.json()
+    update = {
+        "key": "contact_info",
+        "email_title": sanitize_input(body.get("email_title", "Email Us")),
+        "email_address": sanitize_input(body.get("email_address", "support@guessit.com")),
+        "location_title": sanitize_input(body.get("location_title", "Location")),
+        "location_address": sanitize_input(body.get("location_address", "San Francisco, CA")),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": admin["user_id"]
+    }
+    await db.contact_settings.update_one({"key": "contact_info"}, {"$set": update}, upsert=True)
+    await log_admin_action(db, admin["user_id"], "update_contact_settings", "contact_info", "Updated contact settings")
+    return {"success": True}
+
+# ==================== News Management ====================
+
+from pathlib import Path
+NEWS_IMG_DIR = Path("/app/backend/uploads/news")
+NEWS_IMG_DIR.mkdir(parents=True, exist_ok=True)
+
+@router.get("/news")
+async def list_news_admin(request: Request, db: AsyncIOMotorDatabase = Depends(get_db),
+                          page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100)):
+    admin = await get_admin_user(request, db)
+    skip = (page - 1) * limit
+    articles = await db.news_articles.find({}, {"_id": 0}).sort("date", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.news_articles.count_documents({})
+    return {"articles": articles, "total": total, "page": page, "pages": (total + limit - 1) // limit}
+
+@router.post("/news/upload-image")
+async def upload_news_image(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Upload an inline image for news content blocks"""
+    admin = await get_admin_user(request, db)
+    form_data = await request.form()
+    image_file = form_data.get("image")
+    if not image_file or not hasattr(image_file, 'filename') or not image_file.filename:
+        raise HTTPException(status_code=400, detail="Image file is required")
+    file_id = uuid.uuid4().hex[:12]
+    ext = Path(image_file.filename).suffix.lower() or ".jpg"
+    filename = f"news_{file_id}{ext}"
+    file_path = NEWS_IMG_DIR / filename
+    file_content = await image_file.read()
+    with open(file_path, "wb") as f:
+        f.write(file_content)
+    image_url = f"/api/uploads/news/{filename}"
+    return {"success": True, "url": image_url}
+
+@router.post("/news")
+async def create_news(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    form_data = await request.form()
+    
+    title = sanitize_input(form_data.get("title", ""))
+    content = form_data.get("content", "").strip()[:10000]
+    content_blocks_str = form_data.get("content_blocks", "")
+    date_str = form_data.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    category = sanitize_input(form_data.get("category", "News"))
+    published = form_data.get("published", "true").lower() == "true"
+    
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+    
+    # Parse content blocks
+    import json as json_lib
+    content_blocks = []
+    if content_blocks_str:
+        try:
+            content_blocks = json_lib.loads(content_blocks_str)
+        except:
+            content_blocks = []
+    
+    # Build excerpt from text blocks
+    excerpt_parts = []
+    for block in content_blocks:
+        if block.get("type") == "text" and block.get("value"):
+            excerpt_parts.append(block["value"])
+    excerpt_text = " ".join(excerpt_parts) if excerpt_parts else content
+    excerpt = excerpt_text[:200] + ("..." if len(excerpt_text) > 200 else "")
+    
+    image_url = ""
+    image_file = form_data.get("image")
+    if image_file and hasattr(image_file, 'filename') and image_file.filename:
+        file_id = uuid.uuid4().hex[:12]
+        ext = Path(image_file.filename).suffix.lower() or ".jpg"
+        filename = f"news_{file_id}{ext}"
+        file_path = NEWS_IMG_DIR / filename
+        file_content = await image_file.read()
+        with open(file_path, "wb") as f:
+            f.write(file_content)
+        image_url = f"/api/uploads/news/{filename}"
+    
+    # If no cover image but blocks have an image, use the first one
+    if not image_url:
+        for block in content_blocks:
+            if block.get("type") == "image" and block.get("url"):
+                image_url = block["url"]
+                break
+    
+    article_id = f"news_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "article_id": article_id,
+        "title": title,
+        "content": content,
+        "content_blocks": content_blocks,
+        "excerpt": excerpt,
+        "date": date_str,
+        "category": category,
+        "image_url": image_url,
+        "published": published,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": admin["user_id"]
+    }
+    await db.news_articles.insert_one(doc)
+    doc.pop("_id", None)
+    await log_admin_action(db, admin["user_id"], "create_news", article_id, f"Created news: {title}")
+    return {"success": True, "article": doc}
+
+@router.put("/news/{article_id}")
+async def update_news(article_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    article = await db.news_articles.find_one({"article_id": article_id}, {"_id": 0})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    form_data = await request.form()
+    title = sanitize_input(form_data.get("title", article["title"]))
+    content = form_data.get("content", article.get("content", "")).strip()[:10000]
+    content_blocks_str = form_data.get("content_blocks", "")
+    date_str = form_data.get("date", article.get("date", ""))
+    category = sanitize_input(form_data.get("category", article.get("category", "News")))
+    published = form_data.get("published", str(article.get("published", True))).lower() == "true"
+    
+    import json as json_lib
+    content_blocks = article.get("content_blocks", [])
+    if content_blocks_str:
+        try:
+            content_blocks = json_lib.loads(content_blocks_str)
+        except:
+            pass
+    
+    excerpt_parts = []
+    for block in content_blocks:
+        if block.get("type") == "text" and block.get("value"):
+            excerpt_parts.append(block["value"])
+    excerpt_text = " ".join(excerpt_parts) if excerpt_parts else content
+    excerpt = excerpt_text[:200] + ("..." if len(excerpt_text) > 200 else "")
+    
+    image_url = article.get("image_url", "")
+    image_file = form_data.get("image")
+    if image_file and hasattr(image_file, 'filename') and image_file.filename:
+        if image_url.startswith("/api/uploads/news/"):
+            old_path = NEWS_IMG_DIR / image_url.split("/")[-1]
+            if old_path.exists():
+                old_path.unlink()
+        file_id = uuid.uuid4().hex[:12]
+        ext = Path(image_file.filename).suffix.lower() or ".jpg"
+        filename = f"news_{file_id}{ext}"
+        file_path = NEWS_IMG_DIR / filename
+        file_content = await image_file.read()
+        with open(file_path, "wb") as f:
+            f.write(file_content)
+        image_url = f"/api/uploads/news/{filename}"
+    
+    if not image_url:
+        for block in content_blocks:
+            if block.get("type") == "image" and block.get("url"):
+                image_url = block["url"]
+                break
+    
+    update_data = {
+        "title": title,
+        "content": content,
+        "content_blocks": content_blocks,
+        "excerpt": excerpt,
+        "date": date_str,
+        "category": category,
+        "image_url": image_url,
+        "published": published,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.news_articles.update_one({"article_id": article_id}, {"$set": update_data})
+    await log_admin_action(db, admin["user_id"], "update_news", article_id, f"Updated news: {title}")
+    return {"success": True}
+
+@router.delete("/news/{article_id}")
+async def delete_news(article_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    article = await db.news_articles.find_one({"article_id": article_id}, {"_id": 0})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    # Delete image
+    img = article.get("image_url", "")
+    if img.startswith("/api/uploads/news/"):
+        path = NEWS_IMG_DIR / img.split("/")[-1]
+        if path.exists():
+            path.unlink()
+    
+    await db.news_articles.delete_one({"article_id": article_id})
+    await log_admin_action(db, admin["user_id"], "delete_news", article_id, f"Deleted news: {article['title']}")
+    return {"success": True}
+
+@router.put("/news/{article_id}/toggle")
+async def toggle_news_publish(article_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    admin = await get_admin_user(request, db)
+    article = await db.news_articles.find_one({"article_id": article_id}, {"_id": 0})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    new_status = not article.get("published", True)
+    await db.news_articles.update_one({"article_id": article_id}, {"$set": {"published": new_status}})
+    await log_admin_action(db, admin["user_id"], "toggle_news", article_id, 
+                          f"{'Published' if new_status else 'Unpublished'} news: {article['title']}")
+    return {"success": True, "published": new_status}

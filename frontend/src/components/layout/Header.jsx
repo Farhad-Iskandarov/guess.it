@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap, Shield } from 'lucide-react';
+import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
@@ -152,12 +152,6 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/messages')} data-testid="nav-messages">Messages</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/settings')} data-testid="nav-settings">Settings</DropdownMenuItem>
-          {user?.role === 'admin' && (
-            <DropdownMenuItem className="cursor-pointer flex items-center gap-2" onClick={() => nav('/admin')} data-testid="nav-admin">
-              <Shield className="w-4 h-4 text-primary" />
-              <span className="font-semibold text-primary">Admin Panel</span>
-            </DropdownMenuItem>
-          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
             Log out

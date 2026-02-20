@@ -16,7 +16,7 @@ import {
   Activity, MessageSquare, Heart, TrendingUp, ScrollText,
   Server, Star, StarOff, Flame, Lock, KeyRound, Filter,
   ChevronDown, ArrowUpDown, Plus, Power, PowerOff, Zap,
-  UserCheck, Edit
+  UserCheck, Edit, Mail, Newspaper
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -119,6 +119,10 @@ const TABS = [
   { id: 'users', label: 'Users', icon: Users },
   { id: 'matches', label: 'Matches', icon: Trophy },
   { id: 'banners', label: 'Carousel Banners', icon: ScrollText },
+  { id: 'news', label: 'News', icon: Edit },
+  { id: 'subscriptions', label: 'Subscribed Emails', icon: Mail },
+  { id: 'contact-msgs', label: 'Contact Messages', icon: MessageSquare },
+  { id: 'contact-settings', label: 'Contact Settings', icon: KeyRound },
   { id: 'system', label: 'System', icon: Server },
   { id: 'streaks', label: 'Prediction Monitor', icon: Flame },
   { id: 'favorites', label: 'Favorites', icon: Star },
@@ -1592,6 +1596,518 @@ const AnalyticsTab = () => {
   );
 };
 
+/* ============ SUBSCRIPTIONS TAB ============ */
+const SubscriptionsTab = () => {
+  const [subs, setSubs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+
+  const fetchSubs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api(`/subscriptions?page=${page}&limit=20`);
+      setSubs(data.subscriptions || []);
+      setTotal(data.total || 0);
+      setPages(data.pages || 1);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }, [page]);
+
+  useEffect(() => { fetchSubs(); }, [fetchSubs]);
+
+  const handleDelete = async (subId) => {
+    if (!window.confirm('Delete this subscription?')) return;
+    try {
+      await api(`/subscriptions/${subId}`, { method: 'DELETE' });
+      fetchSubs();
+    } catch (err) { alert(err.message); }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="subscriptions-tab">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-foreground">{total}</span></p>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+      ) : subs.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No subscriptions yet</p>
+      ) : (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/30">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Email</th>
+                <th className="text-left px-4 py-3 font-semibold text-foreground">Date</th>
+                <th className="text-right px-4 py-3 font-semibold text-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subs.map(s => (
+                <tr key={s.sub_id} className="border-t border-border/50 hover:bg-secondary/20">
+                  <td className="px-4 py-3 text-foreground">{s.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{new Date(s.subscribed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => handleDelete(s.sub_id)} className="text-red-400 hover:text-red-300 transition-colors" data-testid={`delete-sub-${s.sub_id}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {pages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 hover:bg-secondary disabled:opacity-30"><ChevronLeft className="w-3 h-3" /></button>
+          <span className="text-xs text-muted-foreground">Page {page} of {pages}</span>
+          <button onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page >= pages} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 hover:bg-secondary disabled:opacity-30"><ChevronRight className="w-3 h-3" /></button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ============ CONTACT MESSAGES TAB ============ */
+const ContactMessagesTab = () => {
+  const [msgs, setMsgs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [unread, setUnread] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [expanded, setExpanded] = useState(null);
+
+  const fetchMsgs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api(`/contact-messages?page=${page}&limit=20`);
+      setMsgs(data.messages || []);
+      setTotal(data.total || 0);
+      setUnread(data.unread || 0);
+      setPages(data.pages || 1);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }, [page]);
+
+  useEffect(() => { fetchMsgs(); }, [fetchMsgs]);
+
+  const toggleFlag = async (msgId) => {
+    try {
+      await api(`/contact-messages/${msgId}/flag`, { method: 'PUT' });
+      fetchMsgs();
+    } catch (err) { alert(err.message); }
+  };
+
+  const handleDelete = async (msgId) => {
+    if (!window.confirm('Delete this message?')) return;
+    try {
+      await api(`/contact-messages/${msgId}`, { method: 'DELETE' });
+      fetchMsgs();
+    } catch (err) { alert(err.message); }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="contact-messages-tab">
+      <div className="flex items-center gap-4">
+        <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-foreground">{total}</span></p>
+        {unread > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-semibold">{unread} unread</span>}
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+      ) : msgs.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No contact messages yet</p>
+      ) : (
+        <div className="space-y-3">
+          {msgs.map(m => (
+            <div key={m.msg_id} className={`rounded-xl border ${m.flagged ? 'border-amber-500/50 bg-amber-500/5' : 'border-border bg-card/60'} p-4`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 cursor-pointer" onClick={() => setExpanded(expanded === m.msg_id ? null : m.msg_id)}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-foreground text-sm">{m.name}</span>
+                    <span className="text-xs text-muted-foreground">&lt;{m.email}&gt;</span>
+                    {!m.read && <span className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
+                  <p className="text-sm font-medium text-foreground">{m.subject}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{new Date(m.submitted_at).toLocaleString()}</p>
+                  {expanded === m.msg_id && (
+                    <div className="mt-3 p-3 rounded-lg bg-secondary/30 text-sm text-foreground whitespace-pre-wrap">{m.message}</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => toggleFlag(m.msg_id)} className={`p-1.5 rounded-lg transition-colors ${m.flagged ? 'text-amber-500 bg-amber-500/10' : 'text-muted-foreground hover:text-amber-500'}`} title="Flag" data-testid={`flag-msg-${m.msg_id}`}>
+                    <Pin className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => handleDelete(m.msg_id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 transition-colors" data-testid={`delete-msg-${m.msg_id}`}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {pages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 hover:bg-secondary disabled:opacity-30"><ChevronLeft className="w-3 h-3" /></button>
+          <span className="text-xs text-muted-foreground">Page {page} of {pages}</span>
+          <button onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page >= pages} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 hover:bg-secondary disabled:opacity-30"><ChevronRight className="w-3 h-3" /></button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ============ CONTACT SETTINGS TAB ============ */
+const ContactSettingsTab = () => {
+  const [settings, setSettings] = useState({ email_title: '', email_address: '', location_title: '', location_address: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const data = await api('/contact-settings');
+        setSettings(data);
+      } catch (err) { console.error(err); }
+      finally { setLoading(false); }
+    };
+    fetch_();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api('/contact-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) { alert(err.message); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+
+  return (
+    <div className="max-w-lg space-y-6" data-testid="contact-settings-tab">
+      <p className="text-sm text-muted-foreground">Edit the contact information shown on the Contact page.</p>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Email Section Title</label>
+          <Input value={settings.email_title} onChange={e => setSettings(s => ({ ...s, email_title: e.target.value }))} data-testid="cs-email-title" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Support Email Address</label>
+          <Input value={settings.email_address} onChange={e => setSettings(s => ({ ...s, email_address: e.target.value }))} data-testid="cs-email-address" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Location Title</label>
+          <Input value={settings.location_title} onChange={e => setSettings(s => ({ ...s, location_title: e.target.value }))} data-testid="cs-location-title" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Location Address</label>
+          <Input value={settings.location_address} onChange={e => setSettings(s => ({ ...s, location_address: e.target.value }))} data-testid="cs-location-address" />
+        </div>
+      </div>
+      <Button onClick={handleSave} disabled={saving} className="gap-2" data-testid="cs-save-btn">
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+        {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Changes'}
+      </Button>
+    </div>
+  );
+};
+
+/* ============ NEWS MANAGEMENT TAB ============ */
+const NewsTab = () => {
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editArticle, setEditArticle] = useState(null);
+  const [form, setForm] = useState({ title: '', date: '', category: 'News', published: true });
+  const [blocks, setBlocks] = useState([]);
+  const [coverImage, setCoverImage] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [uploadingIdx, setUploadingIdx] = useState(null);
+
+  const fetchNews = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api('/news?limit=50');
+      setArticles(data.articles || []);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchNews(); }, [fetchNews]);
+
+  const resetForm = () => {
+    setForm({ title: '', date: new Date().toISOString().slice(0, 10), category: 'News', published: true });
+    setBlocks([]);
+    setCoverImage(null);
+    setEditArticle(null);
+    setShowForm(false);
+  };
+
+  const openCreate = () => {
+    setEditArticle(null);
+    setForm({ title: '', date: new Date().toISOString().slice(0, 10), category: 'News', published: true });
+    setBlocks([{ type: 'text', value: '' }]);
+    setCoverImage(null);
+    setShowForm(true);
+  };
+
+  const openEdit = (a) => {
+    setEditArticle(a);
+    setForm({ title: a.title, date: a.date || '', category: a.category || 'News', published: a.published !== false });
+    const existingBlocks = a.content_blocks && a.content_blocks.length > 0
+      ? a.content_blocks
+      : a.content ? [{ type: 'text', value: a.content }] : [{ type: 'text', value: '' }];
+    setBlocks(existingBlocks);
+    setCoverImage(null);
+    setShowForm(true);
+  };
+
+  const addTextBlock = () => setBlocks(b => [...b, { type: 'text', value: '' }]);
+
+  const handleImageUpload = async (file, idx) => {
+    setUploadingIdx(idx);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const data = await api('/news/upload-image', { method: 'POST', body: fd });
+      if (data.url) {
+        setBlocks(prev => {
+          const copy = [...prev];
+          copy[idx] = { type: 'image', url: data.url };
+          return copy;
+        });
+      }
+    } catch (err) { alert('Image upload failed: ' + err.message); }
+    finally { setUploadingIdx(null); }
+  };
+
+  const addImageBlock = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const newIdx = blocks.length;
+        setBlocks(b => [...b, { type: 'image', url: '', uploading: true }]);
+        handleImageUpload(file, newIdx);
+      }
+    };
+    input.click();
+  };
+
+  const updateBlockText = (idx, value) => {
+    setBlocks(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], value };
+      return copy;
+    });
+  };
+
+  const removeBlock = (idx) => setBlocks(prev => prev.filter((_, i) => i !== idx));
+
+  const moveBlock = (idx, dir) => {
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= blocks.length) return;
+    setBlocks(prev => {
+      const copy = [...prev];
+      [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
+      return copy;
+    });
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { alert('Title is required'); return; }
+    setSaving(true);
+    try {
+      const cleanBlocks = blocks.filter(b => (b.type === 'text' && b.value.trim()) || (b.type === 'image' && b.url));
+      const plainContent = cleanBlocks.filter(b => b.type === 'text').map(b => b.value).join('\n\n');
+      
+      const fd = new FormData();
+      fd.append('title', form.title);
+      fd.append('content', plainContent);
+      fd.append('content_blocks', JSON.stringify(cleanBlocks));
+      fd.append('date', form.date);
+      fd.append('category', form.category);
+      fd.append('published', form.published.toString());
+      if (coverImage) fd.append('image', coverImage);
+
+      const url = editArticle ? `/news/${editArticle.article_id}` : '/news';
+      const method = editArticle ? 'PUT' : 'POST';
+      await api(url, { method, body: fd });
+      resetForm();
+      fetchNews();
+    } catch (err) { alert(err.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async (articleId) => {
+    if (!window.confirm('Delete this article?')) return;
+    try {
+      await api(`/news/${articleId}`, { method: 'DELETE' });
+      fetchNews();
+    } catch (err) { alert(err.message); }
+  };
+
+  const togglePublish = async (articleId) => {
+    try {
+      await api(`/news/${articleId}/toggle`, { method: 'PUT' });
+      fetchNews();
+    } catch (err) { alert(err.message); }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="news-tab">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Manage news articles</p>
+        <Button size="sm" onClick={openCreate} className="gap-1.5" data-testid="create-news-btn">
+          <Plus className="w-4 h-4" /> New Article
+        </Button>
+      </div>
+
+      {/* Create/Edit Form */}
+      {showForm && (
+        <div className="rounded-xl border border-border bg-card/60 p-5 space-y-4">
+          <h3 className="font-bold text-foreground">{editArticle ? 'Edit Article' : 'New Article'}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase mb-1">Title *</label>
+              <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} data-testid="news-title-input" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase mb-1">Date</label>
+              <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} data-testid="news-date-input" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase mb-1">Category</label>
+              <Input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="News, Feature, Update..." data-testid="news-category-input" />
+            </div>
+          </div>
+
+          {/* Cover Image */}
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase mb-1">Cover Image (optional)</label>
+            <input type="file" accept="image/*" onChange={e => setCoverImage(e.target.files[0])} className="text-sm text-muted-foreground" data-testid="news-cover-input" />
+          </div>
+
+          {/* Content Blocks */}
+          <div>
+            <label className="block text-xs font-semibold text-muted-foreground uppercase mb-2">Content Blocks</label>
+            <div className="space-y-3">
+              {blocks.map((block, idx) => (
+                <div key={idx} className="relative group rounded-lg border border-border/50 bg-background p-3">
+                  {/* Block controls */}
+                  <div className="absolute -top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => moveBlock(idx, -1)} disabled={idx === 0} className="w-6 h-6 rounded bg-secondary flex items-center justify-center text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">&uarr;</button>
+                    <button onClick={() => moveBlock(idx, 1)} disabled={idx === blocks.length - 1} className="w-6 h-6 rounded bg-secondary flex items-center justify-center text-xs text-muted-foreground hover:text-foreground disabled:opacity-30">&darr;</button>
+                    <button onClick={() => removeBlock(idx)} className="w-6 h-6 rounded bg-red-500/10 flex items-center justify-center text-xs text-red-400 hover:text-red-300"><X className="w-3 h-3" /></button>
+                  </div>
+
+                  {block.type === 'text' ? (
+                    <textarea
+                      value={block.value}
+                      onChange={e => updateBlockText(idx, e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 text-sm rounded-lg border-0 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-y"
+                      placeholder="Write text content..."
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center min-h-[80px]">
+                      {uploadingIdx === idx || (!block.url && block.uploading) ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
+                        </div>
+                      ) : block.url ? (
+                        <img 
+                          src={block.url.startsWith('/') ? `${API_URL}${block.url}` : block.url} 
+                          alt="" 
+                          className="max-h-48 rounded-lg object-contain" 
+                        />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Image failed to upload</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-muted-foreground/50 mt-1">{block.type === 'text' ? 'Text Block' : 'Image Block'}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={addTextBlock} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5" data-testid="add-text-block">
+                <Plus className="w-3 h-3" /> Text Block
+              </button>
+              <button onClick={addImageBlock} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5" data-testid="add-image-block">
+                <Plus className="w-3 h-3" /> Image Block
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.published} onChange={e => setForm(f => ({ ...f, published: e.target.checked }))} className="accent-primary" />
+              <span className="text-foreground">Published</span>
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5" data-testid="news-save-btn">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {editArticle ? 'Update' : 'Create'}
+            </Button>
+            <Button onClick={resetForm} variant="outline" size="sm">Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Article List */}
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+      ) : articles.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">No news articles yet</p>
+      ) : (
+        <div className="space-y-3">
+          {articles.map(a => (
+            <div key={a.article_id} className="flex items-center gap-4 rounded-xl border border-border bg-card/60 p-4 hover:border-border/70 transition-colors">
+              {a.image_url && (
+                <img src={a.image_url.startsWith('/') ? `${API_URL}${a.image_url}` : a.image_url} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-semibold text-foreground text-sm truncate">{a.title}</h4>
+                  {!a.published && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 font-semibold">Draft</span>}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{a.date} &middot; {a.category} &middot; {(a.content_blocks || []).length} blocks</p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => togglePublish(a.article_id)} className={`p-1.5 rounded-lg transition-colors ${a.published ? 'text-emerald-500' : 'text-muted-foreground hover:text-emerald-500'}`} title={a.published ? 'Unpublish' : 'Publish'}>
+                  {a.published ? <Eye className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                </button>
+                <button onClick={() => openEdit(a)} className="p-1.5 rounded-lg text-muted-foreground hover:text-primary transition-colors" data-testid={`edit-news-${a.article_id}`}>
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button onClick={() => handleDelete(a.article_id)} className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 transition-colors" data-testid={`delete-news-${a.article_id}`}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ============ MAIN ADMIN PAGE ============ */
 export const AdminPage = () => {
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
@@ -1662,6 +2178,10 @@ export const AdminPage = () => {
             {activeTab === 'matches' && <MatchesTab />}
             {activeTab === 'system' && <SystemTab />}
             {activeTab === 'banners' && <BannersTab />}
+            {activeTab === 'news' && <NewsTab />}
+            {activeTab === 'subscriptions' && <SubscriptionsTab />}
+            {activeTab === 'contact-msgs' && <ContactMessagesTab />}
+            {activeTab === 'contact-settings' && <ContactSettingsTab />}
             {activeTab === 'streaks' && <StreaksTab />}
             {activeTab === 'favorites' && <FavoritesTab />}
             {activeTab === 'notifications' && <NotificationsTab />}
