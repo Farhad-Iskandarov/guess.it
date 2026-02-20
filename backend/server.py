@@ -270,11 +270,19 @@ async def startup_event():
     # Admin panel indexes
     await db.admin_audit_log.create_index([("timestamp", -1)])
     await db.admin_audit_log.create_index([("admin_id", 1)])
+    await db.admin_audit_log.create_index([("action", 1)])
     await db.reported_messages.create_index([("reported_at", -1)])
     await db.pinned_matches.create_index([("match_id", 1)], unique=True)
     await db.hidden_matches.create_index([("match_id", 1)], unique=True)
     await db.users.create_index([("role", 1)])
     await db.users.create_index([("is_banned", 1)])
+    await db.users.create_index([("points", -1)])
+    await db.users.create_index([("is_online", 1)])
+    # New admin collections indexes
+    await db.admin_api_configs.create_index([("api_id", 1)], unique=True)
+    await db.admin_api_configs.create_index([("is_active", 1)])
+    await db.admin_favorite_users.create_index([("admin_id", 1), ("user_id", 1)], unique=True)
+    await db.predictions.create_index([("user_id", 1), ("points_awarded", 1)])
     start_polling(db)
 
 

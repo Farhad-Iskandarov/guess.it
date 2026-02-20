@@ -1,160 +1,208 @@
 {
   "summary": {
-    "tests_run": 25,
-    "tests_passed": 23,
-    "success_rate": 92.0,
-    "timestamp": "2026-02-20T13:02:23.999490"
+    "tests_run": 33,
+    "tests_passed": 29,
+    "success_rate": 87.87878787878788,
+    "timestamp": "2026-02-20T15:05:51.706394"
   },
   "results": [
     {
       "test": "API Root Endpoint",
       "success": true,
       "details": "Status: 200, Message: GuessIt API is running",
-      "timestamp": "2026-02-20T13:02:16.358180"
+      "timestamp": "2026-02-20T15:05:38.207216"
     },
     {
       "test": "Health Check Endpoint",
       "success": true,
-      "details": "Status: healthy, Timestamp: 2026-02-20T13:02:16.449245+00:00",
-      "timestamp": "2026-02-20T13:02:16.471422"
+      "details": "Status: healthy, Timestamp: 2026-02-20T15:05:38.325592+00:00",
+      "timestamp": "2026-02-20T15:05:38.355701"
     },
     {
       "test": "Football Matches API",
-      "success": true,
-      "details": "Returned 120 matches (>= 100 required)",
-      "timestamp": "2026-02-20T13:02:20.754454"
+      "success": false,
+      "details": "Only 0 matches returned (< 100)",
+      "timestamp": "2026-02-20T15:05:39.063042"
     },
     {
       "test": "Live Matches API",
       "success": true,
-      "details": "Total live matches: 1",
-      "timestamp": "2026-02-20T13:02:20.872158"
+      "details": "Total live matches: 0",
+      "timestamp": "2026-02-20T15:05:39.771894"
     },
     {
       "test": "Competitions API",
       "success": true,
       "details": "Total competitions: 8",
-      "timestamp": "2026-02-20T13:02:21.010032"
+      "timestamp": "2026-02-20T15:05:39.923063"
     },
     {
       "test": "WebSocket Endpoint Check",
       "success": false,
       "details": "Unexpected status: 404",
-      "timestamp": "2026-02-20T13:02:21.134799"
+      "timestamp": "2026-02-20T15:05:40.101724"
     },
     {
       "test": "User Registration",
       "success": true,
-      "details": "User ID: user_8c3a8fcfba63, Requires nickname: True",
-      "timestamp": "2026-02-20T13:02:21.539874"
+      "details": "User ID: user_d0d64009cb9a, Requires nickname: True",
+      "timestamp": "2026-02-20T15:05:40.531901"
     },
     {
       "test": "Set Nickname",
       "success": true,
-      "details": "Nickname 'testuser_1771592541' set successfully",
-      "timestamp": "2026-02-20T13:02:21.684527"
+      "details": "Nickname 'testuser_1771599940' set successfully",
+      "timestamp": "2026-02-20T15:05:40.679721"
     },
     {
       "test": "Get Current User",
       "success": true,
-      "details": "User data retrieved: testuser_1771592541",
-      "timestamp": "2026-02-20T13:02:21.782877"
+      "details": "User data retrieved: testuser_1771599940",
+      "timestamp": "2026-02-20T15:05:40.806431"
     },
     {
       "test": "Predictions API",
       "success": true,
       "details": "Predictions endpoint working, Total: 0",
-      "timestamp": "2026-02-20T13:02:21.887744"
+      "timestamp": "2026-02-20T15:05:40.981259"
     },
     {
       "test": "Messages Conversations API",
       "success": true,
       "details": "Conversations: 0, Unread: 0",
-      "timestamp": "2026-02-20T13:02:22.033159"
+      "timestamp": "2026-02-20T15:05:41.194208"
     },
     {
       "test": "Messages Unread Count API",
       "success": true,
       "details": "Unread count: 0",
-      "timestamp": "2026-02-20T13:02:22.145606"
+      "timestamp": "2026-02-20T15:05:41.342644"
     },
     {
       "test": "WebSocket Chat Endpoint",
       "success": false,
       "details": "Unexpected status: 200",
-      "timestamp": "2026-02-20T13:02:22.291681"
+      "timestamp": "2026-02-20T15:05:41.481200"
     },
     {
       "test": "Admin Login",
       "success": true,
-      "details": "Admin user logged in: SuperAdmin",
-      "timestamp": "2026-02-20T13:02:22.668622"
+      "details": "Admin user logged in: testadmin_1771599941",
+      "timestamp": "2026-02-20T15:05:42.838536"
     },
     {
       "test": "Unauthenticated 401 Check",
       "success": true,
       "details": "Unauthenticated user correctly gets 401",
-      "timestamp": "2026-02-20T13:02:22.795483"
+      "timestamp": "2026-02-20T15:05:43.000073"
     },
     {
       "test": "Non-Admin 403 Check",
       "success": true,
       "details": "Non-admin user correctly gets 403",
-      "timestamp": "2026-02-20T13:02:22.936097"
+      "timestamp": "2026-02-20T15:05:43.212073"
     },
     {
       "test": "Admin Dashboard",
       "success": true,
-      "details": "Dashboard data: 16 users, 120 matches",
-      "timestamp": "2026-02-20T13:02:23.040565"
+      "details": "Dashboard data: 7 users, 120 matches",
+      "timestamp": "2026-02-20T15:05:43.381763"
     },
     {
       "test": "Admin Users API",
       "success": true,
-      "details": "Users list: 16 total users, page 1",
-      "timestamp": "2026-02-20T13:02:23.139402"
+      "details": "Users list: 7 total users, page 1",
+      "timestamp": "2026-02-20T15:05:43.610305"
     },
     {
-      "test": "Admin Users Search",
+      "test": "Admin Users Search (Case Insensitive)",
       "success": true,
-      "details": "Search found SuperAdmin user",
-      "timestamp": "2026-02-20T13:02:23.282393"
+      "details": "Case insensitive search working, found 7 results for all cases",
+      "timestamp": "2026-02-20T15:05:44.310256"
+    },
+    {
+      "test": "Admin Users Sort/Filter",
+      "success": true,
+      "details": "Sorting and filtering working, 7 users sorted by points",
+      "timestamp": "2026-02-20T15:05:45.042032"
+    },
+    {
+      "test": "Admin User Detail",
+      "success": true,
+      "details": "User detail: 0 predictions, 0 friends",
+      "timestamp": "2026-02-20T15:05:45.211867"
+    },
+    {
+      "test": "Admin User Conversations",
+      "success": true,
+      "details": "User conversations: 0 total conversations",
+      "timestamp": "2026-02-20T15:05:45.369985"
+    },
+    {
+      "test": "Admin Change Password",
+      "success": true,
+      "details": "Password changed: Password changed. User's sessions have been invalidated.",
+      "timestamp": "2026-02-20T15:05:45.748224"
+    },
+    {
+      "test": "Admin Ban/Unban User",
+      "success": true,
+      "details": "Ban/unban functionality working",
+      "timestamp": "2026-02-20T15:05:46.004233"
     },
     {
       "test": "Admin Matches API",
       "success": true,
-      "details": "Matches: 120 total matches",
-      "timestamp": "2026-02-20T13:02:23.385125"
+      "details": "Matches: 0 total matches",
+      "timestamp": "2026-02-20T15:05:46.743721"
     },
     {
       "test": "Admin Force Refresh",
       "success": true,
-      "details": "Force refresh successful: Refreshed 120 matches",
-      "timestamp": "2026-02-20T13:02:23.496064"
+      "details": "Force refresh successful: Refreshed 0 matches",
+      "timestamp": "2026-02-20T15:05:47.400435"
     },
     {
-      "test": "Admin Moderation Messages",
+      "test": "Admin System APIs",
       "success": true,
-      "details": "Messages for moderation: 21 total",
-      "timestamp": "2026-02-20T13:02:23.607413"
+      "details": "API management working: list, add, toggle successful",
+      "timestamp": "2026-02-20T15:05:47.903253"
+    },
+    {
+      "test": "Admin Prediction Streaks",
+      "success": true,
+      "details": "Prediction streaks: 0 users with streaks",
+      "timestamp": "2026-02-20T15:05:48.088329"
+    },
+    {
+      "test": "Admin Favorite Users",
+      "success": true,
+      "details": "Favorite users management working",
+      "timestamp": "2026-02-20T15:05:48.510203"
     },
     {
       "test": "Admin Analytics",
       "success": true,
-      "details": "Analytics data loaded: 7 daily user stats, 1 top predictors",
-      "timestamp": "2026-02-20T13:02:23.752935"
+      "details": "Analytics data loaded: 7 daily user stats, 0 top predictors",
+      "timestamp": "2026-02-20T15:05:48.708639"
     },
     {
       "test": "Admin Audit Log",
       "success": true,
-      "details": "Audit log: 1 total entries",
-      "timestamp": "2026-02-20T13:02:23.865747"
+      "details": "Audit log: 19 total entries",
+      "timestamp": "2026-02-20T15:05:48.813593"
     },
     {
       "test": "Admin Broadcast Notification",
       "success": true,
-      "details": "Broadcast sent to 16 users",
-      "timestamp": "2026-02-20T13:02:23.998601"
+      "details": "Broadcast sent to 7 users",
+      "timestamp": "2026-02-20T15:05:48.922485"
+    },
+    {
+      "test": "Non-Admin 403 All Endpoints",
+      "success": false,
+      "details": "Failed endpoints: ['GET /admin/dashboard:401', 'GET /admin/users:401', 'GET /admin/users/user_d0d64009cb9a:401', 'GET /admin/users/user_d0d64009cb9a/conversations:401', 'GET /admin/system/apis:401', 'GET /admin/prediction-streaks:401', 'GET /admin/favorite-users:401', 'GET /admin/analytics:401', 'GET /admin/audit-log:401', 'POST /admin/users/user_d0d64009cb9a/ban:401', 'POST /admin/users/user_d0d64009cb9a/unban:401', 'POST /admin/notifications/broadcast:401']",
+      "timestamp": "2026-02-20T15:05:51.705547"
     }
   ]
 }

@@ -6,7 +6,7 @@ from datetime import datetime
 
 class GuessItAPITester:
     def __init__(self):
-        self.base_url = "https://guess-it-duplicate-1.preview.emergentagent.com/api"
+        self.base_url = "https://guess-it-clone.preview.emergentagent.com/api"
         self.session_token = None
         self.admin_session_token = None
         self.user_id = None
@@ -350,11 +350,52 @@ class GuessItAPITester:
             return False
 
     def test_admin_login(self):
-        """Test admin login with specific credentials"""
+        """Test admin login with a test admin user"""
+        # First create a test admin user
+        test_admin_email = f"admin_{int(time.time())}@example.com"
+        test_admin_password = "AdminPass123!"
+        
         try:
+            # Register the admin user first
+            response = requests.post(
+                f"{self.base_url}/auth/register",
+                json={"email": test_admin_email, "password": test_admin_password, "confirm_password": test_admin_password},
+                timeout=10
+            )
+            
+            if response.status_code != 200:
+                self.log_test("Admin Login", False, f"Admin registration failed: {response.status_code}")
+                return False
+            
+            reg_data = response.json()
+            admin_user_id = reg_data["user"]["user_id"]
+            admin_session = response.cookies.get("session_token")
+            
+            # Set nickname for admin user
+            if admin_session:
+                headers = {"Authorization": f"Bearer {admin_session}"}
+                requests.post(
+                    f"{self.base_url}/auth/nickname",
+                    json={"nickname": f"testadmin_{int(time.time())}"},
+                    headers=headers,
+                    timeout=10
+                )
+            
+            # Manually set role to admin via direct MongoDB update
+            import subprocess
+            result = subprocess.run([
+                "mongosh", "mongodb://localhost:27017/test_database", 
+                "--eval", f'db.users.updateOne({{user_id: "{admin_user_id}"}}, {{$set: {{role: "admin"}}}});'
+            ], capture_output=True, text=True, timeout=10)
+            
+            if result.returncode != 0:
+                self.log_test("Admin Login", False, f"Failed to set admin role: {result.stderr}")
+                return False
+            
+            # Now try to login with admin credentials
             response = requests.post(
                 f"{self.base_url}/auth/login",
-                json={"email": "farhad.isgandarov@gmail.com", "password": "Salam123?"},
+                json={"email": test_admin_email, "password": test_admin_password},
                 timeout=10
             )
             
@@ -365,7 +406,7 @@ class GuessItAPITester:
                     cookies = response.cookies
                     self.admin_session_token = cookies.get("session_token")
                     self.admin_user_id = data["user"]["user_id"]
-                    self.log_test("Admin Login", True, f"Admin user logged in: {data['user'].get('nickname', 'SuperAdmin')}")
+                    self.log_test("Admin Login", True, f"Admin user logged in: {data['user'].get('nickname', 'TestAdmin')}")
                     return True
                 else:
                     self.log_test("Admin Login", False, f"Login successful but not admin role: {data.get('user', {}).get('role', 'None')}")
@@ -464,25 +505,41 @@ class GuessItAPITester:
             return False
 
     def test_admin_users_search(self):
-        """Test admin users search functionality"""
+        """Test admin users search functionality - case insensitive (BUG FIX VERIFICATION)"""
         if not self.admin_session_token:
             self.log_test("Admin Users Search", False, "No admin session token available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.admin_session_token}"}
-            response = requests.get(f"{self.base_url}/admin/users?search=SuperAdmin", headers=headers, timeout=10)
+            
+            # First, let's search for any user to see if search works at all
+            response = requests.get(f"{self.base_url}/admin/users?search=test", headers=headers, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
                 if "users" in data:
-                    # Should find at least the admin user
-                    found_admin = any(u.get("nickname") == "SuperAdmin" for u in data["users"])
-                    if found_admin:
-                        self.log_test("Admin Users Search", True, f"Search found SuperAdmin user")
+                    # Test case insensitive search - search for lowercase when user has mixed case
+                    # This tests the bug fix for case sensitivity
+                    search_terms = ["test", "TEST", "Test"]  # Different cases
+                    all_passed = True
+                    results_counts = []
+                    
+                    for term in search_terms:
+                        test_response = requests.get(f"{self.base_url}/admin/users?search={term}", headers=headers, timeout=10)
+                        if test_response.status_code == 200:
+                            test_data = test_response.json()
+                            results_counts.append(len(test_data.get("users", [])))
+                        else:
+                            all_passed = False
+                            break
+                    
+                    # All search results should be the same (case insensitive)
+                    if all_passed and len(set(results_counts)) <= 1:  # All counts should be equal
+                        self.log_test("Admin Users Search (Case Insensitive)", True, f"Case insensitive search working, found {results_counts[0]} results for all cases")
                         return True
                     else:
-                        self.log_test("Admin Users Search", False, f"SuperAdmin not found in search results")
+                        self.log_test("Admin Users Search (Case Insensitive)", False, f"Case sensitivity issue: {results_counts}")
                         return False
                 else:
                     self.log_test("Admin Users Search", False, f"Invalid response structure: {data}")
@@ -544,29 +601,337 @@ class GuessItAPITester:
             self.log_test("Admin Force Refresh", False, f"Error: {str(e)}")
             return False
 
-    def test_admin_moderation_messages(self):
-        """Test admin moderation messages endpoint"""
-        if not self.admin_session_token:
-            self.log_test("Admin Moderation Messages", False, "No admin session token available")
+    def test_admin_user_detail(self):
+        """Test admin user detail endpoint"""
+        if not self.admin_session_token or not self.user_id:
+            self.log_test("Admin User Detail", False, "No admin session token or user_id available")
             return False
             
         try:
             headers = {"Authorization": f"Bearer {self.admin_session_token}"}
-            response = requests.get(f"{self.base_url}/admin/moderation/messages", headers=headers, timeout=10)
+            response = requests.get(f"{self.base_url}/admin/users/{self.user_id}", headers=headers, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
-                if "messages" in data and "total" in data:
-                    self.log_test("Admin Moderation Messages", True, f"Messages for moderation: {data['total']} total")
+                required_fields = ["user_id", "email", "predictions_count", "messages_sent", "friends_count"]
+                if all(field in data for field in required_fields):
+                    self.log_test("Admin User Detail", True, f"User detail: {data['predictions_count']} predictions, {data['friends_count']} friends")
                     return True
                 else:
-                    self.log_test("Admin Moderation Messages", False, f"Invalid response structure: {data}")
+                    self.log_test("Admin User Detail", False, f"Missing required fields: {data}")
                     return False
             else:
-                self.log_test("Admin Moderation Messages", False, f"Status code: {response.status_code}")
+                self.log_test("Admin User Detail", False, f"Status code: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("Admin Moderation Messages", False, f"Error: {str(e)}")
+            self.log_test("Admin User Detail", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_user_conversations(self):
+        """Test admin user conversations endpoint (replacing moderation)"""
+        if not self.admin_session_token or not self.user_id:
+            self.log_test("Admin User Conversations", False, "No admin session token or user_id available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/users/{self.user_id}/conversations", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "conversations" in data and "total" in data:
+                    self.log_test("Admin User Conversations", True, f"User conversations: {data['total']} total conversations")
+                    return True
+                else:
+                    self.log_test("Admin User Conversations", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin User Conversations", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin User Conversations", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_change_password(self):
+        """Test admin change user password endpoint"""
+        if not self.admin_session_token or not self.user_id:
+            self.log_test("Admin Change Password", False, "No admin session token or user_id available")
+            return False
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.admin_session_token}",
+                "Content-Type": "application/json"
+            }
+            new_password = f"NewPass{int(time.time())}!"
+            response = requests.post(
+                f"{self.base_url}/admin/users/{self.user_id}/change-password",
+                headers=headers,
+                json={"new_password": new_password},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success"):
+                    self.log_test("Admin Change Password", True, f"Password changed: {data.get('message', '')}")
+                    return True
+                else:
+                    self.log_test("Admin Change Password", False, f"Password change failed: {data}")
+                    return False
+            else:
+                self.log_test("Admin Change Password", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Change Password", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_ban_unban_user(self):
+        """Test admin ban/unban user endpoints"""
+        if not self.admin_session_token or not self.user_id:
+            self.log_test("Admin Ban/Unban User", False, "No admin session token or user_id available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            
+            # Test ban
+            response = requests.post(f"{self.base_url}/admin/users/{self.user_id}/ban", headers=headers, timeout=10)
+            if response.status_code != 200:
+                self.log_test("Admin Ban/Unban User", False, f"Ban failed: {response.status_code}")
+                return False
+            
+            # Test unban
+            response = requests.post(f"{self.base_url}/admin/users/{self.user_id}/unban", headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success"):
+                    self.log_test("Admin Ban/Unban User", True, "Ban/unban functionality working")
+                    return True
+                else:
+                    self.log_test("Admin Ban/Unban User", False, f"Unban failed: {data}")
+                    return False
+            else:
+                self.log_test("Admin Ban/Unban User", False, f"Unban status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Ban/Unban User", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_users_sort_and_filter(self):
+        """Test admin users sorting by points and filtering by status"""
+        if not self.admin_session_token:
+            self.log_test("Admin Users Sort/Filter", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            
+            # Test sort by points desc (default)
+            response = requests.get(f"{self.base_url}/admin/users?sort_by=points&sort_order=desc", headers=headers, timeout=10)
+            if response.status_code != 200:
+                self.log_test("Admin Users Sort/Filter", False, f"Sort by points failed: {response.status_code}")
+                return False
+            
+            data = response.json()
+            users = data.get("users", [])
+            
+            # Verify sorting - points should be in descending order
+            points_sorted = all(
+                users[i].get("points", 0) >= users[i + 1].get("points", 0) 
+                for i in range(len(users) - 1)
+            ) if len(users) > 1 else True
+            
+            if not points_sorted:
+                self.log_test("Admin Users Sort/Filter", False, "Points not sorted in descending order")
+                return False
+            
+            # Test filters
+            filter_tests = ["online", "offline", "banned"]
+            for filter_status in filter_tests:
+                response = requests.get(f"{self.base_url}/admin/users?filter_status={filter_status}", headers=headers, timeout=10)
+                if response.status_code != 200:
+                    self.log_test("Admin Users Sort/Filter", False, f"Filter {filter_status} failed: {response.status_code}")
+                    return False
+            
+            self.log_test("Admin Users Sort/Filter", True, f"Sorting and filtering working, {len(users)} users sorted by points")
+            return True
+            
+        except Exception as e:
+            self.log_test("Admin Users Sort/Filter", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_system_apis(self):
+        """Test admin system APIs management"""
+        if not self.admin_session_token:
+            self.log_test("Admin System APIs", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            
+            # Test list APIs
+            response = requests.get(f"{self.base_url}/admin/system/apis", headers=headers, timeout=10)
+            if response.status_code != 200:
+                self.log_test("Admin System APIs", False, f"List APIs failed: {response.status_code}")
+                return False
+            
+            apis_data = response.json()
+            
+            # Test add API
+            test_api = {
+                "name": "Test Football API",
+                "base_url": "https://test.football-api.com/v1",
+                "api_key": "test_key_12345"
+            }
+            response = requests.post(
+                f"{self.base_url}/admin/system/apis",
+                headers={**headers, "Content-Type": "application/json"},
+                json=test_api,
+                timeout=10
+            )
+            if response.status_code != 200:
+                self.log_test("Admin System APIs", False, f"Add API failed: {response.status_code}")
+                return False
+            
+            added_api = response.json()
+            api_id = added_api.get("api", {}).get("api_id")
+            
+            if not api_id:
+                self.log_test("Admin System APIs", False, "No API ID returned after creation")
+                return False
+            
+            # Test toggle API
+            response = requests.post(f"{self.base_url}/admin/system/apis/{api_id}/toggle", headers=headers, timeout=10)
+            if response.status_code != 200:
+                self.log_test("Admin System APIs", False, f"Toggle API failed: {response.status_code}")
+                return False
+            
+            self.log_test("Admin System APIs", True, f"API management working: list, add, toggle successful")
+            return True
+            
+        except Exception as e:
+            self.log_test("Admin System APIs", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_prediction_streaks(self):
+        """Test admin prediction streaks monitoring"""
+        if not self.admin_session_token:
+            self.log_test("Admin Prediction Streaks", False, "No admin session token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            response = requests.get(f"{self.base_url}/admin/prediction-streaks?min_streak=5", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "streaks" in data and "total" in data:
+                    self.log_test("Admin Prediction Streaks", True, f"Prediction streaks: {data['total']} users with streaks")
+                    return True
+                else:
+                    self.log_test("Admin Prediction Streaks", False, f"Invalid response structure: {data}")
+                    return False
+            else:
+                self.log_test("Admin Prediction Streaks", False, f"Status code: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Prediction Streaks", False, f"Error: {str(e)}")
+            return False
+
+    def test_admin_favorite_users(self):
+        """Test admin favorite users management"""
+        if not self.admin_session_token or not self.user_id:
+            self.log_test("Admin Favorite Users", False, "No admin session token or user_id available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_session_token}"}
+            
+            # Test list favorites
+            response = requests.get(f"{self.base_url}/admin/favorite-users", headers=headers, timeout=10)
+            if response.status_code != 200:
+                self.log_test("Admin Favorite Users", False, f"List favorites failed: {response.status_code}")
+                return False
+            
+            # Test add to favorites
+            response = requests.post(
+                f"{self.base_url}/admin/favorite-users/{self.user_id}",
+                headers={**headers, "Content-Type": "application/json"},
+                json={"note": "Test favorite user"},
+                timeout=10
+            )
+            if response.status_code not in [200, 400]:  # 400 if already in favorites
+                self.log_test("Admin Favorite Users", False, f"Add favorite failed: {response.status_code}")
+                return False
+            
+            # Test remove from favorites
+            response = requests.delete(f"{self.base_url}/admin/favorite-users/{self.user_id}", headers=headers, timeout=10)
+            if response.status_code in [200, 404]:  # 404 if not in favorites is OK
+                self.log_test("Admin Favorite Users", True, "Favorite users management working")
+                return True
+            else:
+                self.log_test("Admin Favorite Users", False, f"Remove favorite failed: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Favorite Users", False, f"Error: {str(e)}")
+            return False
+
+    def test_non_admin_all_endpoints_403(self):
+        """Test that non-admin users get 403 for all admin endpoints"""
+        if not self.session_token:
+            self.log_test("Non-Admin 403 All Endpoints", False, "No regular user session available")
+            return False
+            
+        # Test GET endpoints
+        get_endpoints = [
+            "/admin/dashboard",
+            "/admin/users", 
+            f"/admin/users/{self.user_id or 'dummy'}",
+            f"/admin/users/{self.user_id or 'dummy'}/conversations",
+            "/admin/system/apis",
+            "/admin/prediction-streaks",
+            "/admin/favorite-users",
+            "/admin/analytics",
+            "/admin/audit-log"
+        ]
+        
+        # Test POST endpoints that non-admin should get 403 on
+        post_endpoints = [
+            f"/admin/users/{self.user_id or 'dummy'}/ban",
+            f"/admin/users/{self.user_id or 'dummy'}/unban",
+            "/admin/notifications/broadcast"
+        ]
+        
+        try:
+            headers = {"Authorization": f"Bearer {self.session_token}"}
+            failed_endpoints = []
+            
+            # Test GET endpoints
+            for endpoint in get_endpoints:
+                response = requests.get(f"{self.base_url}{endpoint}", headers=headers, timeout=5)
+                if response.status_code != 403:
+                    failed_endpoints.append(f"GET {endpoint}:{response.status_code}")
+            
+            # Test POST endpoints  
+            for endpoint in post_endpoints:
+                response = requests.post(f"{self.base_url}{endpoint}", 
+                                       headers={**headers, "Content-Type": "application/json"},
+                                       json={}, timeout=5)
+                if response.status_code != 403:
+                    failed_endpoints.append(f"POST {endpoint}:{response.status_code}")
+            
+            total_endpoints = len(get_endpoints) + len(post_endpoints)
+            if not failed_endpoints:
+                self.log_test("Non-Admin 403 All Endpoints", True, f"All {total_endpoints} admin endpoints correctly return 403")
+                return True
+            else:
+                self.log_test("Non-Admin 403 All Endpoints", False, f"Failed endpoints: {failed_endpoints}")
+                return False
+                
+        except Exception as e:
+            self.log_test("Non-Admin 403 All Endpoints", False, f"Error: {str(e)}")
             return False
 
     def test_admin_analytics(self):
@@ -692,12 +1057,23 @@ class GuessItAPITester:
             self.test_admin_dashboard()
             self.test_admin_users_api()
             self.test_admin_users_search()
+            self.test_admin_users_sort_and_filter()
+            self.test_admin_user_detail()
+            self.test_admin_user_conversations() 
+            self.test_admin_change_password()
+            self.test_admin_ban_unban_user()
             self.test_admin_matches_api()
             self.test_admin_force_refresh()
-            self.test_admin_moderation_messages()
+            self.test_admin_system_apis()
+            self.test_admin_prediction_streaks()
+            self.test_admin_favorite_users()
             self.test_admin_analytics()
             self.test_admin_audit_log()
             self.test_admin_notifications_broadcast()
+            
+        # Test authorization for all endpoints
+        if self.session_token:
+            self.test_non_admin_all_endpoints_403()
         
         # Print summary
         print("\n" + "=" * 50)

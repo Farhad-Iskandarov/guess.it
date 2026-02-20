@@ -59,11 +59,11 @@ class UserResponse(BaseModel):
     picture: Optional[str] = None
     auth_provider: str
     nickname_set: bool
-    nickname_changed: bool = False  # New field for one-time nickname change rule
+    nickname_changed: bool = False
     created_at: datetime
     points: int = 0
     level: int = 0
-    role: Optional[str] = None
+    role: Optional[str] = None  # Only populated for the user's own /me response
 
 class NicknameSet(BaseModel):
     """Nickname selection request"""

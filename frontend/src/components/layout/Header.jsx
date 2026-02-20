@@ -155,8 +155,8 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           {user?.role === 'admin' && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer text-primary font-medium" onClick={() => nav('/admin')} data-testid="nav-admin">
-                Admin Panel
+              <DropdownMenuItem className="cursor-pointer text-muted-foreground" onClick={() => nav('/admin')} data-testid="nav-admin">
+                Settings & Tools
               </DropdownMenuItem>
             </>
           )}
