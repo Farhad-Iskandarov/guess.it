@@ -69,8 +69,12 @@ ToggleRow.displayName = 'ToggleRow';
 const PrivacyNotificationsSection = memo(() => {
   const [onlineVisibility, setOnlineVisibility] = useState(true);
   const [notificationSound, setNotificationSound] = useState(true);
+  const [readReceipts, setReadReceipts] = useState(true);
+  const [deliveryStatus, setDeliveryStatus] = useState(true);
   const [loadingVisibility, setLoadingVisibility] = useState(false);
   const [loadingSound, setLoadingSound] = useState(false);
+  const [loadingReadReceipts, setLoadingReadReceipts] = useState(false);
+  const [loadingDeliveryStatus, setLoadingDeliveryStatus] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -80,6 +84,8 @@ const PrivacyNotificationsSection = memo(() => {
           const data = await resp.json();
           setOnlineVisibility(data.data?.online_visibility ?? true);
           setNotificationSound(data.data?.notification_sound ?? true);
+          setReadReceipts(data.data?.read_receipts_enabled ?? true);
+          setDeliveryStatus(data.data?.delivery_status_enabled ?? true);
         }
       } catch {}
     };
@@ -128,6 +134,48 @@ const PrivacyNotificationsSection = memo(() => {
     }
   }, [notificationSound]);
 
+  const toggleReadReceipts = useCallback(async () => {
+    setLoadingReadReceipts(true);
+    const newVal = !readReceipts;
+    try {
+      const resp = await fetch(`${API_URL}/api/settings/read-receipts`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newVal })
+      });
+      if (resp.ok) {
+        setReadReceipts(newVal);
+        toast.success(newVal ? 'Read receipts enabled' : 'Read receipts disabled');
+      }
+    } catch {
+      toast.error('Failed to update read receipts');
+    } finally {
+      setLoadingReadReceipts(false);
+    }
+  }, [readReceipts]);
+
+  const toggleDeliveryStatus = useCallback(async () => {
+    setLoadingDeliveryStatus(true);
+    const newVal = !deliveryStatus;
+    try {
+      const resp = await fetch(`${API_URL}/api/settings/delivery-status`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: newVal })
+      });
+      if (resp.ok) {
+        setDeliveryStatus(newVal);
+        toast.success(newVal ? 'Delivery status enabled' : 'Delivery status disabled');
+      }
+    } catch {
+      toast.error('Failed to update delivery status');
+    } finally {
+      setLoadingDeliveryStatus(false);
+    }
+  }, [deliveryStatus]);
+
   return (
     <SectionCard icon={Bell} title="Privacy & Notifications" description="Control your visibility and notification preferences">
       <div className="space-y-1 divide-y divide-border/30">
@@ -150,6 +198,26 @@ const PrivacyNotificationsSection = memo(() => {
           onChange={toggleSound}
           loading={loadingSound}
           testId="notification-sound"
+        />
+        <ToggleRow
+          icon={Eye}
+          iconColor="bg-violet-500/10 text-violet-500"
+          title="Read Receipts"
+          description="Allow others to see when you've read their messages"
+          checked={readReceipts}
+          onChange={toggleReadReceipts}
+          loading={loadingReadReceipts}
+          testId="read-receipts"
+        />
+        <ToggleRow
+          icon={Check}
+          iconColor="bg-amber-500/10 text-amber-500"
+          title="Delivery Status"
+          description="Allow others to see when messages are delivered to you"
+          checked={deliveryStatus}
+          onChange={toggleDeliveryStatus}
+          loading={loadingDeliveryStatus}
+          testId="delivery-status"
         />
       </div>
     </SectionCard>

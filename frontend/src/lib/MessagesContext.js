@@ -1,6 +1,7 @@
 /**
  * Messages Context
- * Global state for real-time messaging, notifications, and unread counts
+ * Global state for real-time messaging, notifications, unread counts,
+ * delivery/read status tracking
  */
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
@@ -26,16 +27,13 @@ export const MessagesProvider = ({ children }) => {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [conversations, setConversations] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  // Listeners that other components can register to receive real-time chat messages
   const chatListenersRef = useRef([]);
   const notifListenersRef = useRef([]);
   const mountedRef = useRef(true);
   const soundEnabledRef = useRef(true);
 
-  // Keep ref in sync for callbacks
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
-  // Fetch sound preference
   const fetchSoundPreference = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
@@ -47,7 +45,6 @@ export const MessagesProvider = ({ children }) => {
     } catch {}
   }, [isAuthenticated]);
 
-  // Fetch unread counts on mount
   const fetchUnreadCounts = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
@@ -64,7 +61,6 @@ export const MessagesProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // Fetch conversations
   const fetchConversations = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
@@ -78,7 +74,6 @@ export const MessagesProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // Register a chat message listener
   const addChatListener = useCallback((fn) => {
     chatListenersRef.current.push(fn);
     return () => {
@@ -86,7 +81,6 @@ export const MessagesProvider = ({ children }) => {
     };
   }, []);
 
-  // Register a notification listener
   const addNotifListener = useCallback((fn) => {
     notifListenersRef.current.push(fn);
     return () => {
@@ -94,28 +88,25 @@ export const MessagesProvider = ({ children }) => {
     };
   }, []);
 
-  // Handle incoming chat WS messages
   const handleChatMessage = useCallback((data) => {
     if (data.type === 'new_message') {
-      // Play sound
       if (soundEnabledRef.current) playSoundForEvent('new_message');
-      // Increment unread
       setUnreadMessages(prev => prev + 1);
-      // Update conversation list
       setConversations(prev => {
         const idx = prev.findIndex(c => c.user_id === data.message.sender_id);
         if (idx >= 0) {
           const updated = [...prev];
+          const msgText = data.message.message_type === 'match_share' ? 'Shared a match' : data.message.message?.substring(0, 80);
           updated[idx] = {
             ...updated[idx],
             unread_count: (updated[idx].unread_count || 0) + 1,
             last_message: {
-              message: data.message.message.substring(0, 80),
+              message: msgText,
               created_at: data.message.created_at,
-              is_mine: false
+              is_mine: false,
+              message_type: data.message.message_type || 'text'
             }
           };
-          // Move to top
           const [item] = updated.splice(idx, 1);
           updated.unshift(item);
           return updated;
@@ -123,25 +114,20 @@ export const MessagesProvider = ({ children }) => {
         return prev;
       });
     }
-    // Notify all listeners
+    // Forward all events (new_message, message_delivered, messages_read, messages_delivered) to listeners
     chatListenersRef.current.forEach(fn => fn(data));
   }, []);
 
-  // Handle incoming notification WS messages
   const handleNotifMessage = useCallback((data) => {
     if (data.type === 'notification') {
       setUnreadNotifications(prev => prev + 1);
-      // Play sound based on notification type
       if (soundEnabledRef.current && data.notification?.type) {
         playSoundForEvent(data.notification.type);
       }
-    } else if (data.type === 'new_message_notification') {
-      // Sound already handled by chat WS
     }
     notifListenersRef.current.forEach(fn => fn(data));
   }, []);
 
-  // Mark conversation as read (called by chat page)
   const markConversationRead = useCallback((friendId, count) => {
     setUnreadMessages(prev => Math.max(0, prev - (count || 0)));
     setConversations(prev =>
@@ -151,7 +137,6 @@ export const MessagesProvider = ({ children }) => {
     );
   }, []);
 
-  // Connect WebSockets
   useEffect(() => {
     mountedRef.current = true;
 

@@ -579,11 +579,19 @@ export const MyPredictionsPage = () => {
   const [viewMode, setViewMode] = useState(() => {
     return (typeof window !== 'undefined' && localStorage.getItem('guessit-predictions-view')) || 'grid';
   });
+  const [viewTransitioning, setViewTransitioning] = useState(false);
 
   const handleViewModeChange = useCallback((mode) => {
-    setViewMode(mode);
-    localStorage.setItem('guessit-predictions-view', mode);
-  }, []);
+    if (mode === viewMode || viewTransitioning) return;
+    setViewTransitioning(true);
+    setTimeout(() => {
+      setViewMode(mode);
+      localStorage.setItem('guessit-predictions-view', mode);
+      requestAnimationFrame(() => {
+        setViewTransitioning(false);
+      });
+    }, 200);
+  }, [viewMode, viewTransitioning]);
 
   const fetchPredictions = useCallback(async () => {
     setIsLoading(true);
@@ -871,7 +879,7 @@ export const MyPredictionsPage = () => {
         ) : (
           <div
             key={`${summaryFilter}-${activeFilter}`}
-            className={`predictions-list-container animate-fade-in ${
+            className={`predictions-list-container view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'} ${
               viewMode === 'grid'
                 ? 'grid grid-cols-1 md:grid-cols-2 gap-3'
                 : 'space-y-3'

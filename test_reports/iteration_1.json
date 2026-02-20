@@ -1,61 +1,47 @@
 {
-  "summary": "Comprehensive testing of GuessIt football match prediction app. All backend APIs (29 tests) passed. Frontend UI flows tested including authentication, navigation, predictions, and favorites.",
-  "backend_issues": {
-    "critical": [],
-    "minor": [
-      {"endpoint": "/api/auth/login", "issue": "testuser2@example.com credentials did not work initially - user had to be registered. This is expected behavior if user doesn't exist."}
-    ]
-  },
+  "summary": "Completed comprehensive end-to-end testing of GuessIT football prediction app. All backend APIs functional, frontend rendering correctly, Football API integration working with live match data display.",
+  
+  "backend_issues": {},
+  
   "frontend_issues": {
-    "ui_bugs": [],
-    "integration_issues": [
-      {"flow": "Match Prediction", "issue": "Prediction buttons showed 'Closed' for live matches - this is correct behavior as predictions lock 10 minutes before match start", "affected_selectors": ["vote buttons"]}
+    "ui_bugs": [
+      {
+        "component": "Theme Toggle",
+        "issue": "Theme toggle button not found with expected data-testid selector",
+        "selector": "[data-testid=\"theme-toggle\"]",
+        "fix_priority": "LOW",
+        "note": "Theme toggle icon visible in header, functionality may work with different selector"
+      }
     ],
-    "design_issues": [
-      {"screen": "HomePage.jsx", "issues": ["Minor ESLint warning: React Hook useEffect has a missing dependency 'activeTab' at line 252"]}
-    ]
+    "integration_issues": []
   },
-  "test_report_links": [
-    "/app/backend/tests/test_guessit_api.py",
-    "/app/test_reports/pytest/pytest_results.xml"
+  
+  "passed_tests": [
+    "API health check endpoint returns 200",
+    "API root endpoint returns GuessIt message", 
+    "Football competitions endpoint returns 8 competitions",
+    "Football matches endpoint returns 120 matches with correct structure",
+    "Auth register endpoint working with validation",
+    "Auth login endpoint working with error handling",
+    "Homepage loads with match data from Football API",
+    "Login page renders with all form fields and Google OAuth",
+    "Register page renders with password validation requirements",
+    "League filter chips are visible and clickable",
+    "Grid/List view toggle functional",
+    "Tab navigation working (Popular, Top Live, Soon, Ended)",
+    "Match cards display team names, scores, and vote buttons",
+    "Vote buttons are clickable and responsive",
+    "Live updates status indicator shows WebSocket connection"
   ],
-  "action_items": [
-    "Fix ESLint warning in HomePage.jsx line 252 - add 'activeTab' to useEffect dependency array or disable the warning if intentional"
-  ],
-  "critical_code_review_comments": [
-    "passlib bcrypt warning in logs: 'AttributeError: module bcrypt has no attribute __about__' - this is a known compatibility issue but doesn't affect functionality",
-    "WebSocket connections are working properly with multiple concurrent connections supported"
-  ],
-  "updated_files": [
-    "/app/backend/tests/test_guessit_api.py"
-  ],
-  "success_rate": {
-    "backend": "100% (29/29 tests passed)",
-    "frontend": "95% - all core flows work, prediction buttons locked for live matches (expected)"
-  },
-  "test_credentials": {
-    "new_test_user_created": "uitest_76272@example.com / TestPass123! / UITest8258",
-    "testuser2_registered": "testuser2@example.com / TestPass123! / Player2"
-  },
-  "seed_data_creation": "Multiple test users created during API testing with prefixed emails",
-  "retest_needed": false,
-  "should_main_agent_self_test": true,
-  "context_for_next_testing_agent": "Backend API tests are in /app/backend/tests/test_guessit_api.py. All 29 tests pass. The Football API integration is working and fetching real match data from football-data.org. WebSocket live updates are active. Authentication flow (register -> set nickname -> login -> logout) works correctly. The 'testuser2@example.com' account was created during testing with password 'TestPass123!' and nickname 'Player2'.",
-  "verified_features": [
-    "Homepage loads with matches displayed correctly - PASS",
-    "Competition filters work (UCL, Premier League, La Liga, Serie A, Bundesliga, Ligue 1) - PASS",
-    "Live matches section displays correctly - PASS with 2 Copa Libertadores matches",
-    "All Matches section displays correctly - PASS",
-    "Register page loads and form works - PASS",
-    "Login page loads and form works - PASS",
-    "User registration via email - PASS",
-    "User login with registered account - PASS",
-    "Nickname setting flow after registration - PASS",
-    "Viewing my predictions page - PASS",
-    "Navigation between pages (Home, Login, Register) - PASS",
-    "Dark/Light mode toggle in header - PASS",
-    "WebSocket live updates - ACTIVE",
-    "Favorite tab appears for authenticated users - PASS"
-  ],
-  "notes": "The prediction buttons show 'Closed' status for currently live matches which is correct behavior - predictions are locked 10 minutes before match start. The Football API (football-data.org) is rate limited at 10 req/min on free tier."
+  
+  "test_report_links": ["/app/backend_test.py"],
+  
+  "success_percentage": "Backend: 100% (8/8), Frontend: 95% (1 minor issue)",
+  
+  "updated_files": ["/app/backend_test.py"],
+  
+  "action_item_for_main_agent": "",
+  
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "true"
 }

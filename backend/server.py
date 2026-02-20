@@ -260,8 +260,11 @@ async def startup_event():
     # Create indexes for messages and notifications
     await db.messages.create_index([("sender_id", 1), ("receiver_id", 1), ("created_at", -1)])
     await db.messages.create_index([("receiver_id", 1), ("read", 1)])
+    await db.messages.create_index([("receiver_id", 1), ("delivered", 1)])
     await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("read", 1)])
+    await db.favorite_matches.create_index([("user_id", 1), ("match_id", 1)], unique=True)
+    await db.favorite_matches.create_index([("user_id", 1), ("created_at", -1)])
     start_polling(db)
 
 

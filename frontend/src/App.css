@@ -139,10 +139,43 @@ main {
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
 }
 
-/* Match list container: no transition on layout change for instant toggle */
-.match-list-container {
-    /* transitions enabled for smooth view switching */
+/* ===== Grid/List View Switch Animation ===== */
+.view-switch-wrapper {
+    transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
+.view-switch-out {
+    opacity: 0;
+    transform: scale(0.97);
+}
+.view-switch-in {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Transition is handled via CSS classes in React
+   to avoid conflicts with existing CSS animations like live-glow */
+.match-list-container {
+    gap: 0.75rem;
+}
+
+/* Initial card-appear animation (used on page load / filter change) */
+.match-list-container .match-row-card {
+    animation: card-appear 0.3s ease-out both;
+}
+@keyframes card-appear {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Stagger children for initial load */
+.match-list-container .match-row-card:nth-child(1) { animation-delay: 0ms; }
+.match-list-container .match-row-card:nth-child(2) { animation-delay: 30ms; }
+.match-list-container .match-row-card:nth-child(3) { animation-delay: 60ms; }
+.match-list-container .match-row-card:nth-child(4) { animation-delay: 90ms; }
+.match-list-container .match-row-card:nth-child(5) { animation-delay: 120ms; }
+.match-list-container .match-row-card:nth-child(6) { animation-delay: 150ms; }
+.match-list-container .match-row-card:nth-child(n+7) { animation-delay: 180ms; }
+
 .match-list-container .match-row-card > div > div {
     transition: none !important;
 }
@@ -156,29 +189,6 @@ main {
 button, a, input, select, textarea {
     transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-
-/* ===== Match List: CSS-based Grid/List toggle (no re-render) ===== */
-.match-list-container {
-    gap: 0.75rem;
-}
-
-/* Smooth view mode transition — animate cards on grid/list switch */
-.match-list-container .match-row-card {
-    animation: card-appear 0.3s ease-out both;
-}
-@keyframes card-appear {
-    from { opacity: 0; transform: translateY(8px) scale(0.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* Stagger children for visual delight */
-.match-list-container .match-row-card:nth-child(1) { animation-delay: 0ms; }
-.match-list-container .match-row-card:nth-child(2) { animation-delay: 30ms; }
-.match-list-container .match-row-card:nth-child(3) { animation-delay: 60ms; }
-.match-list-container .match-row-card:nth-child(4) { animation-delay: 90ms; }
-.match-list-container .match-row-card:nth-child(5) { animation-delay: 120ms; }
-.match-list-container .match-row-card:nth-child(6) { animation-delay: 150ms; }
-.match-list-container .match-row-card:nth-child(n+7) { animation-delay: 180ms; }
 
 /* Filter change fade animation */
 .match-list-animate-in {
@@ -448,4 +458,87 @@ button, a, input, select, textarea {
 /* ===== Favorite Empty State ===== */
 .favorite-empty-state {
     animation: fade-in 0.3s ease-out;
+}
+
+/* ===== Message Status Checkmarks ===== */
+.msg-status-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0px;
+    margin-left: 4px;
+}
+.msg-check {
+    width: 14px;
+    height: 14px;
+}
+.msg-check-single {
+    opacity: 0.5;
+}
+.msg-check-delivered {
+    opacity: 0.7;
+}
+.msg-check-read {
+    color: hsl(var(--primary));
+    opacity: 1;
+}
+
+/* ===== Chat Match Share Card ===== */
+.chat-match-card {
+    border-radius: 0.75rem;
+    border: 1px solid hsl(var(--border) / 0.5);
+    background: hsl(var(--card) / 0.6);
+    padding: 0.75rem;
+    backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.chat-match-card:hover {
+    border-color: hsl(var(--primary) / 0.4);
+    box-shadow: 0 2px 12px hsl(var(--primary) / 0.1);
+}
+
+/* ===== Messages Page Layout — Dual Independent Scroll ===== */
+.messages-layout {
+    height: calc(100vh - 4rem);
+    display: flex;
+    overflow: hidden;
+}
+.messages-sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+.messages-sidebar-list {
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+.messages-chat-area {
+    flex: 1 1 0%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+.messages-chat-messages {
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+/* ===== Favorite Match Bookmark Animation ===== */
+@keyframes bookmark-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+}
+.bookmark-animate {
+    animation: bookmark-pop 0.3s ease-out;
 }

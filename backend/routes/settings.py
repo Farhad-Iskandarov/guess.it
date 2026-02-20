@@ -90,6 +90,14 @@ class NotificationSoundRequest(BaseModel):
     """Toggle notification sounds"""
     enabled: bool
 
+class ReadReceiptsRequest(BaseModel):
+    """Toggle read receipts"""
+    enabled: bool
+
+class DeliveryStatusRequest(BaseModel):
+    """Toggle delivery status visibility"""
+    enabled: bool
+
 # ==================== Helper Functions ====================
 
 def get_db(request: Request) -> AsyncIOMotorDatabase:
@@ -571,6 +579,44 @@ async def get_all_preferences(
         message="Preferences loaded",
         data={
             "online_visibility": user.get("online_visibility", True),
-            "notification_sound": user.get("notification_sound", True)
+            "notification_sound": user.get("notification_sound", True),
+            "read_receipts_enabled": user.get("read_receipts_enabled", True),
+            "delivery_status_enabled": user.get("delivery_status_enabled", True)
         }
+    )
+
+@router.post("/read-receipts", response_model=SettingsResponse)
+async def set_read_receipts(
+    data: ReadReceiptsRequest,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Toggle read receipts - if disabled, sender cannot see when you read messages"""
+    user = await get_current_user(request, db)
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"read_receipts_enabled": data.enabled, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return SettingsResponse(
+        success=True,
+        message=f"Read receipts {'enabled' if data.enabled else 'disabled'}",
+        data={"read_receipts_enabled": data.enabled}
+    )
+
+@router.post("/delivery-status", response_model=SettingsResponse)
+async def set_delivery_status(
+    data: DeliveryStatusRequest,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Toggle delivery status visibility"""
+    user = await get_current_user(request, db)
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"delivery_status_enabled": data.enabled, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return SettingsResponse(
+        success=True,
+        message=f"Delivery status {'enabled' if data.enabled else 'disabled'}",
+        data={"delivery_status_enabled": data.enabled}
     )

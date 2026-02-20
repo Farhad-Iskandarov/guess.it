@@ -1,9 +1,10 @@
 import { useState, useCallback, memo, useEffect, useRef } from 'react';
-import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart } from 'lucide-react';
+import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction } from '@/services/predictions';
 import { addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
+import { addFavoriteMatch, removeFavoriteMatch } from '@/services/messages';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -157,6 +158,40 @@ const FavoriteHeart = memo(({ teamId, teamName, teamCrest, isFavorite, onToggle,
   );
 });
 FavoriteHeart.displayName = 'FavoriteHeart';
+
+// ============ Bookmark Match Button ============
+const BookmarkMatch = memo(({ match, isBookmarked, onToggle, isAuthenticated }) => {
+  const [animating, setAnimating] = useState(false);
+
+  if (!isAuthenticated) return null;
+
+  const handleClick = async (e) => {
+    e.stopPropagation();
+    setAnimating(true);
+    try {
+      await onToggle(match, !isBookmarked);
+    } catch {}
+    setTimeout(() => setAnimating(false), 300);
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex-shrink-0 p-1 rounded-md hover:bg-muted/50 transition-colors"
+      data-testid={`bookmark-match-${match.id}`}
+      aria-label={isBookmarked ? 'Remove from favorite matches' : 'Add to favorite matches'}
+    >
+      <Bookmark
+        className={`w-4 h-4 transition-all duration-200 ${
+          isBookmarked
+            ? 'text-amber-500 fill-amber-500'
+            : 'text-muted-foreground/40 hover:text-amber-400'
+        } ${animating ? 'scale-125' : 'scale-100'}`}
+      />
+    </button>
+  );
+});
+BookmarkMatch.displayName = 'BookmarkMatch';
 
 // ============ Vote Button ============
 const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disabled, locked }) => {
@@ -344,6 +379,8 @@ const MatchRow = memo(({
   favoriteTeamIds,
   onToggleFavorite,
   isAuthenticated,
+  favoriteMatchIds,
+  onToggleFavoriteMatch,
 }) => {
   const displayedSelection = currentSelection !== undefined ? currentSelection : savedPrediction;
   const isLocked = match.predictionLocked;
@@ -382,6 +419,14 @@ const MatchRow = memo(({
         <span className="match-row-datetime whitespace-nowrap">{match.dateTime}</span>
         <span className="text-border hidden sm:inline">|</span>
         <span className="truncate">{match.competition}</span>
+        <div className="ml-auto">
+          <BookmarkMatch
+            match={match}
+            isBookmarked={favoriteMatchIds?.has(match.id)}
+            onToggle={onToggleFavoriteMatch}
+            isAuthenticated={isAuthenticated}
+          />
+        </div>
       </div>
 
       {/* Locked Banner */}
@@ -545,7 +590,7 @@ const MatchRow = memo(({
 MatchRow.displayName = 'MatchRow';
 
 // ============ Main MatchList ============
-export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid', favoriteTeamIds, onToggleFavorite }) => {
+export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid', favoriteTeamIds, onToggleFavorite, favoriteMatchIds, onToggleFavoriteMatch }) => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -554,6 +599,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingPrediction, setPendingPrediction] = useState(null);
   const [prevScores, setPrevScores] = useState({});
+  const containerRef1 = useRef(null);
+  const containerRef2 = useRef(null);
 
   // Track score changes for animation
   const prevMatchesRef = useRef(matches);
@@ -696,6 +743,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               <span className="text-xs text-muted-foreground">({liveMatches.length})</span>
             </div>
             <div
+              ref={containerRef1}
               className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
               data-testid="live-match-list-container"
               data-view-mode={viewMode}
@@ -715,6 +763,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
                   favoriteTeamIds={favoriteTeamIds}
                   onToggleFavorite={onToggleFavorite}
                   isAuthenticated={isAuthenticated}
+                  favoriteMatchIds={favoriteMatchIds}
+                  onToggleFavoriteMatch={onToggleFavoriteMatch}
                 />
               ))}
             </div>
@@ -726,6 +776,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
           {activeLeague === 'live' ? 'Live Matches' : 'All Matches'}
         </h3>
         <div
+          ref={containerRef2}
           className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
           data-testid="match-list-container"
           data-view-mode={viewMode}
@@ -745,6 +796,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               favoriteTeamIds={favoriteTeamIds}
               onToggleFavorite={onToggleFavorite}
               isAuthenticated={isAuthenticated}
+              favoriteMatchIds={favoriteMatchIds}
+              onToggleFavoriteMatch={onToggleFavoriteMatch}
             />
           ))}
         </div>

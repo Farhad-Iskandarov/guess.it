@@ -1,6 +1,6 @@
 /**
  * Messages API Service
- * Real-time messaging between friends
+ * Real-time messaging between friends with delivery/read status
  */
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -23,12 +23,16 @@ export const getChatHistory = async (friendId, { limit = 50, before } = {}) => {
   return await response.json();
 };
 
-export const sendMessage = async (receiverId, message) => {
+export const sendMessage = async (receiverId, message, messageType = 'text', matchData = null) => {
+  const body = { receiver_id: receiverId, message, message_type: messageType };
+  if (messageType === 'match_share' && matchData) {
+    body.match_data = matchData;
+  }
   const response = await fetch(`${API_URL}/api/messages/send`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ receiver_id: receiverId, message })
+    body: JSON.stringify(body)
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.detail || 'Failed to send message');
@@ -44,11 +48,50 @@ export const markMessagesRead = async (friendId) => {
   return await response.json();
 };
 
+export const markMessagesDelivered = async (friendId) => {
+  const response = await fetch(`${API_URL}/api/messages/delivered/${friendId}`, {
+    method: 'POST',
+    credentials: 'include'
+  });
+  if (!response.ok) throw new Error('Failed to mark messages delivered');
+  return await response.json();
+};
+
 export const getUnreadCount = async () => {
   const response = await fetch(`${API_URL}/api/messages/unread-count`, {
     credentials: 'include'
   });
   if (!response.ok) throw new Error('Failed to fetch unread count');
+  return await response.json();
+};
+
+// ==================== Favorites Matches API ====================
+
+export const getFavoriteMatches = async () => {
+  const response = await fetch(`${API_URL}/api/favorites/matches`, {
+    credentials: 'include'
+  });
+  if (!response.ok) throw new Error('Failed to fetch favorite matches');
+  return await response.json();
+};
+
+export const addFavoriteMatch = async (matchData) => {
+  const response = await fetch(`${API_URL}/api/favorites/matches`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(matchData)
+  });
+  if (!response.ok) throw new Error('Failed to add favorite match');
+  return await response.json();
+};
+
+export const removeFavoriteMatch = async (matchId) => {
+  const response = await fetch(`${API_URL}/api/favorites/matches/${matchId}`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  if (!response.ok) throw new Error('Failed to remove favorite match');
   return await response.json();
 };
 
@@ -106,7 +149,6 @@ export const connectChatWS = (userId, onMessage) => {
 
     chatWS.onopen = () => {
       console.log('[ChatWS] Connected');
-      // Ping every 25s to keep alive
       chatPingInterval = setInterval(() => {
         if (chatWS?.readyState === WebSocket.OPEN) {
           chatWS.send('ping');
@@ -129,7 +171,6 @@ export const connectChatWS = (userId, onMessage) => {
       console.log('[ChatWS] Closed:', event.code);
       if (chatPingInterval) clearInterval(chatPingInterval);
       chatWS = null;
-      // Auto-reconnect unless intentionally closed
       if (event.code !== 1000 && event.code !== 4001 && event.code !== 4003) {
         chatReconnectTimer = setTimeout(() => {
           console.log('[ChatWS] Reconnecting...');

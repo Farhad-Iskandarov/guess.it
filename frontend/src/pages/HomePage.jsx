@@ -10,12 +10,13 @@ import { MatchList } from '@/components/home/MatchList';
 import { useAuth } from '@/lib/AuthContext';
 import { getMyPredictions, savePrediction } from '@/services/predictions';
 import { getFavoriteClubs, addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
+import { getFavoriteMatches, addFavoriteMatch, removeFavoriteMatch } from '@/services/messages';
 import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches, fetchEndedMatches } from '@/services/matches';
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock, Bookmark } from 'lucide-react';
 
 // League filters - maps to competition codes
 const leagueFilters = [
@@ -83,12 +84,11 @@ export const HomePage = () => {
   });
   const [matchError, setMatchError] = useState(null);
 
-  // View mode: use ref + direct DOM toggle for instant CSS switch (no React re-render)
-  const viewModeRef = useRef(
-    (typeof window !== 'undefined' && localStorage.getItem('guessit-view-mode')) || 'grid'
+  // View mode
+  const [viewMode, setViewMode] = useState(
+    () => (typeof window !== 'undefined' && localStorage.getItem('guessit-view-mode')) || 'grid'
   );
-  const [viewMode, setViewMode] = useState(viewModeRef.current);
-  const matchListRef = useRef(null);
+  const [viewTransitioning, setViewTransitioning] = useState(false);
 
   // Saved predictions from backend
   const [savedPredictions, setSavedPredictions] = useState({});
@@ -96,6 +96,10 @@ export const HomePage = () => {
   // Favorites state
   const [favoriteTeamIds, setFavoriteTeamIds] = useState(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+
+  // Favorite matches state
+  const [favoriteMatchIds, setFavoriteMatchIds] = useState(new Set());
+  const [favoriteMatchList, setFavoriteMatchList] = useState([]);
 
   // Ended matches state
   const [endedMatches, setEndedMatches] = useState([]);
@@ -308,6 +312,71 @@ export const HomePage = () => {
     }
   }, []);
 
+  // Fetch favorite matches
+  useEffect(() => {
+    const fetchFavMatches = async () => {
+      if (isAuthenticated) {
+        try {
+          const data = await getFavoriteMatches();
+          const items = data.favorites || [];
+          setFavoriteMatchList(items);
+          setFavoriteMatchIds(new Set(items.map(f => f.match_id)));
+        } catch (error) {
+          console.error('Failed to fetch favorite matches:', error);
+        }
+      } else {
+        setFavoriteMatchIds(new Set());
+        setFavoriteMatchList([]);
+      }
+    };
+    fetchFavMatches();
+  }, [isAuthenticated]);
+
+  // Toggle favorite match handler
+  const handleToggleFavoriteMatch = useCallback(async (match, shouldAdd) => {
+    try {
+      if (shouldAdd) {
+        await addFavoriteMatch({
+          match_id: match.id,
+          home_team: match.homeTeam?.name,
+          away_team: match.awayTeam?.name,
+          home_crest: match.homeTeam?.crest,
+          away_crest: match.awayTeam?.crest,
+          competition: match.competition,
+          date_time: match.dateTime,
+          status: match.status,
+          score_home: match.score?.home,
+          score_away: match.score?.away,
+        });
+        setFavoriteMatchIds(prev => new Set([...prev, match.id]));
+        setFavoriteMatchList(prev => [...prev, {
+          match_id: match.id,
+          home_team: match.homeTeam?.name,
+          away_team: match.awayTeam?.name,
+          home_crest: match.homeTeam?.crest,
+          away_crest: match.awayTeam?.crest,
+          competition: match.competition,
+          date_time: match.dateTime,
+          status: match.status,
+          score_home: match.score?.home,
+          score_away: match.score?.away,
+        }]);
+        toast.success('Match bookmarked', { duration: 2000 });
+      } else {
+        await removeFavoriteMatch(match.id);
+        setFavoriteMatchIds(prev => {
+          const next = new Set(prev);
+          next.delete(match.id);
+          return next;
+        });
+        setFavoriteMatchList(prev => prev.filter(f => f.match_id !== match.id));
+        toast.success('Bookmark removed', { duration: 2000 });
+      }
+    } catch (error) {
+      toast.error('Failed to update bookmark', { description: error.message, duration: 3000 });
+    }
+  }, []);
+
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
     setFilterKey(prev => prev + 1);
@@ -348,16 +417,18 @@ export const HomePage = () => {
   }, [logout]);
 
   const handleViewModeChange = useCallback((mode) => {
-    // Direct DOM class toggle for instant CSS switch - bypass React re-render
-    viewModeRef.current = mode;
-    setViewMode(mode); // Update button highlight state only
-    localStorage.setItem('guessit-view-mode', mode);
-    const container = matchListRef.current || document.querySelector('[data-testid="match-list-container"]');
-    if (container) {
-      container.className = `match-list-container ${mode === 'grid' ? 'match-view-grid' : 'match-view-list'}`;
-      container.setAttribute('data-view-mode', mode);
-    }
-  }, []);
+    if (mode === viewMode || viewTransitioning) return;
+    setViewTransitioning(true);
+    // After fade-out animation completes, swap layout and fade in
+    setTimeout(() => {
+      setViewMode(mode);
+      localStorage.setItem('guessit-view-mode', mode);
+      // Small extra frame to let React render new layout before fading in
+      requestAnimationFrame(() => {
+        setViewTransitioning(false);
+      });
+    }, 200);
+  }, [viewMode, viewTransitioning]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -463,43 +534,101 @@ export const HomePage = () => {
 
         {/* Favorite Tab Content */}
         {activeTab === 'favorite' && isAuthenticated && (
-          <div key={`filter-fav-${filterKey}`} className="match-list-animate-in">
+          <div key={`filter-fav-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {(() => {
               const favoriteMatches = matches.filter(m =>
                 favoriteTeamIds.has(m.homeTeam.id) || favoriteTeamIds.has(m.awayTeam.id)
               );
-              if (favoriteTeamIds.size === 0) {
+              if (favoriteTeamIds.size === 0 && favoriteMatchList.length === 0) {
                 return (
                   <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-empty">
                     <Heart className="w-12 h-12 text-muted-foreground/30" />
-                    <p className="text-lg text-foreground font-medium">No favorite clubs yet</p>
+                    <p className="text-lg text-foreground font-medium">No favorites yet</p>
                     <p className="text-sm text-muted-foreground text-center max-w-md">
-                      Tap the heart icon next to any club name in a match card to add it to your favorites.
-                    </p>
-                  </div>
-                );
-              }
-              if (favoriteMatches.length === 0) {
-                return (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-no-matches">
-                    <Heart className="w-12 h-12 text-red-500/30" />
-                    <p className="text-lg text-foreground font-medium">No matches for your favorites</p>
-                    <p className="text-sm text-muted-foreground text-center max-w-md">
-                      None of your favorite clubs have upcoming matches right now. Check back later!
+                      Tap the heart icon or bookmark icon on any match card to add favorites.
                     </p>
                   </div>
                 );
               }
               return (
-                <MatchList
-                  matches={favoriteMatches}
-                  savedPredictions={savedPredictions}
-                  onPredictionSaved={handlePredictionSaved}
-                  activeLeague={activeLeague}
-                  viewMode={viewMode}
-                  favoriteTeamIds={favoriteTeamIds}
-                  onToggleFavorite={handleToggleFavorite}
-                />
+                <>
+                  {favoriteMatches.length > 0 && (
+                    <>
+                      <div className="flex items-center gap-2 mt-4 mb-3">
+                        <Heart className="w-4 h-4 text-red-500" />
+                        <h3 className="text-base font-semibold text-foreground">Favorite Clubs</h3>
+                        <span className="text-xs text-muted-foreground">({favoriteMatches.length} matches)</span>
+                      </div>
+                      <MatchList
+                        matches={favoriteMatches}
+                        savedPredictions={savedPredictions}
+                        onPredictionSaved={handlePredictionSaved}
+                        activeLeague={activeLeague}
+                        viewMode={viewMode}
+                        favoriteTeamIds={favoriteTeamIds}
+                        onToggleFavorite={handleToggleFavorite}
+                        favoriteMatchIds={favoriteMatchIds}
+                        onToggleFavoriteMatch={handleToggleFavoriteMatch}
+                      />
+                    </>
+                  )}
+                  {favoriteMatchList.length > 0 && (
+                    <>
+                      <div className="flex items-center gap-2 mt-6 mb-3">
+                        <Bookmark className="w-4 h-4 text-amber-500" />
+                        <h3 className="text-base font-semibold text-foreground">Bookmarked Matches</h3>
+                        <span className="text-xs text-muted-foreground">({favoriteMatchList.length})</span>
+                      </div>
+                      <div className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}>
+                        {favoriteMatchList.map(fav => (
+                          <div key={fav.match_id} className="match-row-card rounded-xl border border-border bg-card hover:border-primary/30 transition-all p-3 sm:p-4" data-testid={`bookmarked-match-${fav.match_id}`}>
+                            <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-muted-foreground mb-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${fav.status === 'LIVE' ? 'bg-red-500/20 text-red-400' : fav.status === 'FINISHED' ? 'bg-muted text-muted-foreground' : 'bg-blue-500/15 text-blue-400'}`}>
+                                {fav.status === 'LIVE' ? 'LIVE' : fav.status === 'FINISHED' ? 'FT' : fav.status || 'TBD'}
+                              </span>
+                              {fav.date_time && <span className="text-xs">{fav.date_time}</span>}
+                              <span className="text-border hidden sm:inline">|</span>
+                              <span className="truncate">{fav.competition}</span>
+                              <div className="ml-auto">
+                                <button onClick={() => handleToggleFavoriteMatch({ id: fav.match_id }, false)} className="p-1 rounded-md hover:bg-muted/50 transition-colors" data-testid={`remove-bookmark-${fav.match_id}`}>
+                                  <Bookmark className="w-4 h-4 text-amber-500 fill-amber-500" />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0 space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  {fav.home_crest && <img src={fav.home_crest} alt="" className="w-5 h-5 rounded-full object-contain bg-secondary" />}
+                                  <span className="text-sm font-medium truncate">{fav.home_team}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {fav.away_crest && <img src={fav.away_crest} alt="" className="w-5 h-5 rounded-full object-contain bg-secondary" />}
+                                  <span className="text-sm font-medium truncate">{fav.away_team}</span>
+                                </div>
+                              </div>
+                              {fav.score_home !== null && fav.score_home !== undefined && (
+                                <div className="text-lg font-bold tabular-nums flex-shrink-0">
+                                  <span>{fav.score_home}</span>
+                                  <span className="text-muted-foreground mx-1">-</span>
+                                  <span>{fav.score_away}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {favoriteMatches.length === 0 && favoriteMatchList.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-no-matches">
+                      <Heart className="w-12 h-12 text-red-500/30" />
+                      <p className="text-lg text-foreground font-medium">No matches for your favorites</p>
+                      <p className="text-sm text-muted-foreground text-center max-w-md">
+                        None of your favorite clubs have upcoming matches. Try bookmarking individual matches!
+                      </p>
+                    </div>
+                  )}
+                </>
               );
             })()}
           </div>
@@ -507,7 +636,7 @@ export const HomePage = () => {
 
         {/* Ended Matches Tab Content */}
         {activeTab === 'ended' && (
-          <div key={`filter-ended-${filterKey}`} className="match-list-animate-in ended-matches-section" data-testid="ended-matches-section">
+          <div key={`filter-ended-${filterKey}`} className={`match-list-animate-in ended-matches-section view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`} data-testid="ended-matches-section">
             {endedLoading ? (
               <MatchSkeletonGrid />
             ) : endedMatches.length > 0 ? (
@@ -525,6 +654,8 @@ export const HomePage = () => {
                   viewMode={viewMode}
                   favoriteTeamIds={favoriteTeamIds}
                   onToggleFavorite={handleToggleFavorite}
+                  favoriteMatchIds={favoriteMatchIds}
+                  onToggleFavoriteMatch={handleToggleFavoriteMatch}
                 />
               </>
             ) : (
@@ -541,7 +672,7 @@ export const HomePage = () => {
 
         {/* Match Content (non-favorite, non-ended tabs) */}
         {matches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div key={`filter-${activeLeague}-${filterKey}`} className="match-list-animate-in">
+          <div key={`filter-${activeLeague}-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {/* Full Match List */}
             <MatchList
               matches={matches}
@@ -551,6 +682,8 @@ export const HomePage = () => {
               viewMode={viewMode}
               favoriteTeamIds={favoriteTeamIds}
               onToggleFavorite={handleToggleFavorite}
+              favoriteMatchIds={favoriteMatchIds}
+              onToggleFavoriteMatch={handleToggleFavoriteMatch}
             />
           </div>
         )}
