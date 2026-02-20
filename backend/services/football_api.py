@@ -94,24 +94,49 @@ async def _check_rate_limit():
         _request_times.append(now)
 
 
-def _get_headers() -> dict:
-    api_key = os.environ.get("FOOTBALL_API_KEY", "")
+async def _get_headers(db=None) -> dict:
+    """Get headers with API key from database or .env fallback"""
+    api_key = None
+    
+    # Try to get active API key from database first
+    if db is not None:
+        try:
+            active_api = await db.admin_api_configs.find_one(
+                {"is_active": True, "enabled": True},
+                {"_id": 0, "api_key": 1}
+            )
+            if active_api and active_api.get("api_key"):
+                api_key = active_api["api_key"]
+                logger.info("Using active API key from database")
+        except Exception as e:
+            logger.warning(f"Failed to fetch API key from database: {e}")
+    
+    # Fallback to environment variable
+    if not api_key:
+        api_key = os.environ.get("FOOTBALL_API_KEY", "")
+        if api_key:
+            logger.info("Using API key from environment variable")
+        else:
+            logger.warning("No API key found in database or environment")
+    
     return {"X-Auth-Token": api_key}
 
 
-async def _api_get(endpoint: str, params: dict = None) -> dict:
+async def _api_get(endpoint: str, params: dict = None, db=None) -> dict:
     """Make a GET request to Football-Data.org with rate limiting"""
     await _check_rate_limit()
 
     url = f"{BASE_URL}{endpoint}"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(url, headers=_get_headers(), params=params)
+            headers = await _get_headers(db)
+            response = await client.get(url, headers=headers, params=params)
 
             if response.status_code == 429:
                 logger.warning("Rate limited by Football-Data.org, waiting 60s")
                 await asyncio.sleep(60)
-                response = await client.get(url, headers=_get_headers(), params=params)
+                headers = await _get_headers(db)
+                response = await client.get(url, headers=headers, params=params)
 
             if response.status_code != 200:
                 logger.error(f"Football API error: {response.status_code} - {response.text[:200]}")
@@ -342,10 +367,10 @@ async def get_matches(
     # Fetch matches
     if competition and competition in FREE_COMPETITIONS:
         comp_code = competition
-        data = await _api_get(f"/competitions/{comp_code}/matches", params)
+        data = await _api_get(f"/competitions/{comp_code}/matches", params, db)
     else:
         # Fetch from all competitions for today/date range
-        data = await _api_get("/matches", params)
+        data = await _api_get("/matches", params, db)
 
     raw_matches = data.get("matches", [])
 

@@ -106,6 +106,11 @@ UPLOAD_DIR = ROOT_DIR / 'uploads' / 'avatars'
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/api/uploads/avatars", StaticFiles(directory=str(UPLOAD_DIR)), name="avatars")
 
+# Create banners directory and mount static files
+BANNER_DIR = ROOT_DIR / 'uploads' / 'banners'
+BANNER_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/api/uploads/banners", StaticFiles(directory=str(BANNER_DIR)), name="banners")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -256,6 +261,40 @@ async def websocket_notifications(websocket: WebSocket, user_id: str):
             )
 
 
+async def seed_default_api_key(db):
+    """Seed default Football API key into database if none exists"""
+    try:
+        # Check if any API configs exist
+        count = await db.admin_api_configs.count_documents({})
+        
+        if count == 0:
+            # Get API key from environment
+            api_key = os.environ.get("FOOTBALL_API_KEY", "")
+            
+            if api_key:
+                # Create default API config
+                doc = {
+                    "api_id": f"api_{uuid.uuid4().hex[:12]}",
+                    "name": "Football-Data.org (Default)",
+                    "base_url": "https://api.football-data.org/v4",
+                    "api_key": api_key,
+                    "enabled": True,
+                    "is_active": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_by": "system"
+                }
+                
+                await db.admin_api_configs.insert_one(doc)
+                logger.info("✅ Seeded default Football API key into database")
+            else:
+                logger.warning("⚠️  No FOOTBALL_API_KEY found in environment - skipping seed")
+        else:
+            logger.info(f"ℹ️  Found {count} API config(s) in database - skipping seed")
+    except Exception as e:
+        logger.error(f"❌ Failed to seed default API key: {e}")
+
+
+
 @app.on_event("startup")
 async def startup_event():
     """Start background polling for live matches"""
@@ -283,6 +322,10 @@ async def startup_event():
     await db.admin_api_configs.create_index([("is_active", 1)])
     await db.admin_favorite_users.create_index([("admin_id", 1), ("user_id", 1)], unique=True)
     await db.predictions.create_index([("user_id", 1), ("points_awarded", 1)])
+    
+    # Seed default Football API key if none exists
+    await seed_default_api_key(db)
+    
     start_polling(db)
 
 

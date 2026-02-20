@@ -16,7 +16,7 @@ import {
   Activity, MessageSquare, Heart, TrendingUp, ScrollText,
   Server, Star, StarOff, Flame, Lock, KeyRound, Filter,
   ChevronDown, ArrowUpDown, Plus, Power, PowerOff, Zap,
-  UserCheck
+  UserCheck, Edit
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -118,6 +118,7 @@ const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'matches', label: 'Matches', icon: Trophy },
+  { id: 'banners', label: 'Carousel Banners', icon: ScrollText },
   { id: 'system', label: 'System', icon: Server },
   { id: 'streaks', label: 'Prediction Monitor', icon: Flame },
   { id: 'favorites', label: 'Favorites', icon: Star },
@@ -201,6 +202,7 @@ const UsersTab = () => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [messagesDialog, setMessagesDialog] = useState(null);
   const [conversations, setConversations] = useState([]);
+  const [conversationSearch, setConversationSearch] = useState('');
   const [chatDialog, setChatDialog] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -431,7 +433,7 @@ const UsersTab = () => {
       </Dialog>
 
       {/* Conversations Dialog (Eye icon) */}
-      <Dialog open={!!messagesDialog} onOpenChange={() => { setMessagesDialog(null); setChatDialog(null); }}>
+      <Dialog open={!!messagesDialog} onOpenChange={() => { setMessagesDialog(null); setChatDialog(null); setConversationSearch(''); }}>
         <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -439,6 +441,29 @@ const UsersTab = () => {
               {chatDialog ? `Chat: ${messagesDialog?.nickname} & ${chatDialog.otherNick}` : `Conversations of ${messagesDialog?.nickname}`}
             </DialogTitle>
           </DialogHeader>
+          {/* Search bar for conversations */}
+          {!chatDialog && messagesDialog && (
+            <div className="px-4 pb-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search conversations..."
+                  value={conversationSearch}
+                  onChange={(e) => setConversationSearch(e.target.value)}
+                  className="pl-9 h-9 text-sm"
+                  data-testid="conversation-search-input"
+                />
+                {conversationSearch && (
+                  <button
+                    onClick={() => setConversationSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-secondary rounded"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto min-h-0">
             {chatLoading ? (
               <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
@@ -468,27 +493,38 @@ const UsersTab = () => {
             ) : (
               /* Conversations list */
               <div className="divide-y divide-border/20">
-                {conversations.length === 0 ? (
-                  <p className="text-center text-muted-foreground text-sm py-8">No conversations</p>
-                ) : conversations.map(c => (
-                  <button key={c.partner_id} onClick={() => openChat(messagesDialog.userId, c.partner_id, c.partner_nickname)}
-                    className="w-full flex items-center gap-3 px-3 py-3 hover:bg-secondary/20 transition-colors text-left" data-testid={`conv-${c.partner_id}`}>
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src={c.partner_picture?.startsWith('/') ? `${API_URL}${c.partner_picture}` : c.partner_picture} />
-                      <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{(c.partner_nickname || '?')[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-foreground">{c.partner_nickname}</span>
-                        {c.partner_online && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+                {(() => {
+                  const filteredConversations = conversations.filter(c =>
+                    c.partner_nickname?.toLowerCase().includes(conversationSearch.toLowerCase()) ||
+                    c.last_message?.toLowerCase().includes(conversationSearch.toLowerCase())
+                  );
+                  
+                  if (filteredConversations.length === 0) {
+                    return <p className="text-center text-muted-foreground text-sm py-8">
+                      {conversationSearch ? 'No conversations found' : 'No conversations'}
+                    </p>;
+                  }
+                  
+                  return filteredConversations.map(c => (
+                    <button key={c.partner_id} onClick={() => openChat(messagesDialog.userId, c.partner_id, c.partner_nickname)}
+                      className="w-full flex items-center gap-3 px-3 py-3 hover:bg-secondary/20 transition-colors text-left" data-testid={`conv-${c.partner_id}`}>
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={c.partner_picture?.startsWith('/') ? `${API_URL}${c.partner_picture}` : c.partner_picture} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-[10px]">{(c.partner_nickname || '?')[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-foreground">{c.partner_nickname}</span>
+                          {c.partner_online && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground truncate">{c.last_message}</p>
                       </div>
-                      <p className="text-[10px] text-muted-foreground truncate">{c.last_message}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-[10px] text-muted-foreground">{c.message_count} msgs</span>
-                    </div>
-                  </button>
-                ))}
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-muted-foreground">{c.message_count} msgs</span>
+                      </div>
+                    </button>
+                  ));
+                })()}
               </div>
             )}
           </div>
@@ -563,6 +599,109 @@ const UsersTab = () => {
                         <span className={`w-1.5 h-1.5 rounded-full ${f.is_online ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
                         {f.nickname || f.user_id}
                       </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* View Predictions Button */}
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="w-full gap-2" 
+                onClick={async () => {
+                  try {
+                    const data = await api(`/users/${userDetail.user_id}/predictions?limit=100`);
+                    setUserDetail(prev => ({ ...prev, predictions: data.predictions || [], showPredictions: true, predictionSearch: '' }));
+                  } catch (e) {
+                    alert(e.message);
+                  }
+                }}
+                data-testid="view-predictions-btn"
+              >
+                <Trophy className="w-4 h-4" />
+                View User Predictions ({userDetail.predictions_count || 0})
+              </Button>
+              
+              {/* Predictions List */}
+              {userDetail.predictions && userDetail.predictions.length > 0 && userDetail.showPredictions && (
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-foreground">Predictions ({userDetail.predictions.length})</p>
+                    <button
+                      onClick={() => setUserDetail(prev => ({ ...prev, showPredictions: false }))}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Hide
+                    </button>
+                  </div>
+                  
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by club name..."
+                      value={userDetail.predictionSearch || ''}
+                      onChange={e => setUserDetail(prev => ({ ...prev, predictionSearch: e.target.value }))}
+                      className="h-8 pl-8 text-xs"
+                      data-testid="prediction-search"
+                    />
+                  </div>
+                  
+                  {/* Predictions */}
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {userDetail.predictions
+                      .filter(pred => {
+                        if (!userDetail.predictionSearch) return true;
+                        const search = userDetail.predictionSearch.toLowerCase();
+                        const home = pred.match_data?.homeTeam?.name?.toLowerCase() || '';
+                        const away = pred.match_data?.awayTeam?.name?.toLowerCase() || '';
+                        return home.includes(search) || away.includes(search);
+                      })
+                      .map(pred => (
+                      <div key={pred.prediction_id} className="p-3 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors">
+                        {/* Match Info */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            {pred.match_data?.homeTeam?.crest && (
+                              <img src={pred.match_data.homeTeam.crest} alt="" className="w-5 h-5 object-contain" />
+                            )}
+                            <span className="text-xs font-semibold text-foreground truncate">
+                              {pred.match_data?.homeTeam?.name || 'Unknown'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">vs</span>
+                            {pred.match_data?.awayTeam?.crest && (
+                              <img src={pred.match_data.awayTeam.crest} alt="" className="w-5 h-5 object-contain" />
+                            )}
+                            <span className="text-xs font-semibold text-foreground truncate">
+                              {pred.match_data?.awayTeam?.name || 'Unknown'}
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                            pred.result === 'correct' ? 'bg-emerald-500/20 text-emerald-500' :
+                            pred.result === 'wrong' ? 'bg-red-500/20 text-red-500' :
+                            'bg-amber-500/20 text-amber-500'
+                          }`}>
+                            {pred.result === 'correct' ? '✓ Correct' : pred.result === 'wrong' ? '✗ Wrong' : 'Pending'}
+                          </span>
+                        </div>
+                        
+                        {/* Prediction & Points */}
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Predicted: <span className="text-foreground font-semibold">{pred.prediction === 'home' ? 'Home Win' : pred.prediction === 'away' ? 'Away Win' : 'Draw'}</span>
+                          </span>
+                          {pred.points_value !== undefined && (
+                            <span className={`font-bold ${pred.points_value > 0 ? 'text-emerald-500' : pred.points_value < 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                              {pred.points_value > 0 ? '+' : ''}{pred.points_value} pts
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Date */}
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                          {new Date(pred.created_at).toLocaleString()}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -666,6 +805,343 @@ const MatchesTab = () => {
 };
 
 /* ============ SYSTEM TAB (API Management) ============ */
+
+
+/* ============ BANNERS TAB ============ */
+const BannersTab = () => {
+  const [banners, setBanners] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editBanner, setEditBanner] = useState(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    subtitle: '',
+    button_text: '',
+    button_link: '',
+    order: 0,
+    is_active: true
+  });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const fetchBanners = useCallback(() => {
+    setLoading(true);
+    api('/banners').then(d => setBanners(d.banners || [])).catch(console.error).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { fetchBanners(); }, [fetchBanners]);
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Only JPG, PNG, WebP, and GIF images are allowed');
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image too large (max 5MB)');
+      return;
+    }
+
+    setImageFile(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.title) {
+      alert('Title is required');
+      return;
+    }
+
+    if (!editBanner && !imageFile) {
+      alert('Image is required');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const form = new FormData();
+      form.append('title', formData.title);
+      form.append('subtitle', formData.subtitle);
+      form.append('button_text', formData.button_text);
+      form.append('button_link', formData.button_link);
+      form.append('order', formData.order);
+      form.append('is_active', formData.is_active);
+      
+      if (imageFile) {
+        form.append('image', imageFile);
+      }
+
+      const url = editBanner ? `/banners/${editBanner.banner_id}` : '/banners';
+      const method = editBanner ? 'PUT' : 'POST';
+
+      const response = await fetch(`${API_URL}/api/admin${url}`, {
+        method,
+        credentials: 'include',
+        body: form
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || `Error ${response.status}`);
+      }
+
+      setShowAdd(false);
+      setEditBanner(null);
+      setFormData({ title: '', subtitle: '', button_text: '', button_link: '', order: 0, is_active: true });
+      setImageFile(null);
+      setImagePreview('');
+      fetchBanners();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEdit = (banner) => {
+    setEditBanner(banner);
+    setFormData({
+      title: banner.title,
+      subtitle: banner.subtitle || '',
+      button_text: banner.button_text || '',
+      button_link: banner.button_link || '',
+      order: banner.order || 0,
+      is_active: banner.is_active
+    });
+    setImagePreview(banner.image_url?.startsWith('/') ? `${API_URL}${banner.image_url}` : banner.image_url);
+    setShowAdd(true);
+  };
+
+  const handleDelete = async (banner_id) => {
+    if (!window.confirm('Delete this banner?')) return;
+    try {
+      await api(`/banners/${banner_id}`, { method: 'DELETE' });
+      fetchBanners();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const toggleActive = async (banner_id) => {
+    try {
+      await api(`/banners/${banner_id}/toggle`, { method: 'POST' });
+      fetchBanners();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  return (
+    <div className="space-y-5 animate-in fade-in duration-300" data-testid="admin-banners">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-foreground">Carousel Banners</h2>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Manage homepage carousel banners. Upload images, set order, enable/disable.</p>
+        </div>
+        <Button size="sm" onClick={() => {
+          setShowAdd(true);
+          setEditBanner(null);
+          setFormData({ title: '', subtitle: '', button_text: '', button_link: '', order: 0, is_active: true });
+          setImagePreview('');
+          setImageFile(null);
+        }} className="gap-1.5" data-testid="add-banner-btn">
+          <Plus className="w-3.5 h-3.5" />Add Banner
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+      ) : (
+        <div className="space-y-3">
+          {banners.length === 0 ? (
+            <p className="text-center text-muted-foreground py-10">No banners yet. Add your first banner!</p>
+          ) : banners.map(b => (
+            <div key={b.banner_id} className={`rounded-xl border p-4 transition-colors ${b.is_active ? 'border-primary/50 bg-primary/5' : 'border-border/20 bg-card/30 opacity-60'}`} data-testid={`banner-card-${b.banner_id}`}>
+              <div className="flex items-start gap-4">
+                {/* Image Preview */}
+                <div className="shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-secondary">
+                  <img 
+                    src={b.image_url?.startsWith('/') ? `${API_URL}${b.image_url}` : b.image_url} 
+                    alt={b.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                
+                {/* Banner Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-foreground">{b.title}</span>
+                    {b.is_active && <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary text-[9px] font-bold">ACTIVE</span>}
+                    {!b.is_active && <span className="px-1.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-400 text-[9px] font-bold">DISABLED</span>}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{b.subtitle || 'No subtitle'}</p>
+                  {b.button_text && <p className="text-[10px] text-primary mt-1">Button: {b.button_text}</p>}
+                  <p className="text-[10px] text-muted-foreground mt-1">Order: {b.order}</p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button 
+                    onClick={() => toggleActive(b.banner_id)} 
+                    className={`p-1.5 rounded-lg transition-colors ${b.is_active ? 'hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500' : 'hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500'}`} 
+                    title={b.is_active ? 'Disable' : 'Enable'}
+                  >
+                    {b.is_active ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                  </button>
+                  <button 
+                    onClick={() => handleEdit(b)} 
+                    className="p-1.5 rounded-lg hover:bg-sky-500/10 text-muted-foreground hover:text-sky-500 transition-colors" 
+                    title="Edit"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(b.banner_id)} 
+                    className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors" 
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit Banner Dialog */}
+      <Dialog open={showAdd} onOpenChange={(open) => {
+        if (!open) {
+          setShowAdd(false);
+          setEditBanner(null);
+          setImageFile(null);
+          setImagePreview('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base">{editBanner ? 'Edit Banner' : 'Add New Banner'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Image Upload */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Banner Image *</label>
+              <div className="space-y-2">
+                {imagePreview && (
+                  <div className="relative w-full h-40 rounded-lg overflow-hidden bg-secondary">
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <Input 
+                  type="file" 
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleImageSelect}
+                  className="h-9 text-sm" 
+                  data-testid="banner-image-input" 
+                />
+                <p className="text-[10px] text-muted-foreground">JPG, PNG, WebP, or GIF (max 5MB)</p>
+              </div>
+            </div>
+            
+            {/* Title */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Title *</label>
+              <Input 
+                value={formData.title} 
+                onChange={e => setFormData(p => ({ ...p, title: e.target.value }))} 
+                placeholder="e.g. Welcome to GuessIt" 
+                className="h-9 text-sm" 
+                data-testid="banner-title-input" 
+              />
+            </div>
+
+            {/* Subtitle */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Subtitle</label>
+              <Input 
+                value={formData.subtitle} 
+                onChange={e => setFormData(p => ({ ...p, subtitle: e.target.value }))} 
+                placeholder="e.g. Predict. Compete. Win." 
+                className="h-9 text-sm" 
+                data-testid="banner-subtitle-input" 
+              />
+            </div>
+
+            {/* Button Text */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Button Text</label>
+              <Input 
+                value={formData.button_text} 
+                onChange={e => setFormData(p => ({ ...p, button_text: e.target.value }))} 
+                placeholder="e.g. Get Started" 
+                className="h-9 text-sm" 
+                data-testid="banner-btn-text-input" 
+              />
+            </div>
+
+            {/* Button Link */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Button Link</label>
+              <Input 
+                value={formData.button_link} 
+                onChange={e => setFormData(p => ({ ...p, button_link: e.target.value }))} 
+                placeholder="/register or https://..." 
+                className="h-9 text-sm" 
+                data-testid="banner-btn-link-input" 
+              />
+            </div>
+
+            {/* Order */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 block">Display Order</label>
+              <Input 
+                type="number"
+                value={formData.order} 
+                onChange={e => setFormData(p => ({ ...p, order: parseInt(e.target.value) || 0 }))} 
+                className="h-9 text-sm" 
+                data-testid="banner-order-input" 
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Lower numbers appear first</p>
+            </div>
+
+            {/* Active Toggle */}
+            <div className="flex items-center gap-2">
+              <input 
+                type="checkbox"
+                id="banner-active"
+                checked={formData.is_active}
+                onChange={e => setFormData(p => ({ ...p, is_active: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <label htmlFor="banner-active" className="text-xs font-semibold text-foreground">Active (visible on homepage)</label>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSubmit} disabled={saving} data-testid="save-banner-btn">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editBanner ? 'Update' : 'Add Banner'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+
 const SystemTab = () => {
   const [apis, setApis] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1185,6 +1661,7 @@ export const AdminPage = () => {
             {activeTab === 'users' && <UsersTab />}
             {activeTab === 'matches' && <MatchesTab />}
             {activeTab === 'system' && <SystemTab />}
+            {activeTab === 'banners' && <BannersTab />}
             {activeTab === 'streaks' && <StreaksTab />}
             {activeTab === 'favorites' && <FavoritesTab />}
             {activeTab === 'notifications' && <NotificationsTab />}

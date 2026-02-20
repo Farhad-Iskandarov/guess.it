@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap } from 'lucide-react';
+import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
@@ -153,12 +153,10 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/settings')} data-testid="nav-settings">Settings</DropdownMenuItem>
           {user?.role === 'admin' && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer text-muted-foreground" onClick={() => nav('/admin')} data-testid="nav-admin">
-                Settings & Tools
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem className="cursor-pointer flex items-center gap-2" onClick={() => nav('/admin')} data-testid="nav-admin">
+              <Shield className="w-4 h-4 text-primary" />
+              <span className="font-semibold text-primary">Admin Panel</span>
+            </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
@@ -543,6 +541,25 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, onMat
               <span className="text-foreground">IT</span>
             </span>
           </Link>
+
+          {/* Navigation Links - Hidden on mobile */}
+          <nav className="hidden lg:flex items-center gap-1 flex-1 justify-center" data-testid="header-nav">
+            <Link to="/how-it-works" className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors" data-testid="nav-how-it-works">
+              How It Works
+            </Link>
+            <Link to="/leaderboard" className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors" data-testid="nav-leaderboard">
+              Leaderboard
+            </Link>
+            <Link to="/about" className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors" data-testid="nav-about">
+              About Us
+            </Link>
+            <Link to="/news" className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors" data-testid="nav-news">
+              News
+            </Link>
+            <Link to="/contact" className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors" data-testid="nav-contact">
+              Contact
+            </Link>
+          </nav>
 
           {/* Right side */}
           <div className="flex items-center gap-1 md:gap-2">

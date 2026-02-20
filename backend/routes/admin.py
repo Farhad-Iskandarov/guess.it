@@ -252,18 +252,96 @@ async def get_user_detail(user_id: str, request: Request, db: AsyncIOMotorDataba
 @router.get("/users/{user_id}/predictions")
 async def get_user_predictions(
     user_id: str, request: Request, page: int = 1, limit: int = 20,
+    search: str = None,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
     admin = await get_admin_user(request, db)
 
     skip = (max(1, page) - 1) * min(limit, 50)
+    
+    # Get predictions
     predictions = await db.predictions.find(
         {"user_id": user_id}, {"_id": 0}
     ).sort("created_at", -1).skip(skip).limit(min(limit, 50)).to_list(50)
 
+    # Fetch match data for enrichment
+    # Get current matches that are cached by the system
+    from services.football_api import get_matches, get_live_matches
+    from datetime import datetime, timedelta, timezone
+    
+    matches = []
+    try:
+        # First try to get current matches (today + upcoming)
+        matches_today = await get_matches(
+            db,
+            date_from=(datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"),
+            date_to=(datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d"),
+            competition=None,
+            status=None
+        )
+        matches.extend(matches_today)
+        
+        # Also get recent finished matches (last 7 days)
+        matches_recent = await get_matches(
+            db,
+            date_from=(datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d"),
+            date_to=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            competition=None,
+            status=None
+        )
+        matches.extend(matches_recent)
+        
+        logger.info(f"Fetched {len(matches)} matches for prediction enrichment")
+    except Exception as e:
+        logger.error(f"Failed to fetch matches for prediction enrichment: {e}")
+    
+    # Create match lookup dictionary (remove duplicates)
+    match_dict = {}
+    for m in matches:
+        if m.get('id'):
+            match_dict[m['id']] = m
+    
+    logger.info(f"Match dictionary has {len(match_dict)} unique matches")
+    
+    enriched_predictions = []
+    for pred in predictions:
+        match_id = pred.get('match_id')
+        match_data = match_dict.get(match_id)
+        
+        if not match_data:
+            logger.warning(f"Match {match_id} not found in fetched data")
+        
+        # Create enriched prediction
+        enriched = {
+            **pred,
+            "match_data": match_data if match_data else {
+                "id": match_id,
+                "homeTeam": {"name": "Unknown", "crest": None},
+                "awayTeam": {"name": "Unknown", "crest": None},
+                "utcDate": pred.get("created_at", ""),
+                "competition": {"name": "Unknown"},
+                "status": "UNKNOWN"
+            }
+        }
+        
+        # Apply search filter if provided
+        if search:
+            if match_data:
+                home_name = match_data.get("homeTeam", {}).get("name", "").lower()
+                away_name = match_data.get("awayTeam", {}).get("name", "").lower()
+            else:
+                home_name = ""
+                away_name = ""
+            search_lower = search.lower()
+            
+            if search_lower in home_name or search_lower in away_name:
+                enriched_predictions.append(enriched)
+        else:
+            enriched_predictions.append(enriched)
+
     total = await db.predictions.count_documents({"user_id": user_id})
 
-    return {"predictions": predictions, "total": total, "page": page}
+    return {"predictions": enriched_predictions, "total": total, "page": page}
 
 # ==================== User Messages Review (Replaces Moderation) ====================
 
@@ -995,3 +1073,207 @@ async def get_audit_log(
     total = await db.admin_audit_log.count_documents(query)
 
     return {"logs": logs, "total": total, "page": page}
+
+
+# ==================== Carousel Banner Management ====================
+
+@router.get("/banners")
+async def list_banners(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """List all carousel banners"""
+    admin = await get_admin_user(request, db)
+    
+    banners = await db.carousel_banners.find({}, {"_id": 0}).sort("order", 1).to_list(50)
+    return {"banners": banners, "total": len(banners)}
+
+
+@router.post("/banners")
+async def create_banner(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Create a new carousel banner"""
+    from fastapi import File, UploadFile, Form
+    admin = await get_admin_user(request, db)
+    
+    # Get form data
+    form_data = await request.form()
+    title = sanitize_input(form_data.get("title", ""))
+    subtitle = sanitize_input(form_data.get("subtitle", ""))
+    button_text = sanitize_input(form_data.get("button_text", ""))
+    button_link = sanitize_input(form_data.get("button_link", ""))
+    order = int(form_data.get("order", 0))
+    is_active = form_data.get("is_active", "true").lower() == "true"
+    
+    # Handle file upload
+    image_file = form_data.get("image")
+    image_url = ""
+    
+    if image_file and hasattr(image_file, 'filename'):
+        # Validate file type
+        allowed_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+        file_ext = '.' + image_file.filename.split('.')[-1].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Only JPG, PNG, WebP, and GIF images allowed")
+        
+        # Read and validate file
+        contents = await image_file.read()
+        
+        # Validate file size (5MB max)
+        if len(contents) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+        
+        # Save file
+        import os
+        from pathlib import Path
+        
+        banner_dir = Path("/app/backend/uploads/banners")
+        banner_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename
+        file_id = uuid.uuid4().hex[:12]
+        filename = f"banner_{file_id}{file_ext}"
+        file_path = banner_dir / filename
+        
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        image_url = f"/api/uploads/banners/{filename}"
+    
+    if not title or not image_url:
+        raise HTTPException(status_code=400, detail="Title and image are required")
+    
+    banner_id = f"banner_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "banner_id": banner_id,
+        "title": title,
+        "subtitle": subtitle,
+        "button_text": button_text,
+        "button_link": button_link,
+        "image_url": image_url,
+        "order": order,
+        "is_active": is_active,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": admin["user_id"]
+    }
+    
+    await db.carousel_banners.insert_one(doc)
+    doc.pop("_id", None)
+    
+    await log_admin_action(db, admin["user_id"], "create_banner", banner_id, f"Created banner: {title}")
+    return {"success": True, "banner": doc}
+
+
+@router.put("/banners/{banner_id}")
+async def update_banner(banner_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Update a carousel banner"""
+    admin = await get_admin_user(request, db)
+    
+    banner = await db.carousel_banners.find_one({"banner_id": banner_id}, {"_id": 0})
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    
+    # Get form data
+    form_data = await request.form()
+    title = sanitize_input(form_data.get("title", banner["title"]))
+    subtitle = sanitize_input(form_data.get("subtitle", banner.get("subtitle", "")))
+    button_text = sanitize_input(form_data.get("button_text", banner.get("button_text", "")))
+    button_link = sanitize_input(form_data.get("button_link", banner.get("button_link", "")))
+    order = int(form_data.get("order", banner.get("order", 0)))
+    is_active = form_data.get("is_active", str(banner.get("is_active", True))).lower() == "true"
+    
+    image_url = banner["image_url"]
+    
+    # Handle new image upload
+    image_file = form_data.get("image")
+    if image_file and hasattr(image_file, 'filename'):
+        # Validate and save new image (same logic as create)
+        allowed_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+        file_ext = '.' + image_file.filename.split('.')[-1].lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Only JPG, PNG, WebP, and GIF images allowed")
+        
+        contents = await image_file.read()
+        if len(contents) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+        
+        import os
+        from pathlib import Path
+        
+        # Delete old image if it's a local upload
+        if banner["image_url"].startswith("/api/uploads/banners/"):
+            old_file_path = Path(f"/app/backend/uploads/banners/{banner['image_url'].split('/')[-1]}")
+            if old_file_path.exists():
+                old_file_path.unlink()
+        
+        # Save new image
+        banner_dir = Path("/app/backend/uploads/banners")
+        banner_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_id = uuid.uuid4().hex[:12]
+        filename = f"banner_{file_id}{file_ext}"
+        file_path = banner_dir / filename
+        
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        image_url = f"/api/uploads/banners/{filename}"
+    
+    update_doc = {
+        "title": title,
+        "subtitle": subtitle,
+        "button_text": button_text,
+        "button_link": button_link,
+        "image_url": image_url,
+        "order": order,
+        "is_active": is_active,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.carousel_banners.update_one(
+        {"banner_id": banner_id},
+        {"$set": update_doc}
+    )
+    
+    await log_admin_action(db, admin["user_id"], "update_banner", banner_id, f"Updated banner: {title}")
+    return {"success": True, "banner": {**banner, **update_doc}}
+
+
+@router.delete("/banners/{banner_id}")
+async def delete_banner(banner_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Delete a carousel banner"""
+    admin = await get_admin_user(request, db)
+    
+    banner = await db.carousel_banners.find_one({"banner_id": banner_id}, {"_id": 0})
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    
+    # Delete image file if it's a local upload
+    if banner["image_url"].startswith("/api/uploads/banners/"):
+        from pathlib import Path
+        file_path = Path(f"/app/backend/uploads/banners/{banner['image_url'].split('/')[-1]}")
+        if file_path.exists():
+            file_path.unlink()
+    
+    await db.carousel_banners.delete_one({"banner_id": banner_id})
+    await log_admin_action(db, admin["user_id"], "delete_banner", banner_id, f"Deleted banner: {banner['title']}")
+    return {"success": True}
+
+
+@router.post("/banners/{banner_id}/toggle")
+async def toggle_banner(banner_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Toggle banner active status"""
+    admin = await get_admin_user(request, db)
+    
+    banner = await db.carousel_banners.find_one({"banner_id": banner_id}, {"_id": 0})
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    
+    new_status = not banner.get("is_active", True)
+    await db.carousel_banners.update_one(
+        {"banner_id": banner_id},
+        {"$set": {"is_active": new_status}}
+    )
+    
+    await log_admin_action(db, admin["user_id"], "toggle_banner", banner_id, 
+                          f"{'Activated' if new_status else 'Deactivated'} banner: {banner['title']}")
+    return {"success": True, "is_active": new_status}
+

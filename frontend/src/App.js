@@ -15,6 +15,11 @@ import { FriendsPage } from "@/pages/FriendsPage";
 import { MessagesPage } from "@/pages/MessagesPage";
 import { AdminPage } from "@/pages/AdminPage";
 import { GuestProfilePage } from "@/pages/GuestProfilePage";
+import { HowItWorksPage } from "@/pages/HowItWorksPage";
+import { LeaderboardPage } from "@/pages/LeaderboardPage";
+import { AboutPage } from "@/pages/AboutPage";
+import { NewsPage } from "@/pages/NewsPage";
+import { ContactPage } from "@/pages/ContactPage";
 import { useState, useEffect, useRef } from "react";
 
 // ============ Initial Loading Screen ============
@@ -156,6 +161,11 @@ function AppRouter() {
       <Route path="/profile/:userId" element={<ProtectedRoute><GuestProfilePage /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
       <Route path="/admin/*" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+      <Route path="/how-it-works" element={<HowItWorksPage />} />
+      <Route path="/leaderboard" element={<LeaderboardPage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/news" element={<NewsPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

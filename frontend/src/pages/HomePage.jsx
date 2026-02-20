@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
@@ -97,6 +97,10 @@ export const HomePage = () => {
   const [favoriteTeamIds, setFavoriteTeamIds] = useState(new Set());
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
 
+
+  // Banner slides state
+  const [bannerSlides, setBannerSlides] = useState([]);
+
   // Favorite matches state
   const [favoriteMatchIds, setFavoriteMatchIds] = useState(new Set());
   const [favoriteMatchList, setFavoriteMatchList] = useState([]);
@@ -145,6 +149,16 @@ export const HomePage = () => {
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
 
+  // Filter out FINISHED matches from main matches (they should only appear in Ended tab)
+  const activeMatches = useMemo(() => {
+    return matches.filter(match => 
+      match.status !== 'FINISHED' && 
+      match.status !== 'AFTER_EXTRA_TIME' && 
+      match.status !== 'PENALTY_SHOOTOUT'
+    );
+  }, [matches]);
+
+
   // Handle live WebSocket updates
   const handleLiveUpdate = useCallback((data) => {
     if (!data || !data.matches) return;
@@ -169,6 +183,36 @@ export const HomePage = () => {
 
   // Connect to WebSocket for live updates
   const { isConnected } = useLiveMatches(handleLiveUpdate);
+
+
+  // Fetch carousel banners
+  useEffect(() => {
+    const fetchBanners = async () => {
+      try {
+        const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || ''}/api/football/banners`);
+        if (response.ok) {
+          const data = await response.json();
+          // Transform to match expected format
+          const formattedBanners = data.banners.map(b => ({
+            badge: b.title,
+            headline: b.title,
+            highlightedText: '',
+            subtitle: b.subtitle || '',
+            ctaText: b.button_text || 'Get Started',
+            ctaLink: b.button_link || '/register',
+            backgroundImage: b.image_url?.startsWith('/') ? `${process.env.REACT_APP_BACKEND_URL}${b.image_url}` : b.image_url
+          }));
+          setBannerSlides(formattedBanners.length > 0 ? formattedBanners : mockBannerSlides);
+        } else {
+          setBannerSlides(mockBannerSlides);
+        }
+      } catch (error) {
+        console.error('Failed to fetch banners:', error);
+        setBannerSlides(mockBannerSlides);
+      }
+    };
+    fetchBanners();
+  }, []);
 
   // Fetch matches from API (with cache support)
   const loadMatches = useCallback(async (leagueId) => {
@@ -443,7 +487,7 @@ export const HomePage = () => {
       {/* Main Content */}
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1">
         {/* Promo Banner */}
-        <PromoBanner slides={mockBannerSlides} />
+        {bannerSlides.length > 0 && <PromoBanner slides={bannerSlides} />}
 
         {/* Tabs */}
         <TabsSection tabs={tabs} activeTab={activeTab} onTabChange={handleTabChange} />
@@ -671,11 +715,11 @@ export const HomePage = () => {
         )}
 
         {/* Match Content (non-favorite, non-ended tabs) */}
-        {matches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+        {activeMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
           <div key={`filter-${activeLeague}-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {/* Full Match List */}
             <MatchList
-              matches={matches}
+              matches={activeMatches}
               savedPredictions={savedPredictions}
               onPredictionSaved={handlePredictionSaved}
               activeLeague={activeLeague}

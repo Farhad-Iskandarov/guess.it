@@ -171,27 +171,42 @@ async def list_matches(
     - status: LIVE, FINISHED, etc.
     """
     # Default: yesterday + next 7 days if no dates provided
-    # Include yesterday to show recently finished matches with final scores
-    if not date_from and not date_to and not status:
+    if not date_from and not date_to:
         today = datetime.now(timezone.utc)
         date_from = (today - timedelta(days=1)).strftime("%Y-%m-%d")
         date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    
+    comp = request.query_params.get('competition', competition)
+    matches = await get_matches(db, date_from, date_to, comp, status)
+    
+    return {"matches": matches, "total": len(matches)}
 
-    matches = await get_matches(db, date_from, date_to, competition, status)
-    # Cache for admin panel
-    global _last_fetched_matches
-    if not competition and not status:
-        _last_fetched_matches = matches
-    return {
-        "matches": matches,
-        "total": len(matches),
-        "filters": {
-            "date_from": date_from,
-            "date_to": date_to,
-            "competition": competition,
-            "status": status,
-        },
-    }
+
+@router.get("/banners")
+async def get_active_banners(db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get active carousel banners for public display"""
+    banners = await db.carousel_banners.find(
+        {"is_active": True},
+        {"_id": 0}
+    ).sort("order", 1).to_list(20)
+    
+    return {"banners": banners}
+
+
+
+@router.get("/leaderboard")
+async def get_leaderboard(
+    limit: int = 50,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get global leaderboard - top users by points"""
+    users = await db.users.find(
+        {},
+        {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1, 
+         "points": 1, "level": 1, "predictions_count": 1, "correct_predictions": 1}
+    ).sort("points", -1).limit(limit).to_list(limit)
+    
+    return {"users": users}
 
 
 @router.get("/matches/today")
