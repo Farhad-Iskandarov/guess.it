@@ -1,0 +1,149 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "GuessIt",
+      "tone": "Premium Sports Analytics",
+      "mood": "Dark, Electric, Precision",
+      "archetype": "The Performance Pro (Tactical)"
+    },
+    "typography": {
+      "fonts": {
+        "primary": "Inter (Existing System)",
+        "display": "Barlow Condensed (Recommended for Headings if allowed) or Inter Tight"
+      },
+      "rules": {
+        "headings": "text-white font-bold tracking-tight uppercase",
+        "body": "text-gray-400 font-medium",
+        "prices": "text-white font-black tracking-tighter"
+      }
+    },
+    "colors": {
+      "palette": {
+        "background": {
+          "main": "#0f1923",
+          "card": "#1a242d",
+          "card_hover": "#222c36",
+          "overlay": "rgba(15, 25, 35, 0.85)"
+        },
+        "brand": {
+          "primary": "#22c55e",
+          "primary_glow": "rgba(34, 197, 94, 0.5)",
+          "secondary": "#eab308",
+          "secondary_glow": "rgba(234, 179, 8, 0.5)"
+        },
+        "text": {
+          "primary": "#ffffff",
+          "secondary": "#94a3b8",
+          "muted": "#64748b"
+        },
+        "status": {
+          "live": "#ef4444",
+          "winning": "#22c55e",
+          "losing": "#ef4444",
+          "draw": "#94a3b8"
+        }
+      },
+      "gradients": {
+        "green_glow": "linear-gradient(180deg, rgba(34,197,94,0) 0%, rgba(34,197,94,0.1) 100%)",
+        "gold_glow": "linear-gradient(180deg, rgba(234,179,8,0) 0%, rgba(234,179,8,0.1) 100%)",
+        "glass": "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)"
+      }
+    },
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-12",
+      "card_padding": "p-6",
+      "gap": "gap-6 md:gap-8",
+      "radius": "rounded-xl"
+    },
+    "visual_enhancers": {
+      "glassmorphism": "backdrop-blur-md bg-white/5 border border-white/10",
+      "neon_border": "border border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.3)]",
+      "gold_border": "border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.3)]",
+      "noise_texture": "url('data:image/svg+xml;base64,...') (Optional subtle grain)",
+      "shadows": {
+        "card": "0 20px 40px -10px rgba(0,0,0,0.5)",
+        "glow": "0 0 20px rgba(34,197,94,0.4)"
+      }
+    }
+  },
+  "assets": {
+    "images": {
+      "background": {
+        "url": "https://images.unsplash.com/photo-1697562160779-fed83c21a2cd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwxfHxkYXJrJTIwYWJzdHJhY3QlMjBzb2NjZXIlMjBzdGFkaXVtJTIwYmFja2dyb3VuZCUyMGxpZ2h0c3xlbnwwfHx8fDE3NzE3MjYzMDJ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Dark Stadium Lights Background",
+        "usage": "Hero section background with heavy overlay"
+      },
+      "icons": {
+        "standard": {
+          "url": "https://images.unsplash.com/photo-1616514169928-a1e40c6f791c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwxfHxzb2NjZXIlMjBiYWxsJTIwM2QlMjByZW5kZXIlMjBkYXJrJTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NzE3MjYzMDR8MA&ixlib=rb-4.1.0&q=85",
+          "description": "Soccer Ball (Standard Plan)",
+          "usage": "Plan Icon"
+        },
+        "champion": {
+          "url": "https://images.pexels.com/photos/35119581/pexels-photo-35119581.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+          "description": "Gold Trophy (Champion Plan)",
+          "usage": "Plan Icon"
+        },
+        "elite": {
+          "url": "https://images.unsplash.com/photo-1739323980445-b76a6e459d0b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwyfHxjcm93biUyMHJveWFsJTIwZ29sZCUyMGljb24lMjAzZHxlbnwwfHx8fDE3NzE3MjYzMDV8MA&ixlib=rb-4.1.0&q=85",
+          "description": "Gold Crown (Elite Plan)",
+          "usage": "Plan Icon"
+        }
+      }
+    }
+  },
+  "components": {
+    "subscription_card": {
+      "structure": "Glassmorphic container, Top Icon, Price (Large), Features List (Checkmarks), CTA Button",
+      "interaction": "Hover: Scale 1.02, Border Glow, Button Fill",
+      "plans": [
+        {
+          "name": "Standard",
+          "price": "$4.99",
+          "period": "/mo",
+          "color": "gray",
+          "features": ["Basic Predictions", "5 Leagues", "Standard Support"]
+        },
+        {
+          "name": "Champion",
+          "price": "$9.99",
+          "period": "/mo",
+          "color": "green",
+          "highlight": "Most Popular",
+          "features": ["Advanced AI Predictions", "All Leagues", "Live Stats", "Priority Support"]
+        },
+        {
+          "name": "Elite",
+          "price": "$19.99",
+          "period": "/mo",
+          "color": "yellow",
+          "features": ["VIP Insider Tips", "1-on-1 Expert Chat", "Ad-Free Experience", "Exclusive Merch"]
+        }
+      ]
+    },
+    "match_card_expanded": {
+      "path": "/app/frontend/src/components/MatchCardExpanded.js",
+      "concept": "A 'Ticket Stub' that expands into a tactical board.",
+      "states": {
+        "collapsed": "Minimal row. Time | Home Logo vs Away Logo | Score. 'Expand' arrow.",
+        "expanded": "Full details. Possession bar chart, Top Scorers list, 'Predict Now' CTA, Live Commentary snippet."
+      },
+      "style": "Glassmorphism dark (`bg-black/60 backdrop-blur-xl`). 1px border (`border-white/10`)."
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. Create `SubscriptionPage.js` using the defined colors and assets. Ensure the background image has a dark overlay (`bg-black/80`) so text pops.",
+    "2. Implement `MatchCardExpanded.js` as a reusable component. It should accept props for team names, scores, and expanded stats.",
+    "3. Use Tailwind's `group` and `group-hover` classes for card interactions.",
+    "4. Ensure all interactive elements have `data-testid` attributes (e.g., `data-testid='plan-champion-subscribe'`).",
+    "5. For the 'Most Popular' Champion card, use the Green Primary color for the border and glow.",
+    "6. Use `framer-motion` (if available) or CSS transitions for the expand/collapse animation of the match card.",
+    "7. DO NOT use Shadcn Card for the pricing tables if they feel too rigid. Use a custom `div` with `rounded-xl border border-white/10` to achieve the glass look."
+  ],
+  "universal_guidelines": {
+    "animations": "Use `transition-all duration-300 ease-out` for hover states. Avoid `transition: all`.",
+    "accessibility": "Ensure text contrast is >4.5:1. Use lighter grays (`text-gray-300`) on dark backgrounds, never dark gray.",
+    "layout": "Mobile-First. Stack cards on mobile, 3-column grid on desktop.",
+    "ux": "The 'Subscribe' button on the Champion plan should be the most prominent element on the page."
+  }
+}

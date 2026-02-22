@@ -771,21 +771,26 @@ async def invite_friend_to_match(
         }
     )
     
-    # Create chat message
+    # Create chat message - send actual match card
     try:
         from routes.messages import send_system_message
-        chat_message = f"🎯 I invited you to predict on {data.home_team} vs {data.away_team}! Check it out and make your guess!"
+        chat_message = f"I invited you to predict on {data.home_team} vs {data.away_team}! Make your guess!"
+        match_card_data = {
+            "match_id": data.match_id,
+            "homeTeam": {"name": data.home_team},
+            "awayTeam": {"name": data.away_team},
+            "competition": "",
+            "dateTime": data.match_date,
+            "status": "SCHEDULED",
+            "score": {}
+        }
         await send_system_message(
             db,
             sender_id=user["user_id"],
             receiver_id=data.friend_user_id,
             message=chat_message,
-            message_type="match_invitation",
-            metadata={
-                "match_id": data.match_id,
-                "home_team": data.home_team,
-                "away_team": data.away_team
-            }
+            message_type="match_share",
+            metadata=match_card_data
         )
     except Exception as e:
         logger.warning(f"Failed to send chat message for match invitation: {e}")

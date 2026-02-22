@@ -585,6 +585,34 @@ async def get_my_exact_score_predictions(
     }
 
 
+@router.delete("/exact-score/match/{match_id}")
+async def delete_exact_score_prediction(
+    match_id: int,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Delete exact score prediction for a match (only if not yet awarded points)"""
+    user = await get_current_user(request, db)
+    
+    existing = await db.exact_score_predictions.find_one({
+        "user_id": user["user_id"],
+        "match_id": match_id
+    }, {"_id": 0})
+    
+    if not existing:
+        raise HTTPException(status_code=404, detail="No exact score prediction found")
+    
+    if existing.get("points_awarded"):
+        raise HTTPException(status_code=400, detail="Cannot delete - match already processed")
+    
+    await db.exact_score_predictions.delete_one({
+        "user_id": user["user_id"],
+        "match_id": match_id
+    })
+    
+    return {"message": "Exact score prediction deleted"}
+
+
 
 # ==================== Smart Advice & Friends Activity ====================
 

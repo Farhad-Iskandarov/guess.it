@@ -22,6 +22,7 @@ import { AboutPage } from "@/pages/AboutPage";
 import { NewsPage } from "@/pages/NewsPage";
 import { NewsArticlePage } from "@/pages/NewsArticlePage";
 import { ContactPage } from "@/pages/ContactPage";
+import { SubscriptionPage, SubscriptionSuccess } from "@/pages/SubscriptionPage";
 import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -223,6 +224,8 @@ function AppRouter() {
       <Route path="/news" element={<PublicLayout><NewsPage /></PublicLayout>} />
       <Route path="/news/:articleId" element={<PublicLayout><NewsArticlePage /></PublicLayout>} />
       <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
+      <Route path="/subscribe" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
+      <Route path="/subscribe/success" element={<ProtectedRoute><SubscriptionSuccess /></ProtectedRoute>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -152,6 +152,9 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/messages')} data-testid="nav-messages">Messages</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/my-predictions')} data-testid="nav-my-predictions">My Predictions</DropdownMenuItem>
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/settings')} data-testid="nav-settings">Settings</DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/subscribe')} data-testid="nav-subscribe">
+            <span className="flex items-center gap-2">Subscribe <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-bold">PRO</span></span>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
             Log out

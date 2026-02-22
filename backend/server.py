@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -24,6 +24,7 @@ from routes.messages import router as messages_router, chat_manager, notificatio
 from routes.notifications import router as notifications_router
 from routes.admin import router as admin_router
 from routes.public import router as public_router
+from routes.subscriptions import router as subscriptions_router, seed_subscription_plans
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -99,6 +100,7 @@ api_router.include_router(messages_router)
 api_router.include_router(notifications_router)
 api_router.include_router(admin_router)
 api_router.include_router(public_router)
+api_router.include_router(subscriptions_router)
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -125,6 +127,82 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Stripe webhook endpoint
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events"""
+    try:
+        body = await request.body()
+        sig = request.headers.get("Stripe-Signature")
+        
+        api_key = os.environ.get("STRIPE_API_KEY")
+        if not api_key:
+            return {"status": "error", "message": "Stripe not configured"}
+        
+        from emergentintegrations.payments.stripe.checkout import StripeCheckout
+        
+        host_url = str(request.base_url).rstrip("/")
+        webhook_url = f"{host_url}api/webhook/stripe"
+        stripe_checkout = StripeCheckout(api_key=api_key, webhook_url=webhook_url)
+        
+        webhook_response = await stripe_checkout.handle_webhook(body, sig)
+        
+        now = datetime.now(timezone.utc).isoformat()
+        
+        if webhook_response.payment_status == "paid" and webhook_response.session_id:
+            # Atomic update to prevent double processing
+            result = await db.payment_transactions.update_one(
+                {"session_id": webhook_response.session_id, "payment_status": {"$ne": "paid"}},
+                {"$set": {
+                    "status": "complete",
+                    "payment_status": "paid",
+                    "updated_at": now
+                }}
+            )
+            
+            if result.modified_count > 0:
+                tx = await db.payment_transactions.find_one(
+                    {"session_id": webhook_response.session_id},
+                    {"_id": 0}
+                )
+                if tx:
+                    sub_id = f"sub_{uuid.uuid4().hex[:12]}"
+                    sub_doc = {
+                        "subscription_id": sub_id,
+                        "user_id": tx["user_id"],
+                        "plan_id": tx["plan_id"],
+                        "plan_name": tx["plan_name"],
+                        "status": "active",
+                        "amount": tx["amount"],
+                        "currency": tx.get("currency", "usd"),
+                        "session_id": webhook_response.session_id,
+                        "activated_at": now,
+                        "created_at": now
+                    }
+                    await db.user_subscriptions.insert_one(sub_doc)
+                    
+                    plan = await db.subscription_plans.find_one(
+                        {"plan_id": tx["plan_id"]},
+                        {"_id": 0}
+                    )
+                    await db.users.update_one(
+                        {"user_id": tx["user_id"]},
+                        {"$set": {
+                            "subscription_plan": tx["plan_id"],
+                            "subscription_name": tx["plan_name"],
+                            "subscription_badge": plan.get("badge_name") if plan else None,
+                            "subscription_badge_color": plan.get("badge_color") if plan else None,
+                            "subscription_active": True,
+                            "updated_at": now
+                        }}
+                    )
+                    logger.info(f"Webhook: Subscription activated for {tx['user_id']}")
+        
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"status": "error"}
 
 # Configure logging
 logging.basicConfig(
@@ -382,12 +460,20 @@ async def startup_event():
     await db.admin_api_configs.create_index([("is_active", 1)])
     await db.admin_favorite_users.create_index([("admin_id", 1), ("user_id", 1)], unique=True)
     await db.predictions.create_index([("user_id", 1), ("points_awarded", 1)])
+    # Subscription indexes
+    await db.subscription_plans.create_index([("plan_id", 1)], unique=True)
+    await db.user_subscriptions.create_index([("user_id", 1), ("status", 1)])
+    await db.payment_transactions.create_index([("session_id", 1)], unique=True)
+    await db.payment_transactions.create_index([("user_id", 1)])
     
     # Seed default Football API key if none exists
     await seed_default_api_key(db)
     
     # Seed admin account if it doesn't exist
     await seed_admin_account(db)
+    
+    # Seed subscription plans
+    await seed_subscription_plans(db)
     
     start_polling(db)
 

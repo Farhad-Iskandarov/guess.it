@@ -86,64 +86,334 @@ const MessageStatus = memo(({ delivered, read, isMine }) => {
 });
 MessageStatus.displayName = 'MessageStatus';
 
-/* ─────── Shared Match Card ─────── */
+/* ─────── Shared Match Card (Full Feature - Same as Main Page) ─────── */
 const SharedMatchCard = memo(({ matchData, isMine }) => {
-  const navigate = useNavigate();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedVote, setSelectedVote] = useState(null);
+  const [savedPrediction, setSavedPrediction] = useState(null);
+  const [exactScoreLocked, setExactScoreLocked] = useState(false);
+  const [homeScoreInput, setHomeScoreInput] = useState(0);
+  const [awayScoreInput, setAwayScoreInput] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAdvance, setShowAdvance] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
   if (!matchData) return null;
+
+  const matchId = matchData.match_id || matchData.id;
+  const isLocked = matchData.status === 'FINISHED' || matchData.status === 'LIVE' || matchData.status === 'IN_PLAY';
+  const homeName = matchData.homeTeam?.name || matchData.home_team || '';
+  const awayName = matchData.awayTeam?.name || matchData.away_team || '';
+
+  // Load existing predictions when card expands
+  const loadExisting = async () => {
+    if (loaded || !matchId) return;
+    try {
+      const [predRes, exactRes] = await Promise.all([
+        fetch(`${API_URL}/api/predictions/match/${matchId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+      if (predRes?.prediction) {
+        setSavedPrediction(predRes.prediction);
+        setSelectedVote(predRes.prediction);
+      }
+      if (exactRes?.home_score !== undefined && exactRes?.home_score !== null) {
+        setExactScoreLocked(true);
+        setHomeScoreInput(exactRes.home_score);
+        setAwayScoreInput(exactRes.away_score);
+      }
+    } catch (err) { console.error('Load predictions failed:', err); }
+    setLoaded(true);
+  };
+
+  const handleToggleExpand = (e) => {
+    e.stopPropagation();
+    const next = !isExpanded;
+    setIsExpanded(next);
+    if (next) loadExisting();
+  };
+
+  // Save winner prediction (Guess It)
+  const handleGuessIt = async () => {
+    if (!selectedVote || !matchId || isLocked || exactScoreLocked) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/predictions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ match_id: matchId, prediction: selectedVote }),
+      });
+      if (res.ok) setSavedPrediction(selectedVote);
+    } catch (err) { console.error('Save prediction failed:', err); }
+    finally { setIsSubmitting(false); }
+  };
+
+  // Lock exact score prediction
+  const handleLockExactScore = async () => {
+    if (!matchId || isLocked || savedPrediction) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/predictions/exact-score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ match_id: matchId, home_score: homeScoreInput, away_score: awayScoreInput }),
+      });
+      if (res.ok) setExactScoreLocked(true);
+    } catch (err) { console.error('Exact score failed:', err); }
+    finally { setIsSubmitting(false); }
+  };
+
+  // Remove all predictions for this match
+  const handleRemove = async () => {
+    if (!matchId) return;
+    setIsSubmitting(true);
+    try {
+      const promises = [];
+      if (savedPrediction) {
+        promises.push(fetch(`${API_URL}/api/predictions/match/${matchId}`, { method: 'DELETE', credentials: 'include' }));
+      }
+      if (exactScoreLocked) {
+        promises.push(fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, { method: 'DELETE', credentials: 'include' }));
+      }
+      await Promise.all(promises);
+      setSavedPrediction(null);
+      setSelectedVote(null);
+      setExactScoreLocked(false);
+      setHomeScoreInput(0);
+      setAwayScoreInput(0);
+      setShowAdvance(false);
+    } catch (err) { console.error('Remove failed:', err); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const hasPrediction = !!savedPrediction || exactScoreLocked;
+  const canRemove = hasPrediction || !!selectedVote;
+
+  // Card background color
+  const cardBg = isExpanded
+    ? exactScoreLocked
+      ? 'border-amber-500/30 bg-amber-500/[0.06] backdrop-blur-xl shadow-[0_0_30px_rgba(245,158,11,0.1)]'
+      : savedPrediction
+        ? 'border-emerald-500/30 bg-emerald-500/[0.06] backdrop-blur-xl shadow-[0_0_30px_rgba(34,197,94,0.1)]'
+        : 'border-primary/30 bg-[#1a242d]/90 backdrop-blur-xl shadow-[0_0_30px_rgba(34,197,94,0.1)]'
+    : exactScoreLocked
+      ? 'border-amber-500/25 bg-amber-500/[0.04] backdrop-blur-sm hover:border-amber-500/40'
+      : savedPrediction
+        ? 'border-emerald-500/25 bg-emerald-500/[0.04] backdrop-blur-sm hover:border-emerald-500/40'
+        : 'border-border/30 bg-card/40 backdrop-blur-sm hover:border-primary/20 hover:shadow-md hover:shadow-primary/[0.06]';
+
+  const voteLabels = { home: '1', draw: 'X', away: '2' };
 
   return (
     <div
-      className="rounded-[10px] border border-border/30 bg-card/40 p-2.5 backdrop-blur-sm cursor-pointer hover:border-primary/35 hover:shadow-md hover:shadow-primary/[0.08] transition-all duration-200 my-1"
-      onClick={() => navigate('/')}
+      className={`rounded-xl border transition-all duration-300 ease-out my-1 overflow-hidden ${cardBg}`}
       data-testid="shared-match-card"
     >
-      <div className="flex items-center gap-1.5 mb-2">
-        <Trophy className="w-3 h-3 text-amber-400" />
-        <span className={`text-[10px] font-semibold tracking-wide uppercase truncate ${isMine ? 'text-white/60' : 'text-muted-foreground'}`}>
-          {sanitizeDisplay(matchData.competition)}
-        </span>
-        {matchData.status && (
-          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
-            matchData.status === 'LIVE' ? 'bg-red-500/20 text-red-400' :
-            matchData.status === 'FINISHED' ? 'bg-white/10 text-white/50' :
-            'bg-sky-500/15 text-sky-400'
-          }`}>
-            {matchData.status === 'LIVE' ? 'LIVE' : matchData.status === 'FINISHED' ? 'FT' : 'Upcoming'}
+      {/* Header - always visible */}
+      <div className="p-2.5 cursor-pointer" onClick={handleToggleExpand} data-testid="shared-match-card-toggle">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Trophy className="w-3 h-3 text-amber-400" />
+          <span className={`text-[10px] font-semibold tracking-wide uppercase truncate ${isMine ? 'text-white/60' : 'text-muted-foreground'}`}>
+            {sanitizeDisplay(matchData.competition)}
           </span>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            {matchData.homeTeam?.crest && (
-              <img src={matchData.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain" />
-            )}
-            <span className={`text-xs font-medium truncate ${isMine ? 'text-white/90' : 'text-foreground'}`}>
-              {sanitizeDisplay(matchData.homeTeam?.name || matchData.home_team || '')}
+          {matchData.status && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
+              matchData.status === 'LIVE' || matchData.status === 'IN_PLAY' ? 'bg-red-500/20 text-red-400' :
+              matchData.status === 'FINISHED' ? 'bg-white/10 text-white/50' :
+              'bg-sky-500/15 text-sky-400'
+            }`}>
+              {matchData.status === 'LIVE' || matchData.status === 'IN_PLAY' ? 'LIVE' : matchData.status === 'FINISHED' ? 'FT' : 'Upcoming'}
             </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {matchData.awayTeam?.crest && (
-              <img src={matchData.awayTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain" />
-            )}
-            <span className={`text-xs font-medium truncate ${isMine ? 'text-white/90' : 'text-foreground'}`}>
-              {sanitizeDisplay(matchData.awayTeam?.name || matchData.away_team || '')}
-            </span>
-          </div>
+          )}
+          {savedPrediction && <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold">PREDICTED</span>}
+          {exactScoreLocked && <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">EXACT</span>}
+          <span className={`ml-auto text-[9px] ${isExpanded ? 'text-primary' : isMine ? 'text-white/30' : 'text-muted-foreground/50'} transition-colors`}>
+            {isExpanded ? 'Collapse' : 'Tap to expand'}
+          </span>
         </div>
-        {matchData.score && matchData.score.home !== null && matchData.score.home !== undefined && (
-          <div className="flex items-center gap-1.5 text-sm font-bold tabular-nums flex-shrink-0">
-            <span className={isMine ? 'text-white' : 'text-foreground'}>{matchData.score.home}</span>
-            <span className={`text-xs ${isMine ? 'text-white/40' : 'text-muted-foreground'}`}>-</span>
-            <span className={isMine ? 'text-white' : 'text-foreground'}>{matchData.score.away}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              {matchData.homeTeam?.crest && <img src={matchData.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain" />}
+              <span className={`text-xs font-medium truncate ${isMine ? 'text-white/90' : 'text-foreground'}`}>{sanitizeDisplay(homeName)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {matchData.awayTeam?.crest && <img src={matchData.awayTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain" />}
+              <span className={`text-xs font-medium truncate ${isMine ? 'text-white/90' : 'text-foreground'}`}>{sanitizeDisplay(awayName)}</span>
+            </div>
           </div>
-        )}
+          {matchData.score && matchData.score.home !== null && matchData.score.home !== undefined && (
+            <div className="flex items-center gap-1.5 text-sm font-bold tabular-nums flex-shrink-0">
+              <span className={isMine ? 'text-white' : 'text-foreground'}>{matchData.score.home}</span>
+              <span className={`text-xs ${isMine ? 'text-white/40' : 'text-muted-foreground'}`}>-</span>
+              <span className={isMine ? 'text-white' : 'text-foreground'}>{matchData.score.away}</span>
+            </div>
+          )}
+        </div>
+        {matchData.dateTime && <p className={`text-[10px] mt-1.5 ${isMine ? 'text-white/40' : 'text-muted-foreground'}`}>{sanitizeDisplay(matchData.dateTime)}</p>}
       </div>
-      {matchData.dateTime && (
-        <p className={`text-[10px] mt-1.5 ${isMine ? 'text-white/40' : 'text-muted-foreground'}`}>
-          {sanitizeDisplay(matchData.dateTime)}
-        </p>
-      )}
+
+      {/* Expanded Section */}
+      <div
+        className={`transition-all duration-400 ease-out overflow-hidden ${isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}
+        style={{ transitionProperty: 'max-height, opacity' }}
+      >
+        <div className="px-3 pb-3 space-y-2.5 border-t border-border/20 pt-3" onClick={(e) => e.stopPropagation()}>
+
+          {isLocked ? (
+            <p className="text-[11px] text-muted-foreground text-center py-2">
+              {matchData.status === 'FINISHED' ? 'This match has ended' : 'Match is live - predictions locked'}
+            </p>
+          ) : (
+            <>
+              {/* ── Vote Buttons (1/X/2) ── */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-muted-foreground">
+                  Winner Prediction
+                </p>
+                <div className="flex gap-1.5">
+                  {['home', 'draw', 'away'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => !exactScoreLocked && setSelectedVote(type)}
+                      disabled={exactScoreLocked}
+                      data-testid={`chat-vote-btn-${type}`}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all duration-200 border ${
+                        exactScoreLocked
+                          ? 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
+                          : selectedVote === type
+                            ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_10px_rgba(34,197,94,0.15)]'
+                            : 'bg-secondary/40 border-border/30 text-foreground hover:bg-secondary/60 hover:border-border/50'
+                      }`}
+                    >
+                      <span className="text-sm">{voteLabels[type]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Guess It Button ── */}
+              <button
+                onClick={handleGuessIt}
+                disabled={isSubmitting || exactScoreLocked || (!selectedVote && !savedPrediction)}
+                data-testid="chat-guess-it-btn"
+                className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all duration-200 border ${
+                  exactScoreLocked
+                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 cursor-not-allowed'
+                    : savedPrediction
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                      : selectedVote
+                        ? 'bg-primary hover:bg-primary/90 border-primary text-primary-foreground hover:scale-[1.01] active:scale-[0.99]'
+                        : 'bg-secondary/30 border-border/30 text-muted-foreground opacity-50 cursor-not-allowed'
+                }`}
+              >
+                {isSubmitting ? '...' : exactScoreLocked ? 'Saved (Exact Score)' : savedPrediction ? 'Saved' : 'GUESS IT'}
+              </button>
+
+              {/* ── Action Buttons Row: Advance + Remove ── */}
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setShowAdvance(!showAdvance)}
+                  disabled={savedPrediction}
+                  data-testid="chat-advance-btn"
+                  className={`flex-1 py-2 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
+                    savedPrediction
+                      ? 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
+                      : showAdvance
+                        ? 'bg-primary/15 border-primary/40 text-primary'
+                        : 'bg-secondary/40 border-border/30 text-foreground hover:bg-secondary/60'
+                  }`}
+                >
+                  {showAdvance ? 'Close Advance' : 'Advance'}
+                </button>
+                <button
+                  onClick={handleRemove}
+                  disabled={isSubmitting || !canRemove}
+                  data-testid="chat-remove-btn"
+                  className={`flex-1 py-2 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
+                    canRemove
+                      ? 'bg-transparent border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50'
+                      : 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
+                  }`}
+                >
+                  Remove
+                </button>
+              </div>
+
+              {/* ── Advance Section (Exact Score) ── */}
+              <div className={`transition-all duration-300 overflow-hidden ${showAdvance && !savedPrediction ? 'max-h-[200px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Exact Score</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">+50 PTS</span>
+                  </div>
+
+                  {exactScoreLocked ? (
+                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <div className="flex items-center gap-1.5 text-amber-400 text-[11px] font-medium">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 flex items-center justify-center text-[8px]">&#10003;</span>
+                        Exact Score Locked: {homeName} {homeScoreInput} - {awayScoreInput} {awayName}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 text-center">
+                          <p className="text-[9px] text-muted-foreground mb-1 truncate">{homeName}</p>
+                          <input
+                            type="number" min="0" max="20" value={homeScoreInput}
+                            onChange={(e) => setHomeScoreInput(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground focus:outline-none focus:border-amber-500/50"
+                            data-testid="chat-exact-home"
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground font-bold mt-4">-</span>
+                        <div className="flex-1 text-center">
+                          <p className="text-[9px] text-muted-foreground mb-1 truncate">{awayName}</p>
+                          <input
+                            type="number" min="0" max="20" value={awayScoreInput}
+                            onChange={(e) => setAwayScoreInput(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground focus:outline-none focus:border-amber-500/50"
+                            data-testid="chat-exact-away"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleLockExactScore}
+                        disabled={isSubmitting}
+                        data-testid="chat-lock-exact-btn"
+                        className="w-full py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/30 transition-all duration-200 disabled:opacity-50"
+                      >
+                        {isSubmitting ? '...' : 'Lock Exact Score Prediction'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Status footer */}
+          {hasPrediction && !isLocked && (
+            <div className="flex items-center gap-2 text-[10px] pt-1 border-t border-border/15">
+              {savedPrediction && (
+                <span className="text-emerald-400 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  Pick: {selectedVote === 'home' ? '1' : selectedVote === 'draw' ? 'X' : '2'}
+                </span>
+              )}
+              {exactScoreLocked && (
+                <span className="text-amber-400 font-medium flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Exact: {homeScoreInput}-{awayScoreInput}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 });

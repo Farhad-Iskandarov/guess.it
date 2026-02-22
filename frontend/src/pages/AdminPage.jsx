@@ -16,7 +16,7 @@ import {
   Activity, MessageSquare, Heart, TrendingUp, ScrollText,
   Server, Star, StarOff, Flame, Lock, KeyRound, Filter,
   ChevronDown, ArrowUpDown, Plus, Power, PowerOff, Zap,
-  UserCheck, Edit, Mail, Newspaper
+  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -121,6 +121,7 @@ const TABS = [
   { id: 'points', label: 'Points Settings', icon: Zap },
   { id: 'banners', label: 'Carousel Banners', icon: ScrollText },
   { id: 'news', label: 'News', icon: Edit },
+  { id: 'sub-plans', label: 'Subscription Plans', icon: Crown },
   { id: 'subscriptions', label: 'Subscribed Emails', icon: Mail },
   { id: 'contact-msgs', label: 'Contact Messages', icon: MessageSquare },
   { id: 'contact-settings', label: 'Contact Settings', icon: KeyRound },
@@ -136,10 +137,15 @@ const DashboardTab = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [subStats, setSubStats] = useState(null);
 
   useEffect(() => {
-    Promise.all([api('/dashboard'), api('/audit-log?limit=5')])
-      .then(([s, a]) => { setStats(s); setAuditLogs(a.logs || []); })
+    Promise.all([
+      api('/dashboard'),
+      api('/audit-log?limit=5'),
+      api('/subscription-stats').catch(() => null)
+    ])
+      .then(([s, a, ss]) => { setStats(s); setAuditLogs(a.logs || []); setSubStats(ss); })
       .catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -158,6 +164,24 @@ const DashboardTab = () => {
         <StatCard icon={Bell} label="Notifications" value={stats.total_notifications} color="amber" />
         <StatCard icon={Shield} label="Admins" value={stats.admin_count} color="emerald" sub={`${stats.banned_users} banned`} />
       </div>
+
+      {/* Subscription Overview Section */}
+      {subStats && (
+        <div className="rounded-2xl border border-primary/20 bg-card/60 p-5" data-testid="dashboard-subscription-overview">
+          <div className="flex items-center gap-2 mb-4">
+            <Crown className="w-5 h-5 text-primary" />
+            <span className="text-sm font-bold text-foreground">Subscription Overview</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <StatCard icon={Crown} label="Total Subscribers" value={subStats.total_subscribers} color="primary" />
+            <StatCard icon={DollarSign} label="Revenue" value={`$${subStats.total_revenue}`} color="emerald" />
+            {subStats.plan_stats?.map(ps => (
+              <StatCard key={ps.plan_id} icon={Users} label={ps.name} value={ps.subscriber_count} color={ps.plan_id === 'plan_standard' ? 'emerald' : ps.plan_id === 'plan_champion' ? 'sky' : 'purple'} />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-border/40 bg-card/60 p-5">
         <div className="flex items-center gap-2 mb-3">
           <div className={`w-2.5 h-2.5 rounded-full ${stats.system_status === 'healthy' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
@@ -1904,6 +1928,181 @@ const SubscriptionsTab = () => {
   );
 };
 
+/* ============ SUBSCRIPTION PLANS MANAGEMENT TAB ============ */
+const SubPlansTab = () => {
+  const [plans, setPlans] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editingPlan, setEditingPlan] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [plansData, statsData] = await Promise.all([
+        api('/subscription-plans'),
+        api('/subscription-stats')
+      ]);
+      setPlans(plansData.plans || []);
+      setStats(statsData);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const startEdit = (plan) => {
+    setEditingPlan(plan.plan_id);
+    setEditForm({ ...plan, features: plan.features?.join('\n') || '' });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const features = editForm.features.split('\n').map(f => f.trim()).filter(Boolean);
+      await api(`/subscription-plans/${editingPlan}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          price: parseFloat(editForm.price),
+          features,
+          is_active: editForm.is_active,
+          badge_name: editForm.badge_name,
+          badge_color: editForm.badge_color,
+        })
+      });
+      setEditingPlan(null);
+      fetchData();
+    } catch (err) { alert(err.message); }
+    finally { setSaving(false); }
+  };
+
+  const togglePlan = async (plan) => {
+    try {
+      await api(`/subscription-plans/${plan.plan_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !plan.is_active })
+      });
+      fetchData();
+    } catch (err) { alert(err.message); }
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+
+  const planColors = { plan_standard: 'emerald', plan_champion: 'blue', plan_elite: 'purple' };
+
+  return (
+    <div className="space-y-6" data-testid="sub-plans-tab">
+      {/* Stats Overview */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard icon={Crown} label="Total Subscribers" value={stats.total_subscribers} color="primary" />
+          <StatCard icon={DollarSign} label="Total Revenue" value={`$${stats.total_revenue}`} color="emerald" />
+          {stats.plan_stats?.map(ps => (
+            <StatCard key={ps.plan_id} icon={Users} label={`${ps.name} Users`} value={ps.subscriber_count} color={planColors[ps.plan_id] || 'sky'} />
+          ))}
+        </div>
+      )}
+
+      {/* Plan Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {plans.map(plan => {
+          const color = planColors[plan.plan_id] || 'gray';
+          const isEditing = editingPlan === plan.plan_id;
+          const psStat = stats?.plan_stats?.find(s => s.plan_id === plan.plan_id);
+
+          return (
+            <div key={plan.plan_id} className={`rounded-2xl border ${plan.is_active ? `border-${color}-500/30` : 'border-border/30 opacity-60'} bg-card/60 p-5 space-y-4 transition-all`} data-testid={`admin-plan-${plan.plan_id}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Crown className={`w-5 h-5 text-${color}-400`} />
+                  {isEditing ? (
+                    <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="h-8 w-32 text-sm" />
+                  ) : (
+                    <span className="text-sm font-bold text-foreground">{plan.name}</span>
+                  )}
+                </div>
+                <button onClick={() => togglePlan(plan)} className="text-muted-foreground hover:text-foreground transition-colors" data-testid={`toggle-plan-${plan.plan_id}`}>
+                  {plan.is_active ? <ToggleRight className="w-6 h-6 text-emerald-500" /> : <ToggleLeft className="w-6 h-6" />}
+                </button>
+              </div>
+
+              {isEditing ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Price ($/mo)</label>
+                    <Input type="number" step="0.01" value={editForm.price} onChange={e => setEditForm({ ...editForm, price: e.target.value })} className="h-8 text-sm mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Features (one per line)</label>
+                    <textarea value={editForm.features} onChange={e => setEditForm({ ...editForm, features: e.target.value })} className="w-full h-24 mt-1 text-xs rounded-lg bg-secondary/50 border border-border/30 p-2 text-foreground resize-none focus:outline-none focus:border-primary/50" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Badge Color</label>
+                    <Input type="color" value={editForm.badge_color || '#22c55e'} onChange={e => setEditForm({ ...editForm, badge_color: e.target.value })} className="h-8 w-16 mt-1 p-0.5" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSave} disabled={saving} className="flex-1 h-8 text-xs">
+                      {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingPlan(null)} className="h-8 text-xs">Cancel</Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-foreground">${plan.price}</span>
+                    <span className="text-xs text-muted-foreground">/mo</span>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {plan.features?.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <Check className={`w-3 h-3 mt-0.5 text-${color}-400 flex-shrink-0`} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex items-center justify-between pt-2 border-t border-border/20">
+                    <span className="text-[10px] text-muted-foreground">{psStat?.subscriber_count || 0} subscribers</span>
+                    <Button size="sm" variant="ghost" onClick={() => startEdit(plan)} className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground" data-testid={`edit-plan-${plan.plan_id}`}>
+                      <Edit className="w-3 h-3" /> Edit
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Recent Subscriptions */}
+      {stats?.recent_subscriptions?.length > 0 && (
+        <div className="rounded-2xl border border-border/40 bg-card/60 p-5">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-muted-foreground" /> Recent Subscriptions
+          </h3>
+          <div className="space-y-2">
+            {stats.recent_subscriptions.map((sub, i) => (
+              <div key={sub.subscription_id || i} className="flex items-center gap-3 text-xs py-1.5 border-b border-border/20 last:border-0">
+                <Avatar className="w-6 h-6">
+                  <AvatarImage src={sub.user_picture} />
+                  <AvatarFallback className="text-[9px] bg-primary/10 text-primary">{(sub.user_nickname || '?')[0].toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <span className="font-medium text-foreground">{sub.user_nickname || sub.user_email}</span>
+                <span className="text-primary font-semibold">{sub.plan_name}</span>
+                <span className="text-muted-foreground ml-auto">{sub.activated_at ? new Date(sub.activated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ============ CONTACT MESSAGES TAB ============ */
 const ContactMessagesTab = () => {
   const [msgs, setMsgs] = useState([]);
@@ -2414,6 +2613,7 @@ export const AdminPage = () => {
             {activeTab === 'banners' && <BannersTab />}
             {activeTab === 'news' && <NewsTab />}
             {activeTab === 'subscriptions' && <SubscriptionsTab />}
+            {activeTab === 'sub-plans' && <SubPlansTab />}
             {activeTab === 'contact-msgs' && <ContactMessagesTab />}
             {activeTab === 'contact-settings' && <ContactSettingsTab />}
             {activeTab === 'streaks' && <StreaksTab />}

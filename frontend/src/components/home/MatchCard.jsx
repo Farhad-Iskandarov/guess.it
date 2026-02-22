@@ -181,8 +181,59 @@ const SmartAdvice = ({ matchId, onGetAdvice, advice, isLoading }) => {
   );
 };
 
-// Invite Friend Component (placeholder - will be expanded in P2)
-const InviteFriend = ({ matchId }) => {
+// Invite Friend Component - Functional
+const InviteFriend = ({ matchId, match }) => {
+  const [showFriends, setShowFriends] = useState(false);
+  const [friends, setFriends] = useState([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [sending, setSending] = useState(null);
+  const [sentTo, setSentTo] = useState([]);
+  const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
+  const loadFriends = async () => {
+    if (friends.length > 0) { setShowFriends(true); return; }
+    setLoadingFriends(true);
+    try {
+      const res = await fetch(`${API_URL}/api/friends/list`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setFriends(data.friends || []);
+      }
+    } catch (err) { console.error(err); }
+    finally { setLoadingFriends(false); setShowFriends(true); }
+  };
+
+  const handleInvite = async (friend) => {
+    if (!match) return;
+    setSending(friend.user_id);
+    try {
+      const matchCardData = {
+        match_id: matchId,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        competition: match.competition || '',
+        dateTime: match.dateTime || '',
+        status: match.status || 'SCHEDULED',
+        score: match.score || {}
+      };
+      const res = await fetch(`${API_URL}/api/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          receiver_id: friend.user_id,
+          message: `I invited you to predict on ${match.homeTeam?.name || ''} vs ${match.awayTeam?.name || ''}! Make your guess!`,
+          message_type: 'match_share',
+          match_data: matchCardData
+        })
+      });
+      if (res.ok) {
+        setSentTo(prev => [...prev, friend.user_id]);
+      }
+    } catch (err) { console.error(err); }
+    finally { setSending(null); }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -190,18 +241,56 @@ const InviteFriend = ({ matchId }) => {
         <span className="font-medium">Invite Friend</span>
       </div>
       
-      <Button 
-        variant="outline"
-        className="w-full gap-2"
-        data-testid="invite-friend-btn"
-        disabled
-      >
-        <UserPlus className="w-4 h-4" />
-        Invite to Predict (Coming Soon)
-      </Button>
+      {!showFriends ? (
+        <Button 
+          variant="outline"
+          className="w-full gap-2"
+          data-testid="invite-friend-btn"
+          onClick={loadFriends}
+          disabled={loadingFriends}
+        >
+          <UserPlus className="w-4 h-4" />
+          {loadingFriends ? 'Loading friends...' : 'Select Friend to Invite'}
+        </Button>
+      ) : friends.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-2">
+          No friends yet. Add friends first!
+        </p>
+      ) : (
+        <div className="max-h-32 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+          {friends.map(f => {
+            const isSent = sentTo.includes(f.user_id);
+            const pic = f.picture?.startsWith('/') ? `${API_URL}${f.picture}` : f.picture;
+            return (
+              <div key={f.user_id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-secondary/30 transition-colors">
+                <div className="w-7 h-7 rounded-full bg-secondary overflow-hidden flex-shrink-0">
+                  {pic ? <img src={pic} alt="" className="w-full h-full object-cover" /> : (
+                    <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+                      {(f.nickname || '?')[0].toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs text-foreground font-medium truncate flex-1">{f.nickname}</span>
+                <button
+                  onClick={() => !isSent && handleInvite(f)}
+                  disabled={sending === f.user_id || isSent}
+                  data-testid={`invite-friend-${f.user_id}`}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                    isSent ? 'bg-emerald-500/20 text-emerald-400' :
+                    sending === f.user_id ? 'bg-secondary text-muted-foreground' :
+                    'bg-primary/15 text-primary hover:bg-primary/25'
+                  }`}
+                >
+                  {isSent ? 'Sent!' : sending === f.user_id ? '...' : 'Invite'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
       
       <p className="text-[10px] text-muted-foreground text-center">
-        Invite friends to predict on this match
+        Send match card to friends via chat
       </p>
     </div>
   );
@@ -489,7 +578,7 @@ export const MatchCard = ({
                 
                 {/* Invite Friend */}
                 <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
-                  <InviteFriend matchId={match.id} />
+                  <InviteFriend matchId={match.id} match={match} />
                 </div>
                 
                 {/* Friends Activity */}

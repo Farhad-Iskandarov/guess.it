@@ -267,22 +267,27 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
 VoteButton.displayName = 'VoteButton';
 
 // ============ GUESS IT Button ============
-const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onClick, locked }) => {
+const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onClick, locked, hasExactScore }) => {
   const hasSelection = !!currentSelection;
   const hasSaved = !!savedPrediction;
   const isCurrentSaved = hasSaved && savedPrediction === currentSelection;
   const hasUnsavedChanges = hasSaved && currentSelection && savedPrediction !== currentSelection;
+  // Mutual exclusivity: if exact score is locked, show saved-orange state
+  const blockedByExactScore = hasExactScore && !hasSaved;
 
   const getButtonState = () => {
-    if (locked) return { text: 'Closed', showCheck: false, showUpdate: false, isSaved: false, isLocked: true };
-    if (isLoading) return { text: 'Saving...', showCheck: false, showUpdate: false, isSaved: false, isLocked: false };
-    if (isCurrentSaved) return { text: 'Saved', showCheck: true, showUpdate: false, isSaved: true, isLocked: false };
-    if (hasUnsavedChanges) return { text: 'Update', showCheck: false, showUpdate: true, isSaved: false, isLocked: false };
-    return { text: 'GUESS IT', showCheck: false, showUpdate: false, isSaved: false, isLocked: false };
+    if (locked) return { text: 'Closed', showCheck: false, showUpdate: false, isSaved: false, isLocked: true, isExactScore: false };
+    if (isLoading) return { text: 'Saving...', showCheck: false, showUpdate: false, isSaved: false, isLocked: false, isExactScore: false };
+    if (blockedByExactScore) return { text: 'Saved', showCheck: true, showUpdate: false, isSaved: true, isLocked: false, isExactScore: true };
+    if (isCurrentSaved && hasExactScore) return { text: 'Saved', showCheck: true, showUpdate: false, isSaved: true, isLocked: false, isExactScore: true };
+    if (isCurrentSaved) return { text: 'Saved', showCheck: true, showUpdate: false, isSaved: true, isLocked: false, isExactScore: false };
+    if (hasUnsavedChanges) return { text: 'Update', showCheck: false, showUpdate: true, isSaved: false, isLocked: false, isExactScore: false };
+    return { text: 'GUESS IT', showCheck: false, showUpdate: false, isSaved: false, isLocked: false, isExactScore: false };
   };
 
   const state = getButtonState();
-  const isDisabled = locked || !hasSelection || isLoading;
+  // Disabled when: locked, no selection (and no exact score), loading, OR exact score blocks voting
+  const isDisabled = locked || isLoading || blockedByExactScore || (!hasSelection && !hasSaved);
 
   return (
     <Button
@@ -294,7 +299,9 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
         ${state.isLocked
           ? 'bg-muted border-2 border-border text-muted-foreground cursor-not-allowed'
           : state.isSaved
-            ? 'bg-primary/20 border-2 border-primary text-primary hover:bg-primary/30'
+            ? state.isExactScore
+              ? 'bg-amber-500/20 border-2 border-amber-500 text-amber-500'
+              : 'bg-primary/20 border-2 border-primary text-primary hover:bg-primary/30'
             : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
         }
         ${isDisabled && !state.isSaved && !state.isLocked ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''}
@@ -321,26 +328,29 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
 GuessItButton.displayName = 'GuessItButton';
 
 // ============ Remove Button ============
-const RemoveButton = memo(({ onClick, disabled, hasSelection }) => (
-  <Button
-    onClick={onClick}
-    disabled={disabled || !hasSelection}
-    variant="outline"
-    data-testid="remove-prediction-btn"
-    className={`
-      relative match-action-btn-sm h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
-      border-2 border-muted-foreground/30 hover:border-destructive/50
-      bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive
-      ${!hasSelection ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105'}
-    `}
-    style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
-  >
-    <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
-      <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span className="text-[10px] sm:text-xs md:text-sm font-semibold">Remove</span>
-    </div>
-  </Button>
-));
+const RemoveButton = memo(({ onClick, disabled, hasSelection, hasExactScore }) => {
+  const canRemove = hasSelection || hasExactScore;
+  return (
+    <Button
+      onClick={onClick}
+      disabled={disabled || !canRemove}
+      variant="outline"
+      data-testid="remove-prediction-btn"
+      className={`
+        relative match-action-btn-sm h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
+        border-2 border-muted-foreground/30 hover:border-destructive/50
+        bg-transparent hover:bg-destructive/10 text-muted-foreground hover:text-destructive
+        ${!canRemove ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105'}
+      `}
+      style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
+    >
+      <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
+        <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="text-[10px] sm:text-xs md:text-sm font-semibold">Remove</span>
+      </div>
+    </Button>
+  );
+});
 RemoveButton.displayName = 'RemoveButton';
 
 // ============ Advance Button ============
@@ -371,12 +381,12 @@ AdvanceButton.displayName = 'AdvanceButton';
 // ============ Advanced Options Modal ============
 import { Target, Lightbulb, UserPlus, Users, ChevronRight, X as XIcon, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { saveExactScorePrediction, getExactScorePrediction } from '@/services/predictions';
+import { saveExactScorePrediction, getExactScorePrediction, getMyExactScorePredictions } from '@/services/predictions';
 import { useFriends } from '@/lib/FriendsContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, onNavigateLogin }) => {
+const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, onNavigateLogin, onExactScoreSaved, savedPrediction }) => {
   const [activeSection, setActiveSection] = useState('exact-score');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
@@ -433,6 +443,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
     try {
       await saveExactScorePrediction(match.id, homeScore, awayScore);
       setExistingPrediction({ home_score: homeScore, away_score: awayScore });
+      if (onExactScoreSaved) onExactScoreSaved(match.id);
       toast.success('Exact score prediction saved!', {
         description: `${match.homeTeam.name} ${homeScore} - ${awayScore} ${match.awayTeam.name}`,
         duration: 3000
@@ -561,9 +572,19 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                   </span>
                 </div>
                 
-                {existingPrediction ? (
-                  <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <div className="flex items-center gap-2 text-emerald-500 font-medium">
+                {savedPrediction ? (
+                  <div className="p-4 rounded-lg bg-muted/50 border border-border/30">
+                    <div className="flex items-center gap-2 text-muted-foreground font-medium">
+                      <Lock className="w-4 h-4" />
+                      Exact Score Unavailable
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      You already saved a winner prediction (1/X/2) for this match. Remove it first to use exact score.
+                    </p>
+                  </div>
+                ) : existingPrediction ? (
+                  <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <div className="flex items-center gap-2 text-amber-500 font-medium">
                       <Check className="w-4 h-4" />
                       Prediction Locked
                     </div>
@@ -805,6 +826,7 @@ const MatchRow = memo(({
   isAuthenticated,
   favoriteMatchIds,
   onToggleFavoriteMatch,
+  hasExactScore,
 }) => {
   const displayedSelection = currentSelection !== undefined ? currentSelection : savedPrediction;
   const isLocked = match.predictionLocked;
@@ -823,15 +845,18 @@ const MatchRow = memo(({
   const isCurrentSaved = savedPrediction && savedPrediction === displayedSelection;
   const hasUnsavedChanges = savedPrediction && displayedSelection && savedPrediction !== displayedSelection;
   const hasSavedPrediction = !!savedPrediction;
+  const hasAnyPrediction = hasSavedPrediction || hasExactScore;
 
   return (
     <div
       className={`match-row-card rounded-xl border overflow-hidden ${
         match.status === 'LIVE'
           ? 'live-match-card'
-          : hasSavedPrediction
-            ? 'bg-emerald-500/[0.06] border-emerald-500/25 hover:border-emerald-500/40'
-            : 'bg-card/50 hover:bg-card border-border/50 hover:border-border'
+          : hasExactScore
+            ? 'bg-amber-500/[0.06] border-amber-500/25 hover:border-amber-500/40'
+            : hasSavedPrediction
+              ? 'bg-emerald-500/[0.06] border-emerald-500/25 hover:border-emerald-500/40'
+              : 'bg-card/50 hover:bg-card border-border/50 hover:border-border'
       }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
@@ -917,14 +942,14 @@ const MatchRow = memo(({
           )}
           {/* Right: Vote buttons + Action buttons */}
           <div className="flex items-center gap-1 md:gap-2">
-            <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
-            <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
-            <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
+            <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
+            <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
+            <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
           </div>
           <div className="flex items-center gap-1 md:gap-2">
-            <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} />
-            <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
-            <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
+            <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} />
+            <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked || hasSavedPrediction} />
+            <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection || hasSavedPrediction} hasExactScore={hasExactScore} />
           </div>
         </div>
       </div>
@@ -974,14 +999,14 @@ const MatchRow = memo(({
           {/* Vote + Action buttons — stacked on mobile */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
             <div className="flex items-center gap-1 flex-1">
-              <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
-              <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
-              <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading} locked={isLocked} />
+              <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
+              <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
+              <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} />
-              <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
-              <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection} />
+              <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} />
+              <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked || hasSavedPrediction} />
+              <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection || hasSavedPrediction} hasExactScore={hasExactScore} />
             </div>
           </div>
         </div>
@@ -999,6 +1024,12 @@ const MatchRow = memo(({
           <span className="text-primary font-medium flex items-center gap-1">
             <Check className="w-3 h-3" />
             Pick: {displayedSelection === 'home' ? '1' : displayedSelection === 'draw' ? 'X' : '2'}
+          </span>
+        )}
+        {hasExactScore && (
+          <span className="text-amber-500 font-medium flex items-center gap-1">
+            <Check className="w-3 h-3" />
+            Exact Score
           </span>
         )}
         {hasUnsavedChanges && (
@@ -1024,8 +1055,23 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
   const [pendingPrediction, setPendingPrediction] = useState(null);
   const [prevScores, setPrevScores] = useState({});
   const [advancedModalMatch, setAdvancedModalMatch] = useState(null);
+  const [exactScoreMatchIds, setExactScoreMatchIds] = useState(new Set());
   const containerRef1 = useRef(null);
   const containerRef2 = useRef(null);
+
+  // Fetch exact score predictions on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      getMyExactScorePredictions()
+        .then(data => {
+          const ids = new Set((data.exact_score_predictions || []).map(p => p.match_id));
+          setExactScoreMatchIds(ids);
+        })
+        .catch(() => {});
+    } else {
+      setExactScoreMatchIds(new Set());
+    }
+  }, [isAuthenticated]);
 
   // Track score changes for animation
   const prevMatchesRef = useRef(matches);
@@ -1047,22 +1093,56 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
 
   const handleRefresh = useCallback(async (matchId) => {
     setCurrentSelections((prev) => ({ ...prev, [matchId]: null }));
-    // If user had a saved prediction, delete it from backend
-    if (savedPredictions[matchId]) {
-      setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
-      try {
-        await deletePrediction(matchId);
-        if (onPredictionSaved) onPredictionSaved(matchId, null);
-        toast.success('Vote removed', { description: 'Your prediction has been cleared.', duration: 2000 });
-      } catch (error) {
-        toast.error('Failed to remove vote', { description: error.message, duration: 3000 });
-      } finally {
-        setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
+    setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
+    
+    const hadSavedPrediction = !!savedPredictions[matchId];
+    const hadExactScore = exactScoreMatchIds.has(matchId);
+    
+    try {
+      const promises = [];
+      
+      // Delete normal prediction if exists
+      if (hadSavedPrediction) {
+        promises.push(deletePrediction(matchId));
       }
-    } else {
-      toast.info('Selection cleared', { duration: 2000 });
+      
+      // Delete exact score prediction if exists
+      if (hadExactScore) {
+        promises.push(
+          fetch(`${process.env.REACT_APP_BACKEND_URL}/api/predictions/exact-score/match/${matchId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+          })
+        );
+      }
+      
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        
+        // Clear normal prediction state
+        if (hadSavedPrediction && onPredictionSaved) {
+          onPredictionSaved(matchId, null);
+        }
+        
+        // Clear exact score state
+        if (hadExactScore) {
+          setExactScoreMatchIds(prev => {
+            const next = new Set(prev);
+            next.delete(matchId);
+            return next;
+          });
+        }
+        
+        toast.success('Prediction removed', { description: 'All predictions for this match have been cleared.', duration: 2000 });
+      } else {
+        toast.info('Selection cleared', { duration: 2000 });
+      }
+    } catch (error) {
+      toast.error('Failed to remove prediction', { description: error.message, duration: 3000 });
+    } finally {
+      setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
     }
-  }, [savedPredictions, onPredictionSaved]);
+  }, [savedPredictions, onPredictionSaved, exactScoreMatchIds]);
 
   const handleAdvance = useCallback((matchId) => {
     const match = matches.find(m => m.id === matchId);
@@ -1073,6 +1153,10 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
 
   const handleCloseAdvancedModal = useCallback(() => {
     setAdvancedModalMatch(null);
+  }, []);
+
+  const handleExactScoreSaved = useCallback((matchId) => {
+    setExactScoreMatchIds(prev => new Set([...prev, matchId]));
   }, []);
 
   const handleNavigateLoginFromAdvanced = useCallback(() => {
@@ -1199,6 +1283,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
                   isAuthenticated={isAuthenticated}
                   favoriteMatchIds={favoriteMatchIds}
                   onToggleFavoriteMatch={onToggleFavoriteMatch}
+                  hasExactScore={exactScoreMatchIds.has(match.id)}
                 />
               ))}
             </div>
@@ -1232,6 +1317,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               isAuthenticated={isAuthenticated}
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={onToggleFavoriteMatch}
+              hasExactScore={exactScoreMatchIds.has(match.id)}
             />
           ))}
         </div>
@@ -1255,6 +1341,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         match={advancedModalMatch}
         isAuthenticated={isAuthenticated}
         onNavigateLogin={handleNavigateLoginFromAdvanced}
+        onExactScoreSaved={handleExactScoreSaved}
+        savedPrediction={advancedModalMatch ? savedPredictions[advancedModalMatch.id] : null}
       />
     </>
   );

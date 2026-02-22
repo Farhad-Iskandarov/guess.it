@@ -1642,3 +1642,109 @@ async def reset_points_config(request: Request, db: AsyncIOMotorDatabase = Depen
     await log_admin_action(db, admin["user_id"], "reset_points_config", "points", "Reset to defaults")
     
     return {"success": True, "config": default_config}
+
+
+# ==================== SUBSCRIPTION PLANS MANAGEMENT ====================
+
+@router.get("/subscription-plans")
+async def list_subscription_plans(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get all subscription plans (including inactive)"""
+    admin = await get_admin_user(request, db)
+    plans = await db.subscription_plans.find({}, {"_id": 0}).sort("order", 1).to_list(20)
+    return {"plans": plans}
+
+
+@router.put("/subscription-plans/{plan_id}")
+async def update_subscription_plan(plan_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Update a subscription plan"""
+    admin = await get_admin_user(request, db)
+    body = await request.json()
+    
+    now = datetime.now(timezone.utc).isoformat()
+    update_fields = {"updated_at": now}
+    
+    allowed = ["name", "price", "features", "badge_name", "badge_color", "order", "is_active"]
+    for key in allowed:
+        if key in body:
+            update_fields[key] = body[key]
+    
+    result = await db.subscription_plans.update_one(
+        {"plan_id": plan_id},
+        {"$set": update_fields}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    await log_admin_action(db, admin["user_id"], "update_subscription_plan", plan_id, f"Updated plan: {plan_id}")
+    
+    return {"success": True}
+
+
+@router.get("/subscription-stats")
+async def get_subscription_stats(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get subscription statistics for dashboard"""
+    admin = await get_admin_user(request, db)
+    
+    total_subs = await db.user_subscriptions.count_documents({"status": "active"})
+    
+    # Count per plan
+    plans = await db.subscription_plans.find({}, {"_id": 0}).sort("order", 1).to_list(10)
+    plan_stats = []
+    for plan in plans:
+        count = await db.user_subscriptions.count_documents({"plan_id": plan["plan_id"], "status": "active"})
+        plan_stats.append({
+            "plan_id": plan["plan_id"],
+            "name": plan["name"],
+            "price": plan["price"],
+            "subscriber_count": count,
+            "is_active": plan.get("is_active", True)
+        })
+    
+    # Total revenue from paid transactions
+    pipeline = [
+        {"$match": {"payment_status": "paid"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    revenue_result = await db.payment_transactions.aggregate(pipeline).to_list(1)
+    total_revenue = revenue_result[0]["total"] if revenue_result else 0
+    
+    # Recent subscriptions
+    recent = await db.user_subscriptions.find(
+        {"status": "active"},
+        {"_id": 0}
+    ).sort("activated_at", -1).limit(10).to_list(10)
+    
+    for sub in recent:
+        user = await db.users.find_one({"user_id": sub["user_id"]}, {"_id": 0, "nickname": 1, "email": 1, "picture": 1})
+        if user:
+            sub["user_nickname"] = user.get("nickname")
+            sub["user_email"] = user.get("email")
+            sub["user_picture"] = user.get("picture")
+    
+    return {
+        "total_subscribers": total_subs,
+        "plan_stats": plan_stats,
+        "total_revenue": round(total_revenue, 2),
+        "recent_subscriptions": recent
+    }
+
+
+@router.get("/user-subscriptions")
+async def list_user_subscriptions(request: Request, db: AsyncIOMotorDatabase = Depends(get_db),
+                                   page: int = 1, limit: int = 20):
+    """List all user subscriptions"""
+    admin = await get_admin_user(request, db)
+    skip = (page - 1) * limit
+    
+    total = await db.user_subscriptions.count_documents({})
+    subs = await db.user_subscriptions.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    
+    for sub in subs:
+        user = await db.users.find_one({"user_id": sub["user_id"]}, {"_id": 0, "nickname": 1, "email": 1, "picture": 1})
+        if user:
+            sub["user_nickname"] = user.get("nickname")
+            sub["user_email"] = user.get("email")
+    
+    return {"subscriptions": subs, "total": total}
+

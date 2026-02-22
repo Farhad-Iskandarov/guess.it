@@ -40,9 +40,48 @@ A social football prediction platform where fans analyze, predict, and compete w
 - **Advanced Match Options** - Expandable section with enhanced prediction features
 - **Configurable Points System** - Admin can configure all point values dynamically
 
+### Subscription System (NEW - Feb 2026)
+- **3 Premium Plans** - Standard ($4.99/mo), Champion ($9.99/mo), Elite ($19.99/mo)
+- **Stripe Payment Integration** - Secure checkout with Stripe (test mode)
+- **Subscription Management** - Users can subscribe, view active plan, cancel
+- **Premium Badges** - Visual subscription tier badges on user profiles
+- **Admin Plan Management** - Edit prices, features, toggle plans on/off
+
+### Chat & Social Improvements (NEW - Feb 2026)
+- **Expandable Match Cards in Chat** - Clicking a shared match card expands it in-place with full prediction UI (vote, exact score) instead of redirecting
+- **Invite Friend via Match Card** - Sending a guess invite from Advanced section now sends the actual match card in chat
+- **Visual Prediction Types** - Green background = normal winner prediction, Orange background = exact score prediction
+
 ---
 
 ## Recent Updates (February 2026)
+
+### Exact Score Prediction UI Fix (Latest)
+- Fixed exact score prediction only updating the specific match card (not all cards)
+- Added visual differentiation: Green = winner prediction, Orange = exact score prediction
+- Mutual exclusivity per match: exact score locks out 1/X/2 votes and vice versa
+- Remove button clears BOTH normal prediction and exact score for that match only
+- Advance button disabled when normal prediction already saved (mutual exclusivity)
+- GuessItButton shows "Saved" with light orange for exact score, light green for normal guess
+- Backend: DELETE /api/predictions/exact-score/match/{id} endpoint for removing exact scores
+- Chat expanded match cards also show amber/orange styling for locked exact scores
+- +50 points auto-awarded when exact score matches final result (processed once, notifications sent)
+- State persists correctly after page refresh
+
+### Subscription System ✅
+- New `/subscribe` page with 3 premium plans (Standard, Champion, Elite)
+- Stripe integration for secure payment checkout
+- Admin can manage plans (edit prices, features, toggle active/inactive)
+- Dashboard shows subscription overview (total subscribers, revenue, per-plan stats)
+
+### Chat Match Card Fix ✅
+- Match cards shared in chat now expand in-place with smooth animation
+- Full prediction UI (vote 1/X/2, exact score) works directly inside chat
+- No page redirect or reload
+
+### Invite Friend Fix ✅
+- Invite from Advanced section sends actual match card in chat (not just text)
+- Consistent with chat card sharing system
 
 ### P0: Admin Account Persistence ✅
 - Admin account auto-seeds on server startup
@@ -91,12 +130,13 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 
 | Tab | Description |
 |---|---|
-| Dashboard | Overview stats, recent activity, audit log |
+| Dashboard | Overview stats, recent activity, audit log, **subscription overview** |
 | Users | Manage users (ban, promote, view) |
 | Matches | Match management and live match control |
-| **Points Settings** | Configure prediction points, penalties, bonuses (NEW) |
+| **Points Settings** | Configure prediction points, penalties, bonuses |
 | Carousel Banners | Homepage banner image management |
 | News | Create, edit, delete, publish/unpublish news articles |
+| **Subscription Plans** | Manage premium plans: edit prices, features, toggle active/inactive (NEW) |
 | Subscribed Emails | View and manage newsletter subscriptions |
 | Contact Messages | View, flag, and delete contact form submissions |
 | Contact Settings | Edit support email, location info shown on Contact page |

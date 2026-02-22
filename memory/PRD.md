@@ -1,118 +1,72 @@
-# Guess.it - Sports Prediction Platform
+# GuessIt - Football Prediction Platform
 
 ## Original Problem Statement
-Clone the project from https://github.com/Farhad-Iskandarov/guess.it and implement new features for a sports prediction platform.
+Clone https://github.com/Farhad-Iskandarov/guess.it and implement multiple features and fixes.
 
-## User Personas
-- **Regular Users**: Predict match outcomes, earn points, compete with friends
-- **Admin Users**: Manage platform settings, users, points configuration
+## Architecture
+- **Frontend:** React 19, CRACO, Tailwind CSS 3, shadcn/ui (Radix), Recharts
+- **Backend:** FastAPI (Python 3.11), Motor (async MongoDB), Pydantic v2
+- **Database:** MongoDB (local)
+- **Payment:** Stripe (via emergentintegrations library)
+- **Real-time:** WebSockets (live matches, chat, notifications)
+- **Auth:** Session-based (httpOnly cookies) + Google OAuth
 
----
+## What's Been Implemented
 
-## Completed Work
+### Session 1: Project Clone
+- Full project cloned from GitHub
 
-### December 2025 - Initial Clone & Bug Fix
-- ✅ Cloned project from GitHub
-- ✅ Fixed profile picture save bug
-- ✅ Fixed Football API key issue (typo: letter O vs number 0)
+### Session 2: 5 Feature Implementation
+1. Chat Match Card Fix — expand in-place, no redirect
+2. Invite Friend Fix — sends actual match card via chat
+3. Subscription System — 3 plans + Stripe
+4. Admin Subscription Plans Tab
+5. Admin Dashboard subscription overview
 
-### February 2026 - P0 & P1 Features ✅
+### Session 3: Exact Score Prediction UI Fix (v1)
+- Green/orange visual differentiation
+- Per-card exact score tracking
 
-#### P0: Admin Account Persistence
-- Admin account (farhad.isgandar@gmail.com) auto-seeds on server startup
-- **Files**: `backend/server.py`
+### Session 4: Critical Prediction Logic Fix (Latest)
+**Mutual Exclusivity Per Match:**
+- If exact score locked → 1/X/2 vote buttons disabled, GuessIt shows "Saved" amber
+- If winner prediction saved → Advance button disabled, exact score unavailable in modal
+- Only affects THAT specific match card — no global side effects
 
-#### P1: Match Card Advanced Section
-- Animated expand/collapse "Advanced" section with 4 tabs
-- **Files**: `frontend/src/components/home/MatchList.jsx`
+**Remove Button Clears Everything:**
+- Deletes normal prediction AND exact score prediction for that match
+- New backend: DELETE /api/predictions/exact-score/match/{id}
+- Resets card background, button state, re-enables all options
 
-#### P1: Exact Score Prediction (+50 Bonus)
-- Users can predict exact final scores for bonus points
-- One-time lock (cannot be changed after submission)
-- **API**: POST/GET `/api/predictions/exact-score`
-- **Files**: `backend/routes/predictions.py`, `backend/models/prediction.py`
+**Exact Score Reward (+50 pts):**
+- Auto-processed when match finishes (prediction_processor.py)
+- +50 points for correct exact score, 0 for wrong
+- Notifications sent: "Exact score correct! +50 points!"
+- Processed once only (no duplicates)
 
-#### P1: Admin Points Management
-- "Points Settings" tab in admin panel
-- Configurable: correct points, penalty, exact bonus, level thresholds
-- **API**: GET/PUT `/api/admin/points-config`
-- **Files**: `backend/routes/admin.py`, `backend/models/points_config.py`
+**Visual States Per Card:**
+- Default: neutral background, "GUESS IT" button
+- Winner prediction (1/X/2): green background, green "Saved" button
+- Exact score: orange/amber background, amber "Saved" button
+- Both cleared: back to default
 
-### February 2026 - P2 Features ✅
+## Key Files
+- `/app/frontend/src/components/home/MatchList.jsx` — Core prediction UI logic
+- `/app/frontend/src/pages/MessagesPage.jsx` — Chat expandable match cards
+- `/app/frontend/src/pages/SubscriptionPage.jsx` — Premium subscription page
+- `/app/frontend/src/pages/AdminPage.jsx` — Admin panel with subscription management
+- `/app/backend/routes/predictions.py` — Prediction CRUD + exact score delete
+- `/app/backend/routes/subscriptions.py` — Stripe checkout + plans
+- `/app/backend/services/prediction_processor.py` — Auto-award exact score points
 
-#### P2.1: Prediction Result Notifications ✅
-- In-app notifications when match finishes
-- ✅ Correct prediction: "Correct! [Match] finished [score]. You earned +X points!"
-- ❌ Wrong prediction: "Wrong prediction. [Match] finished [score]."
-- Notifications sent when points are awarded
-- **Files**: `backend/routes/predictions.py` (lines 365-430)
+## Admin Access
+- URL: `/itguess/admin/login`
+- Email: `farhad.isgandar@gmail.com`
+- Password: `Salam123?`
 
-#### P2.2: Invite Friend to Guess ✅
-- Full invitation flow from Advanced section
-- Creates notification AND chat message
-- Prevents duplicate invitations for same match
-- **API**: 
-  - POST `/api/friends/invite/match`
-  - GET `/api/friends/invitations/received`
-  - POST `/api/friends/invitations/{id}/dismiss`
-- **Files**: `backend/routes/friends.py`, `backend/routes/messages.py`
-
-#### P2.3: Smart Advice ✅
-- Get prediction from top-performing users (10+ correct in 30 days)
-- Randomly selects from qualified users
-- Message format: "[User] who guessed last X matches correctly thinks [prediction]"
-- **API**: GET `/api/predictions/smart-advice/{match_id}`
-- **Files**: `backend/routes/predictions.py` (lines 590-665)
-
-#### P2.4: Friends Activity on Match Card ✅
-- Shows friends' profile pictures and predictions on match cards
-- Only visible if users are friends
-- Respects privacy settings
-- **API**: GET `/api/predictions/match/{match_id}/friends-activity`
-- **Files**: `backend/routes/predictions.py` (lines 670-720)
-
----
-
-## Remaining P2 Tasks
-
-### P2.5: Profile Privacy Settings (TODO)
-- Add toggle in user settings
-- When enabled: full profile visible
-- When disabled: show only picture, points, level, friendship button, "Profile is private" text
-
----
-
-## Technical Architecture
-
-### Stack
-- **Frontend**: React + Vite, Tailwind CSS, Shadcn/UI
-- **Backend**: FastAPI (Python)
-- **Database**: MongoDB
-- **Auth**: JWT cookies, Google OAuth
-- **Real-time**: WebSockets (matches, chat, notifications)
-
-### Key Files
-- `backend/server.py` - Main server, admin seeding
-- `backend/routes/predictions.py` - All prediction APIs + smart advice + friends activity
-- `backend/routes/friends.py` - Friends + match invitations
-- `backend/routes/admin.py` - Admin panel APIs
-- `frontend/src/components/home/MatchList.jsx` - Match cards with Advanced modal
-- `frontend/src/pages/AdminPage.jsx` - Admin panel with Points Settings
-
-### Database Collections
-- `users` - User accounts
-- `predictions` - Match predictions
-- `exact_score_predictions` - Exact score bonus predictions
-- `points_config` - Admin-configured points values
-- `match_invitations` - Match prediction invitations
-- `notifications` - User notifications
-
----
-
-## Credentials
-- **Admin**: farhad.isgandar@gmail.com / Salam123?
-- **Football API Key**: In `backend/.env` as FOOTBALL_API_KEY
-
-## Test Reports
-- `/app/test_reports/iteration_2.json` - P0 & P1 tests (100% pass)
-- `/app/test_reports/iteration_3.json` - P2 tests (100% pass)
+## Prioritized Backlog
+- P0: None (all requested features working)
+- P1: Stripe live keys
+- P1: Subscription benefits enforcement
+- P2: Subscription analytics charts
+- P2: Referral/promo code system
