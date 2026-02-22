@@ -126,30 +126,43 @@ TeamCrest.displayName = 'TeamCrest';
 // ============ Favorite Heart Button ============
 const FavoriteHeart = memo(({ teamId, teamName, teamCrest, isFavorite, onToggle, isAuthenticated }) => {
   const [animating, setAnimating] = useState(false);
+  const [optimisticFavorite, setOptimisticFavorite] = useState(null);
+
+  // Reset optimistic state when prop changes
+  useEffect(() => {
+    setOptimisticFavorite(null);
+  }, [isFavorite]);
 
   if (!isAuthenticated) return null;
 
-  const handleClick = async (e) => {
+  const displayFavorite = optimisticFavorite !== null ? optimisticFavorite : isFavorite;
+
+  const handleClick = (e) => {
     e.stopPropagation();
+    const newState = !displayFavorite;
+    
+    // Immediate visual feedback
+    setOptimisticFavorite(newState);
     setAnimating(true);
-    try {
-      await onToggle(teamId, teamName, teamCrest, !isFavorite);
-    } catch {
-      // error handled by parent
-    }
-    setTimeout(() => setAnimating(false), 300);
+    setTimeout(() => setAnimating(false), 200);
+    
+    // Fire and forget - API call in background
+    onToggle(teamId, teamName, teamCrest, newState).catch(() => {
+      // Revert on error
+      setOptimisticFavorite(!newState);
+    });
   };
 
   return (
     <button
       onClick={handleClick}
-      className="flex-shrink-0 p-0.5 rounded-full hover:bg-muted/50 transition-colors"
+      className="flex-shrink-0 p-0.5 rounded-full hover:bg-muted/50 active:scale-90 transition-all duration-100"
       data-testid={`fav-heart-${teamId}`}
-      aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      aria-label={displayFavorite ? 'Remove from favorites' : 'Add to favorites'}
     >
       <Heart
-        className={`w-3.5 h-3.5 transition-all duration-200 ${
-          isFavorite
+        className={`w-3.5 h-3.5 transition-all duration-100 ${
+          displayFavorite
             ? 'text-red-500 fill-red-500'
             : 'text-muted-foreground/40 hover:text-red-400'
         } ${animating ? 'scale-125' : 'scale-100'}`}
@@ -162,28 +175,43 @@ FavoriteHeart.displayName = 'FavoriteHeart';
 // ============ Bookmark Match Button ============
 const BookmarkMatch = memo(({ match, isBookmarked, onToggle, isAuthenticated }) => {
   const [animating, setAnimating] = useState(false);
+  const [optimisticBookmark, setOptimisticBookmark] = useState(null);
+
+  // Reset optimistic state when prop changes
+  useEffect(() => {
+    setOptimisticBookmark(null);
+  }, [isBookmarked]);
 
   if (!isAuthenticated) return null;
 
-  const handleClick = async (e) => {
+  const displayBookmark = optimisticBookmark !== null ? optimisticBookmark : isBookmarked;
+
+  const handleClick = (e) => {
     e.stopPropagation();
+    const newState = !displayBookmark;
+    
+    // Immediate visual feedback
+    setOptimisticBookmark(newState);
     setAnimating(true);
-    try {
-      await onToggle(match, !isBookmarked);
-    } catch {}
-    setTimeout(() => setAnimating(false), 300);
+    setTimeout(() => setAnimating(false), 200);
+    
+    // Fire and forget - API call in background
+    onToggle(match, newState).catch(() => {
+      // Revert on error
+      setOptimisticBookmark(!newState);
+    });
   };
 
   return (
     <button
       onClick={handleClick}
-      className="flex-shrink-0 p-1 rounded-md hover:bg-muted/50 transition-colors"
+      className="flex-shrink-0 p-1 rounded-md hover:bg-muted/50 active:scale-90 transition-all duration-100"
       data-testid={`bookmark-match-${match.id}`}
-      aria-label={isBookmarked ? 'Remove from favorite matches' : 'Add to favorite matches'}
+      aria-label={displayBookmark ? 'Remove from favorite matches' : 'Add to favorite matches'}
     >
       <Bookmark
-        className={`w-4 h-4 transition-all duration-200 ${
-          isBookmarked
+        className={`w-4 h-4 transition-all duration-100 ${
+          displayBookmark
             ? 'text-amber-500 fill-amber-500'
             : 'text-muted-foreground/40 hover:text-amber-400'
         } ${animating ? 'scale-125' : 'scale-100'}`}
@@ -198,9 +226,15 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
   const labels = { home: '1', draw: 'X', away: '2' };
   const isLocked = disabled || locked;
 
+  const handleClick = () => {
+    if (!isLocked) {
+      onClick(type);
+    }
+  };
+
   return (
     <button
-      onClick={() => !isLocked && onClick(type)}
+      onClick={handleClick}
       disabled={isLocked}
       data-selected={isSelected ? 'true' : 'false'}
       data-testid={`vote-btn-${type}`}
@@ -209,9 +243,9 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
           ? 'opacity-40 cursor-not-allowed bg-muted border-border/30'
           : isSelected
             ? 'bg-primary/30 border-primary border-2 shadow-glow ring-2 ring-primary/30'
-            : 'bg-vote-inactive border-transparent hover:bg-vote-inactive-hover hover:border-border cursor-pointer'
+            : 'bg-vote-inactive border-transparent hover:bg-vote-inactive-hover hover:border-border cursor-pointer active:scale-95'
       }`}
-      style={{ transition: 'background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease' }}
+      style={{ transition: 'background-color 0.1s ease, border-color 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease' }}
     >
       <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5">
         <span className={`text-xs sm:text-sm md:text-base font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
@@ -261,11 +295,11 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
           ? 'bg-muted border-2 border-border text-muted-foreground cursor-not-allowed'
           : state.isSaved
             ? 'bg-primary/20 border-2 border-primary text-primary hover:bg-primary/30'
-            : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105'
+            : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
         }
         ${isDisabled && !state.isSaved && !state.isLocked ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''}
       `}
-      style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease' }}
+      style={{ transition: 'background-color 0.1s ease, transform 0.1s ease, box-shadow 0.1s ease' }}
     >
       <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
         {state.isLocked ? (
@@ -333,6 +367,396 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
   </Button>
 ));
 AdvanceButton.displayName = 'AdvanceButton';
+
+// ============ Advanced Options Modal ============
+import { Target, Lightbulb, UserPlus, Users, ChevronRight, X as XIcon, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { saveExactScorePrediction, getExactScorePrediction } from '@/services/predictions';
+import { useFriends } from '@/lib/FriendsContext';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, onNavigateLogin }) => {
+  const [activeSection, setActiveSection] = useState('exact-score');
+  const [homeScore, setHomeScore] = useState(0);
+  const [awayScore, setAwayScore] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [existingPrediction, setExistingPrediction] = useState(null);
+  const [smartAdvice, setSmartAdvice] = useState(null);
+  const [isLoadingAdvice, setIsLoadingAdvice] = useState(false);
+  const [invitingFriend, setInvitingFriend] = useState(null);
+  const [invitedFriends, setInvitedFriends] = useState(new Set());
+  const [friendsActivity, setFriendsActivity] = useState([]);
+  const [isLoadingFriendsActivity, setIsLoadingFriendsActivity] = useState(false);
+  
+  // Get friends list from context
+  const { friends } = useFriends();
+
+  // Load existing exact score prediction
+  useEffect(() => {
+    if (isOpen && isAuthenticated && match) {
+      getExactScorePrediction(match.id)
+        .then(pred => {
+          if (pred) {
+            setExistingPrediction(pred);
+            setHomeScore(pred.home_score);
+            setAwayScore(pred.away_score);
+          }
+        })
+        .catch(() => {});
+      
+      // Reset invites when modal opens
+      setInvitedFriends(new Set());
+    }
+  }, [isOpen, isAuthenticated, match]);
+  
+  // Load friends activity for this match
+  useEffect(() => {
+    if (isOpen && isAuthenticated && match && activeSection === 'friends') {
+      setIsLoadingFriendsActivity(true);
+      fetch(`${API_URL}/api/predictions/match/${match.id}/friends-activity`, {
+        credentials: 'include'
+      })
+        .then(res => res.ok ? res.json() : { friends: [] })
+        .then(data => setFriendsActivity(data.friends || []))
+        .catch(() => setFriendsActivity([]))
+        .finally(() => setIsLoadingFriendsActivity(false));
+    }
+  }, [isOpen, isAuthenticated, match, activeSection]);
+
+  const handleExactScoreSubmit = async () => {
+    if (!isAuthenticated) {
+      onNavigateLogin();
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await saveExactScorePrediction(match.id, homeScore, awayScore);
+      setExistingPrediction({ home_score: homeScore, away_score: awayScore });
+      toast.success('Exact score prediction saved!', {
+        description: `${match.homeTeam.name} ${homeScore} - ${awayScore} ${match.awayTeam.name}`,
+        duration: 3000
+      });
+    } catch (error) {
+      toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGetAdvice = async () => {
+    setIsLoadingAdvice(true);
+    try {
+      const response = await fetch(`${API_URL}/api/predictions/smart-advice/${match.id}`, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Use advice if available, otherwise use the message or a default
+        setSmartAdvice(data.advice || data.message || "No top performers have predicted this match yet. Trust your instincts!");
+      } else {
+        setSmartAdvice("No advice available for this match yet. Top performers haven't predicted yet.");
+      }
+    } catch {
+      setSmartAdvice("Unable to get advice at this time. Please try again.");
+    } finally {
+      setIsLoadingAdvice(false);
+    }
+  };
+  
+  const handleInviteFriend = async (friend) => {
+    if (invitedFriends.has(friend.user_id)) {
+      toast.info('Already invited', { description: `You've already invited ${friend.nickname}` });
+      return;
+    }
+    
+    setInvitingFriend(friend.user_id);
+    try {
+      const response = await fetch(`${API_URL}/api/friends/invite/match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          friend_user_id: friend.user_id,
+          match_id: match.id,
+          home_team: match.homeTeam.name,
+          away_team: match.awayTeam.name,
+          match_date: match.dateTime || match.utcDate
+        })
+      });
+      
+      if (response.ok) {
+        setInvitedFriends(prev => new Set([...prev, friend.user_id]));
+        toast.success('Invitation sent!', {
+          description: `${friend.nickname} will receive a notification`,
+          duration: 3000
+        });
+      } else {
+        const error = await response.json();
+        toast.error('Failed to invite', { description: error.detail || 'Please try again' });
+      }
+    } catch {
+      toast.error('Failed to send invitation');
+    } finally {
+      setInvitingFriend(null);
+    }
+  };
+
+  if (!match) return null;
+
+  const sections = [
+    { id: 'exact-score', label: 'Exact Score', icon: Target, color: 'amber' },
+    { id: 'smart-advice', label: 'Smart Advice', icon: Lightbulb, color: 'sky' },
+    { id: 'invite', label: 'Invite Friend', icon: UserPlus, color: 'emerald' },
+    { id: 'friends', label: 'Friends Activity', icon: Users, color: 'purple' },
+  ];
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+        <div className="bg-card">
+          {/* Header */}
+          <div className="p-4 border-b border-border/50">
+            <DialogTitle className="text-lg font-bold">Advanced Options</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              {match.homeTeam.name} vs {match.awayTeam.name}
+            </DialogDescription>
+          </div>
+
+          {/* Section Tabs */}
+          <div className="flex border-b border-border/30 overflow-x-auto">
+            {sections.map(section => (
+              <button
+                key={section.id}
+                onClick={() => !section.disabled && setActiveSection(section.id)}
+                disabled={section.disabled}
+                className={`flex-1 min-w-[100px] px-3 py-2.5 text-xs font-medium transition-all border-b-2 ${
+                  activeSection === section.id
+                    ? `border-${section.color}-500 text-${section.color}-500 bg-${section.color}-500/5`
+                    : section.disabled
+                      ? 'border-transparent text-muted-foreground/50 cursor-not-allowed'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                }`}
+              >
+                <section.icon className="w-4 h-4 mx-auto mb-1" />
+                {section.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div className="p-4 min-h-[200px]">
+            {!isAuthenticated ? (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground mb-4">Please sign in to access advanced features</p>
+                <Button onClick={onNavigateLogin}>Sign In</Button>
+              </div>
+            ) : activeSection === 'exact-score' ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-amber-500" />
+                  <span className="font-semibold">Predict Exact Score</span>
+                  <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold">
+                    +50 BONUS
+                  </span>
+                </div>
+                
+                {existingPrediction ? (
+                  <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="flex items-center gap-2 text-emerald-500 font-medium">
+                      <Check className="w-4 h-4" />
+                      Prediction Locked
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Your prediction: {match.homeTeam.name} <strong>{existingPrediction.home_score}</strong> - <strong>{existingPrediction.away_score}</strong> {match.awayTeam.name}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 text-center">
+                        <label className="text-xs text-muted-foreground block mb-1 truncate">{match.homeTeam.name}</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={homeScore}
+                          onChange={e => setHomeScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                          className="h-12 text-xl font-bold text-center"
+                          data-testid="modal-exact-home"
+                        />
+                      </div>
+                      <span className="text-2xl font-bold text-muted-foreground pt-5">-</span>
+                      <div className="flex-1 text-center">
+                        <label className="text-xs text-muted-foreground block mb-1 truncate">{match.awayTeam.name}</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={awayScore}
+                          onChange={e => setAwayScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                          className="h-12 text-xl font-bold text-center"
+                          data-testid="modal-exact-away"
+                        />
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={handleExactScoreSubmit}
+                      disabled={isSubmitting}
+                      className="w-full gap-2"
+                    >
+                      <Target className="w-4 h-4" />
+                      {isSubmitting ? 'Submitting...' : 'Lock Exact Score Prediction'}
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground text-center">
+                      Once submitted, exact score predictions cannot be changed.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : activeSection === 'smart-advice' ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-sky-500" />
+                  <span className="font-semibold">Smart Advice</span>
+                </div>
+                {smartAdvice ? (
+                  <div className="p-4 rounded-lg bg-sky-500/10 border border-sky-500/20">
+                    <p className="text-sm">{smartAdvice}</p>
+                  </div>
+                ) : (
+                  <Button 
+                    onClick={handleGetAdvice}
+                    variant="outline"
+                    disabled={isLoadingAdvice}
+                    className="w-full gap-2"
+                  >
+                    <Lightbulb className="w-4 h-4" />
+                    {isLoadingAdvice ? 'Getting advice...' : 'Get Smart Advice'}
+                  </Button>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Get prediction advice from top-performing users who have a high accuracy rate.
+                </p>
+              </div>
+            ) : activeSection === 'invite' ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-emerald-500" />
+                  <span className="font-semibold">Invite Friend to Predict</span>
+                </div>
+                
+                {friends && friends.length > 0 ? (
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                    {friends.map(friend => (
+                      <div 
+                        key={friend.user_id}
+                        className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                          {friend.picture ? (
+                            <img src={friend.picture} alt={friend.nickname} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-sm font-bold text-muted-foreground">
+                              {(friend.nickname || '?')[0].toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{friend.nickname}</p>
+                          <p className="text-xs text-muted-foreground">Level {friend.level}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={invitedFriends.has(friend.user_id) ? "secondary" : "default"}
+                          disabled={invitingFriend === friend.user_id || invitedFriends.has(friend.user_id)}
+                          onClick={() => handleInviteFriend(friend)}
+                          className="gap-1.5"
+                          data-testid={`invite-friend-${friend.user_id}`}
+                        >
+                          {invitedFriends.has(friend.user_id) ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              Invited
+                            </>
+                          ) : invitingFriend === friend.user_id ? (
+                            <>Sending...</>
+                          ) : (
+                            <>
+                              <UserPlus className="w-3.5 h-3.5" />
+                              Invite
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <Users className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">No friends yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Add friends to invite them to predict!</p>
+                  </div>
+                )}
+                
+                <p className="text-[10px] text-muted-foreground text-center">
+                  Friends will receive a notification and chat message with match details.
+                </p>
+              </div>
+            ) : activeSection === 'friends' ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-500" />
+                  <span className="font-semibold">Friends Activity</span>
+                </div>
+                
+                {isLoadingFriendsActivity ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : friendsActivity && friendsActivity.length > 0 ? (
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                    {friendsActivity.map((activity, idx) => (
+                      <div 
+                        key={activity.user_id || idx}
+                        className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                          {activity.picture ? (
+                            <img src={activity.picture} alt={activity.nickname} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-sm font-bold text-muted-foreground">
+                              {(activity.nickname || '?')[0].toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{activity.nickname}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Predicted: <span className="font-medium text-purple-500">
+                              {activity.prediction === 'home' ? '1 (Home)' : activity.prediction === 'away' ? '2 (Away)' : 'X (Draw)'}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <Users className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">No friends have predicted yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Invite friends to see their predictions!</p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+});
+AdvancedOptionsModal.displayName = 'AdvancedOptionsModal';
 
 // ============ Auth Required Modal ============
 const AuthRequiredModal = memo(({ isOpen, onClose, onLogin, onRegister }) => (
@@ -599,6 +1023,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingPrediction, setPendingPrediction] = useState(null);
   const [prevScores, setPrevScores] = useState({});
+  const [advancedModalMatch, setAdvancedModalMatch] = useState(null);
   const containerRef1 = useRef(null);
   const containerRef2 = useRef(null);
 
@@ -639,12 +1064,21 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     }
   }, [savedPredictions, onPredictionSaved]);
 
-  const handleAdvance = useCallback(() => {
-    toast.info('Coming Soon!', {
-      description: 'Advanced predictions will be available soon.',
-      duration: 3000,
-    });
+  const handleAdvance = useCallback((matchId) => {
+    const match = matches.find(m => m.id === matchId);
+    if (match) {
+      setAdvancedModalMatch(match);
+    }
+  }, [matches]);
+
+  const handleCloseAdvancedModal = useCallback(() => {
+    setAdvancedModalMatch(null);
   }, []);
+
+  const handleNavigateLoginFromAdvanced = useCallback(() => {
+    handleCloseAdvancedModal();
+    navigate('/login');
+  }, [navigate, handleCloseAdvancedModal]);
 
   const getEffectiveSelection = useCallback(
     (matchId) => {
@@ -813,6 +1247,14 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         onClose={handleCloseAuthModal}
         onLogin={handleAuthModalLogin}
         onRegister={handleAuthModalRegister}
+      />
+
+      <AdvancedOptionsModal
+        isOpen={!!advancedModalMatch}
+        onClose={handleCloseAdvancedModal}
+        match={advancedModalMatch}
+        isAuthenticated={isAuthenticated}
+        onNavigateLogin={handleNavigateLoginFromAdvanced}
       />
     </>
   );

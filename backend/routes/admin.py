@@ -1560,3 +1560,85 @@ async def toggle_news_publish(article_id: str, request: Request, db: AsyncIOMoto
     await log_admin_action(db, admin["user_id"], "toggle_news", article_id, 
                           f"{'Published' if new_status else 'Unpublished'} news: {article['title']}")
     return {"success": True, "published": new_status}
+
+
+# ==================== Points Configuration Management ====================
+
+from models.points_config import DEFAULT_POINTS_CONFIG
+
+@router.get("/points-config")
+async def get_points_config(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get current points configuration"""
+    admin = await get_admin_user(request, db)
+    
+    config = await db.points_config.find_one({"config_id": "default_points"}, {"_id": 0})
+    
+    if not config:
+        # Return default config
+        return DEFAULT_POINTS_CONFIG
+    
+    return config
+
+
+@router.put("/points-config")
+async def update_points_config(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Update points configuration"""
+    admin = await get_admin_user(request, db)
+    
+    body = await request.json()
+    
+    # Validate level thresholds
+    level_thresholds = body.get("level_thresholds", DEFAULT_POINTS_CONFIG["level_thresholds"])
+    if not isinstance(level_thresholds, list) or len(level_thresholds) != 11:
+        raise HTTPException(status_code=400, detail="level_thresholds must be a list of exactly 11 integers")
+    
+    # Ensure thresholds are monotonically increasing
+    for i in range(1, len(level_thresholds)):
+        if level_thresholds[i] < level_thresholds[i-1]:
+            raise HTTPException(status_code=400, detail="level_thresholds must be monotonically increasing")
+    
+    update_data = {
+        "config_id": "default_points",
+        "correct_prediction": max(0, min(1000, int(body.get("correct_prediction", 10)))),
+        "wrong_penalty": max(0, min(100, int(body.get("wrong_penalty", 5)))),
+        "penalty_min_level": max(0, min(10, int(body.get("penalty_min_level", 5)))),
+        "exact_score_bonus": max(0, min(500, int(body.get("exact_score_bonus", 50)))),
+        "level_thresholds": [int(t) for t in level_thresholds],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": admin["user_id"]
+    }
+    
+    await db.points_config.update_one(
+        {"config_id": "default_points"},
+        {"$set": update_data},
+        upsert=True
+    )
+    
+    await log_admin_action(
+        db, admin["user_id"], "update_points_config", "points", 
+        f"Updated: correct={update_data['correct_prediction']}, wrong={update_data['wrong_penalty']}, exact_bonus={update_data['exact_score_bonus']}"
+    )
+    
+    return {"success": True, "config": update_data}
+
+
+@router.post("/points-config/reset")
+async def reset_points_config(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Reset points configuration to defaults"""
+    admin = await get_admin_user(request, db)
+    
+    default_config = {
+        **DEFAULT_POINTS_CONFIG,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": admin["user_id"]
+    }
+    
+    await db.points_config.update_one(
+        {"config_id": "default_points"},
+        {"$set": default_config},
+        upsert=True
+    )
+    
+    await log_admin_action(db, admin["user_id"], "reset_points_config", "points", "Reset to defaults")
+    
+    return {"success": True, "config": default_config}

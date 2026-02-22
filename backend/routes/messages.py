@@ -220,6 +220,63 @@ async def are_friends(db, user_a: str, user_b: str) -> bool:
     })
     return f is not None
 
+
+async def send_system_message(db, sender_id: str, receiver_id: str, message: str, 
+                              message_type: str = "text", metadata: dict = None):
+    """
+    Send a system/automated message between users.
+    Used for match invitations, notifications, etc.
+    """
+    msg_id = f"msg_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Get sender info
+    sender = await db.users.find_one({"user_id": sender_id}, {"_id": 0, "nickname": 1, "picture": 1})
+    
+    msg_doc = {
+        "message_id": msg_id,
+        "sender_id": sender_id,
+        "receiver_id": receiver_id,
+        "message": message,
+        "message_type": message_type,
+        "match_data": metadata,
+        "created_at": now,
+        "delivered": False,
+        "delivered_at": None,
+        "read": False,
+        "read_at": None,
+        "is_system": True
+    }
+    await db.messages.insert_one(msg_doc)
+    
+    # Send via chat WS
+    await chat_manager.send_to_user(receiver_id, {
+        "type": "new_message",
+        "message": {
+            "message_id": msg_id,
+            "sender_id": sender_id,
+            "sender_nickname": sender.get("nickname") if sender else "System",
+            "sender_picture": sender.get("picture") if sender else None,
+            "message": message,
+            "message_type": message_type,
+            "match_data": metadata,
+            "created_at": now,
+            "delivered": True,
+            "read": False
+        }
+    })
+    
+    # Also send via notification WS
+    await notification_manager.notify(receiver_id, {
+        "type": "new_message_notification",
+        "sender_id": sender_id,
+        "sender_nickname": sender.get("nickname") if sender else "System",
+        "preview": message[:50]
+    })
+    
+    return msg_id
+
+
 # ==================== Routes ====================
 
 @router.post("/send")

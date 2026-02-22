@@ -118,6 +118,7 @@ const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'matches', label: 'Matches', icon: Trophy },
+  { id: 'points', label: 'Points Settings', icon: Zap },
   { id: 'banners', label: 'Carousel Banners', icon: ScrollText },
   { id: 'news', label: 'News', icon: Edit },
   { id: 'subscriptions', label: 'Subscribed Emails', icon: Mail },
@@ -804,6 +805,238 @@ const MatchesTab = () => {
           <Button variant="outline" size="icon" className="h-7 w-7" disabled={page * 15 >= total} onClick={() => setPage(p => p + 1)}><ChevronRight className="w-3.5 h-3.5" /></Button>
         </div>
       </div>
+    </div>
+  );
+};
+
+/* ============ POINTS SETTINGS TAB ============ */
+const PointsTab = () => {
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    correct_prediction: 10,
+    wrong_penalty: 5,
+    penalty_min_level: 5,
+    exact_score_bonus: 50,
+    level_thresholds: [0, 100, 120, 200, 330, 500, 580, 650, 780, 900, 1000]
+  });
+
+  useEffect(() => {
+    api('/points-config')
+      .then(data => {
+        setConfig(data);
+        setFormData({
+          correct_prediction: data.correct_prediction || 10,
+          wrong_penalty: data.wrong_penalty || 5,
+          penalty_min_level: data.penalty_min_level || 5,
+          exact_score_bonus: data.exact_score_bonus || 50,
+          level_thresholds: data.level_thresholds || [0, 100, 120, 200, 330, 500, 580, 650, 780, 900, 1000]
+        });
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await api('/points-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      setConfig(response.config);
+      alert('Points configuration saved successfully!');
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm('Reset all points settings to defaults?')) return;
+    setSaving(true);
+    try {
+      const response = await api('/points-config/reset', { method: 'POST' });
+      setConfig(response.config);
+      setFormData({
+        correct_prediction: response.config.correct_prediction,
+        wrong_penalty: response.config.wrong_penalty,
+        penalty_min_level: response.config.penalty_min_level,
+        exact_score_bonus: response.config.exact_score_bonus,
+        level_thresholds: response.config.level_thresholds
+      });
+      alert('Points configuration reset to defaults!');
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateThreshold = (index, value) => {
+    const newThresholds = [...formData.level_thresholds];
+    newThresholds[index] = Math.max(0, parseInt(value) || 0);
+    setFormData({ ...formData, level_thresholds: newThresholds });
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300" data-testid="admin-points">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-foreground">Points Configuration</h2>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Configure points for correct predictions, penalties, and exact score bonuses
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleReset} disabled={saving} className="gap-1.5" data-testid="reset-points-btn">
+            <RotateCcw className="w-3.5 h-3.5" />Reset to Defaults
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5" data-testid="save-points-btn">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            Save Changes
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Settings Grid */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Correct Prediction Points */}
+        <div className="p-4 rounded-xl border border-border/40 bg-card/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+              <Check className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Correct Prediction</p>
+              <p className="text-[10px] text-muted-foreground">Points awarded for correct predictions</p>
+            </div>
+          </div>
+          <Input
+            type="number"
+            min="0"
+            max="1000"
+            value={formData.correct_prediction}
+            onChange={e => setFormData({ ...formData, correct_prediction: Math.max(0, Math.min(1000, parseInt(e.target.value) || 0)) })}
+            className="h-10 text-lg font-bold text-center"
+            data-testid="correct-prediction-input"
+          />
+        </div>
+
+        {/* Wrong Prediction Penalty */}
+        <div className="p-4 rounded-xl border border-border/40 bg-card/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-red-500/15 text-red-500 flex items-center justify-center">
+              <X className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Wrong Prediction Penalty</p>
+              <p className="text-[10px] text-muted-foreground">Points deducted (applied at level {formData.penalty_min_level}+)</p>
+            </div>
+          </div>
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            value={formData.wrong_penalty}
+            onChange={e => setFormData({ ...formData, wrong_penalty: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)) })}
+            className="h-10 text-lg font-bold text-center"
+            data-testid="wrong-penalty-input"
+          />
+        </div>
+
+        {/* Exact Score Bonus */}
+        <div className="p-4 rounded-xl border border-border/40 bg-card/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-500 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Exact Score Bonus</p>
+              <p className="text-[10px] text-muted-foreground">Bonus points for predicting exact score</p>
+            </div>
+          </div>
+          <Input
+            type="number"
+            min="0"
+            max="500"
+            value={formData.exact_score_bonus}
+            onChange={e => setFormData({ ...formData, exact_score_bonus: Math.max(0, Math.min(500, parseInt(e.target.value) || 0)) })}
+            className="h-10 text-lg font-bold text-center"
+            data-testid="exact-bonus-input"
+          />
+        </div>
+
+        {/* Penalty Minimum Level */}
+        <div className="p-4 rounded-xl border border-border/40 bg-card/60">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-500 flex items-center justify-center">
+              <Shield className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Penalty Minimum Level</p>
+              <p className="text-[10px] text-muted-foreground">Level at which wrong prediction penalty applies</p>
+            </div>
+          </div>
+          <Input
+            type="number"
+            min="0"
+            max="10"
+            value={formData.penalty_min_level}
+            onChange={e => setFormData({ ...formData, penalty_min_level: Math.max(0, Math.min(10, parseInt(e.target.value) || 0)) })}
+            className="h-10 text-lg font-bold text-center"
+            data-testid="penalty-level-input"
+          />
+        </div>
+      </div>
+
+      {/* Level Thresholds */}
+      <div className="p-4 rounded-xl border border-border/40 bg-card/60">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center">
+            <BarChart3 className="w-4 h-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Level Thresholds</p>
+            <p className="text-[10px] text-muted-foreground">Points required to reach each level (0-10)</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-11 gap-2">
+          {formData.level_thresholds.map((threshold, index) => (
+            <div key={index} className="text-center">
+              <label className="text-[10px] text-muted-foreground font-medium block mb-1">Lvl {index}</label>
+              <Input
+                type="number"
+                min="0"
+                value={threshold}
+                onChange={e => updateThreshold(index, e.target.value)}
+                className="h-9 text-xs text-center px-1"
+                data-testid={`level-threshold-${index}`}
+              />
+            </div>
+          ))}
+        </div>
+        
+        <p className="text-[10px] text-muted-foreground mt-3">
+          Note: Level thresholds must be in increasing order. Level 0 should always be 0.
+        </p>
+      </div>
+
+      {/* Last Updated Info */}
+      {config?.updated_at && (
+        <p className="text-[10px] text-muted-foreground text-right">
+          Last updated: {new Date(config.updated_at).toLocaleString()}
+        </p>
+      )}
     </div>
   );
 };
@@ -2176,6 +2409,7 @@ export const AdminPage = () => {
             {activeTab === 'dashboard' && <DashboardTab />}
             {activeTab === 'users' && <UsersTab />}
             {activeTab === 'matches' && <MatchesTab />}
+            {activeTab === 'points' && <PointsTab />}
             {activeTab === 'system' && <SystemTab />}
             {activeTab === 'banners' && <BannersTab />}
             {activeTab === 'news' && <NewsTab />}

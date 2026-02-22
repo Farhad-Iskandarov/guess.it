@@ -14,7 +14,6 @@ import { getFavoriteMatches, addFavoriteMatch, removeFavoriteMatch } from '@/ser
 import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches, fetchEndedMatches } from '@/services/matches';
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
-import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock, Bookmark } from 'lucide-react';
 
@@ -736,9 +735,6 @@ export const HomePage = () => {
 
       {/* Footer */}
       <Footer />
-
-      {/* Toast Notifications */}
-      <Toaster position="bottom-right" theme="dark" richColors />
     </div>
   );
 };

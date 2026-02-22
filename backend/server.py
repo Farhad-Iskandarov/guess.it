@@ -301,6 +301,59 @@ async def seed_default_api_key(db):
         logger.error(f"❌ Failed to seed default API key: {e}")
 
 
+async def seed_admin_account(db):
+    """Seed the admin account if it doesn't exist"""
+    from passlib.context import CryptContext
+    
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    
+    ADMIN_EMAIL = "farhad.isgandar@gmail.com"
+    ADMIN_PASSWORD = "Salam123?"
+    ADMIN_NICKNAME = "admin"
+    
+    try:
+        # Check if admin account exists
+        existing_admin = await db.users.find_one({"email": ADMIN_EMAIL}, {"_id": 0})
+        
+        if not existing_admin:
+            # Create admin user
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            now = datetime.now(timezone.utc).isoformat()
+            
+            admin_doc = {
+                "user_id": user_id,
+                "email": ADMIN_EMAIL,
+                "password_hash": pwd_context.hash(ADMIN_PASSWORD),
+                "nickname": ADMIN_NICKNAME,
+                "nickname_set": True,
+                "nickname_changed": False,
+                "auth_provider": "email",
+                "role": "admin",
+                "points": 0,
+                "level": 0,
+                "picture": None,
+                "is_online": False,
+                "is_banned": False,
+                "created_at": now,
+                "updated_at": now
+            }
+            
+            await db.users.insert_one(admin_doc)
+            logger.info(f"✅ Seeded admin account: {ADMIN_EMAIL}")
+        else:
+            # Ensure the existing user has admin role
+            if existing_admin.get("role") != "admin":
+                await db.users.update_one(
+                    {"email": ADMIN_EMAIL},
+                    {"$set": {"role": "admin", "updated_at": datetime.now(timezone.utc).isoformat()}}
+                )
+                logger.info(f"✅ Promoted existing user to admin: {ADMIN_EMAIL}")
+            else:
+                logger.info(f"ℹ️  Admin account already exists: {ADMIN_EMAIL}")
+    except Exception as e:
+        logger.error(f"❌ Failed to seed admin account: {e}")
+
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -332,6 +385,9 @@ async def startup_event():
     
     # Seed default Football API key if none exists
     await seed_default_api_key(db)
+    
+    # Seed admin account if it doesn't exist
+    await seed_admin_account(db)
     
     start_polling(db)
 

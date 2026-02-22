@@ -25,6 +25,7 @@ import { ContactPage } from "@/pages/ContactPage";
 import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { Toaster } from "@/components/ui/sonner";
 
 // ============ Initial Loading Screen ============
 function InitialLoadingScreen({ onReady }) {
@@ -264,6 +265,7 @@ function App() {
         <FriendsProvider>
           <MessagesProvider>
             <AppShell />
+            <Toaster position="bottom-right" theme="dark" richColors />
           </MessagesProvider>
         </FriendsProvider>
       </AuthProvider>

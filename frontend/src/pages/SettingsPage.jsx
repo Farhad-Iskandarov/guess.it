@@ -384,13 +384,19 @@ export const SettingsPage = () => {
         throw new Error(data.detail || 'Failed to upload avatar');
       }
 
-      toast.success('Profile picture updated');
+      // Clear file state and input
       setAvatarFile(null);
       setAvatarPreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      // Refresh user data to get updated picture URL
       await refreshUser();
       await fetchSettings();
+      toast.success('Profile picture updated successfully');
     } catch (error) {
-      toast.error(error.message);
+      toast.error(error.message || 'Failed to upload avatar');
     } finally {
       setUploadingAvatar(false);
     }

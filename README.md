@@ -17,6 +17,7 @@ A social football prediction platform where fans analyze, predict, and compete w
 
 ## Features
 
+### Core Features
 - User registration & login (email + Google OAuth)
 - Live football match browsing (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, UCL)
 - Match predictions with points system
@@ -26,13 +27,50 @@ A social football prediction platform where fans analyze, predict, and compete w
 - In-app notifications
 - User profiles with avatar & banner uploads
 - Favorite matches
+- Dark/Light theme toggle
+
+### Content Features
 - **News/Blog system** (admin-managed, with article detail pages and related articles)
 - **Email subscriptions** (footer newsletter signup)
 - **Contact form** (saves to backend, viewable in admin)
 - **Editable contact info** (admin-controlled email, location)
-- Admin panel (user management, match management, analytics, API config, banners, news, subscriptions, contact messages, contact settings, audit log)
-- Dark/Light theme toggle
-- Consistent header/footer across all pages
+
+### Advanced Prediction Features (NEW - Feb 2026)
+- **Exact Score Predictions** - Predict exact match scores for +50 bonus points
+- **Advanced Match Options** - Expandable section with enhanced prediction features
+- **Configurable Points System** - Admin can configure all point values dynamically
+
+---
+
+## Recent Updates (February 2026)
+
+### P0: Admin Account Persistence ✅
+- Admin account auto-seeds on server startup
+- Credentials: `farhad.isgandar@gmail.com` / `Salam123?`
+
+### P1: Advanced Section Foundation ✅
+- Animated expand/collapse "Advanced" section on match cards
+- Smooth transitions and modern UI
+
+### P1: Exact Score Prediction ✅
+- Users can predict exact final scores
+- +50 bonus points for correct exact score predictions
+- One-time lock (cannot be changed after submission)
+- API: `POST /api/predictions/exact-score`
+
+### P1: Admin Points Management ✅
+- New "Points Settings" tab in admin panel
+- Configurable values:
+  - Correct prediction points (default: 10)
+  - Wrong prediction penalty (default: 5)
+  - Exact score bonus (default: 50)
+  - Penalty minimum level (default: 5)
+  - Level thresholds (11 levels, 0-10)
+- Save and Reset to Defaults functionality
+
+### Bug Fixes ✅
+- Fixed Football API key issue (typo: letter O vs number 0)
+- Fixed profile picture caching issue
 
 ---
 
@@ -56,11 +94,12 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 | Dashboard | Overview stats, recent activity, audit log |
 | Users | Manage users (ban, promote, view) |
 | Matches | Match management and live match control |
+| **Points Settings** | Configure prediction points, penalties, bonuses (NEW) |
 | Carousel Banners | Homepage banner image management |
-| **News** | Create, edit, delete, publish/unpublish news articles |
-| **Subscribed Emails** | View and manage newsletter subscriptions |
-| **Contact Messages** | View, flag, and delete contact form submissions |
-| **Contact Settings** | Edit support email, location info shown on Contact page |
+| News | Create, edit, delete, publish/unpublish news articles |
+| Subscribed Emails | View and manage newsletter subscriptions |
+| Contact Messages | View, flag, and delete contact form submissions |
+| Contact Settings | Edit support email, location info shown on Contact page |
 | System | API configuration and system settings |
 | Prediction Monitor | Monitor prediction streaks |
 | Favorites | View user favorite matches |
@@ -74,15 +113,18 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 ```
 /app
 ├── backend/
-│   ├── server.py              # Main FastAPI app, WebSocket endpoints
+│   ├── server.py              # Main FastAPI app, WebSocket endpoints, Admin seeding
 │   ├── .env                   # Environment variables
 │   ├── requirements.txt       # Python dependencies
-│   ├── models/                # Pydantic models
+│   ├── models/
+│   │   ├── auth.py            # User models
+│   │   ├── prediction.py      # Prediction + ExactScore models
+│   │   └── points_config.py   # Points configuration model (NEW)
 │   ├── routes/
 │   │   ├── auth.py            # Register, Login, Google OAuth, Nickname
-│   │   ├── admin.py           # Admin panel (all management endpoints)
+│   │   ├── admin.py           # Admin panel (all management + points config)
 │   │   ├── public.py          # Subscribe, Contact, Contact Settings, News (public)
-│   │   ├── predictions.py     # Match predictions
+│   │   ├── predictions.py     # Match predictions + exact score predictions
 │   │   ├── football.py        # Football API, live polling, banners
 │   │   ├── favorites.py       # Favorite matches
 │   │   ├── friends.py         # Friend requests & friendships
@@ -91,13 +133,15 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 │   │   └── settings.py        # User settings
 │   ├── services/
 │   │   └── football_api.py    # Football-data.org API service
+│   ├── tests/
+│   │   └── test_p0_p1_features.py  # P0/P1 feature tests
 │   └── uploads/               # User avatars, banners, news images
 ├── frontend/
 │   ├── src/
 │   │   ├── App.js             # Routes, AdminRoute, PublicLayout
 │   │   ├── pages/
 │   │   │   ├── AdminLoginPage.jsx    # Dedicated admin login
-│   │   │   ├── AdminPage.jsx         # Admin dashboard (all tabs)
+│   │   │   ├── AdminPage.jsx         # Admin dashboard (all tabs + Points Settings)
 │   │   │   ├── HomePage.jsx          # Main page with matches
 │   │   │   ├── NewsPage.jsx          # Dynamic news list
 │   │   │   ├── NewsArticlePage.jsx   # Individual news article view
@@ -106,13 +150,20 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 │   │   │   └── ...                   # Other pages
 │   │   ├── components/
 │   │   │   ├── layout/        # Header, Footer (with working subscribe)
-│   │   │   ├── home/          # MatchCard, PromoBanner, etc.
+│   │   │   ├── home/          
+│   │   │   │   ├── MatchList.jsx     # Match cards with Advanced modal (NEW)
+│   │   │   │   └── MatchCard.jsx     # Alternative match card component
 │   │   │   └── ui/            # shadcn/ui components
 │   │   ├── lib/               # AuthContext, FriendsContext, etc.
-│   │   └── services/          # API service functions
+│   │   └── services/
+│   │       ├── predictions.js  # Prediction API + exact score functions (NEW)
+│   │       └── ...            # Other services
 │   └── .env                   # Frontend env
-└── memory/
-    └── PRD.md                 # Product requirements document
+├── memory/
+│   └── PRD.md                 # Product requirements document
+└── test_reports/
+    ├── iteration_1.json       # Initial test results
+    └── iteration_2.json       # P0/P1 test results (100% pass)
 ```
 
 ---
@@ -132,6 +183,15 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 - `GET /api/auth/me` — Get current user
 - `POST /api/auth/logout` — Logout
 
+### Predictions
+- `POST /api/predictions` — Create/update prediction
+- `GET /api/predictions/me` — Get user's predictions
+- `GET /api/predictions/me/detailed` — Get detailed predictions with match data
+- `DELETE /api/predictions/match/{match_id}` — Delete prediction
+- **`POST /api/predictions/exact-score`** — Create exact score prediction (NEW)
+- **`GET /api/predictions/exact-score/match/{match_id}`** — Get exact score for match (NEW)
+- **`GET /api/predictions/exact-score/me`** — Get all exact score predictions (NEW)
+
 ### Admin (requires `role: admin`)
 - `GET /api/admin/dashboard` — Dashboard stats
 - `GET/POST/PUT/DELETE /api/admin/news` — News CRUD
@@ -142,8 +202,69 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 - `GET/POST/PUT/DELETE /api/admin/banners` — Banner management
 - `GET /api/admin/users` — User management
 - `GET /api/admin/analytics` — Analytics
+- **`GET /api/admin/points-config`** — Get points configuration (NEW)
+- **`PUT /api/admin/points-config`** — Update points configuration (NEW)
+- **`POST /api/admin/points-config/reset`** — Reset to defaults (NEW)
 
 ### Football
 - `GET /api/football/matches` — Get matches
 - `GET /api/football/banners` — Get active banners
 - `WS /api/ws/matches` — Live match updates
+
+---
+
+## Environment Variables
+
+### Backend (.env)
+```
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=test_database
+SECRET_KEY=your-secret-key
+FOOTBALL_API_KEY=your-football-data-api-key
+ALLOWED_ORIGINS=*
+```
+
+### Frontend (.env)
+```
+REACT_APP_BACKEND_URL=https://your-app.preview.emergentagent.com
+```
+
+---
+
+## Running the Application
+
+### Development
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn server:app --reload --port 8001
+
+# Frontend
+cd frontend
+yarn install
+yarn start
+```
+
+### Production
+The application is deployed on Emergent Platform with:
+- Backend on port 8001 (supervised)
+- Frontend on port 3000 (supervised)
+- MongoDB local instance
+- Nginx reverse proxy
+
+---
+
+## Upcoming Features (P2)
+
+1. **Prediction Result Notifications** - Notify users when their predictions resolve
+2. **Invite Friend to Guess** - Share matches with friends via notifications & chat
+3. **Friends Activity on Match Card** - See which friends predicted on a match
+4. **Profile Privacy Settings** - Control profile visibility
+5. **Smart Advice** - Get prediction tips from top performers
+
+---
+
+## License
+
+Proprietary - All rights reserved.

@@ -78,6 +78,10 @@ async def _poll_live_matches(db):
     _polling_active = True
 
     logger.info("Live match polling started")
+    
+    # Track processed finished matches to avoid duplicate processing
+    processed_finished_matches = set()
+    last_finished_check = datetime.now(timezone.utc)
 
     while _polling_active:
         try:
@@ -100,6 +104,24 @@ async def _poll_live_matches(db):
                         "matches": today_matches,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
+                    
+                    # Check for newly finished matches and process exact score predictions
+                    for match in today_matches:
+                        if match.get("status") == "FINISHED":
+                            match_id = match.get("id")
+                            if match_id and match_id not in processed_finished_matches:
+                                score = match.get("score", {})
+                                home_score = score.get("home")
+                                away_score = score.get("away")
+                                
+                                if home_score is not None and away_score is not None:
+                                    try:
+                                        from services.prediction_processor import process_exact_score_results
+                                        await process_exact_score_results(db, match_id, home_score, away_score)
+                                        processed_finished_matches.add(match_id)
+                                        logger.info(f"Processed exact scores for finished match {match_id}")
+                                    except Exception as e:
+                                        logger.error(f"Error processing exact scores for match {match_id}: {e}")
 
             # Poll every 30 seconds
             await asyncio.sleep(30)

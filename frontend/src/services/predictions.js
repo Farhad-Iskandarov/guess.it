@@ -134,3 +134,74 @@ export const deletePrediction = async (matchId) => {
   invalidateCache();
   return await response.json();
 };
+
+// ==================== Exact Score Predictions ====================
+
+/**
+ * Save an exact score prediction (can only be done once per match)
+ */
+export const saveExactScorePrediction = async (matchId, homeScore, awayScore) => {
+  const response = await fetch(`${API_URL}/api/predictions/exact-score`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ 
+      match_id: matchId, 
+      home_score: homeScore, 
+      away_score: awayScore 
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to save exact score prediction');
+  }
+
+  invalidateCache();
+  return await response.json();
+};
+
+/**
+ * Get exact score prediction for a specific match
+ */
+export const getExactScorePrediction = async (matchId) => {
+  const response = await fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, {
+    credentials: 'include',
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch exact score prediction');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Get all exact score predictions for current user
+ */
+export const getMyExactScorePredictions = async () => {
+  const cacheKey = 'my_exact_score_predictions';
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  const response = await fetch(`${API_URL}/api/predictions/exact-score/me`, {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      return { exact_score_predictions: [], total: 0 };
+    }
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to fetch exact score predictions');
+  }
+
+  const data = await response.json();
+  setCache(cacheKey, data);
+  return data;
+};

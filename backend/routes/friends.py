@@ -683,3 +683,177 @@ async def get_friend_profile(
         "created_at": friend.get("created_at"),
         "is_friend": True
     }
+
+
+# ==================== Match Invitations ====================
+
+class MatchInvitationModel(BaseModel):
+    """Send match prediction invitation"""
+    friend_user_id: str
+    match_id: int
+    home_team: str = ""
+    away_team: str = ""
+    match_date: str = ""
+
+
+@router.post("/invite/match")
+async def invite_friend_to_match(
+    data: MatchInvitationModel,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """
+    Invite a friend to predict on a specific match.
+    Creates both a notification and a chat message.
+    Prevents duplicate invitations for the same match.
+    """
+    user = await get_current_user(request, db)
+    
+    # Verify they are friends
+    friendship = await db.friendships.find_one({
+        "$or": [
+            {"user_a": user["user_id"], "user_b": data.friend_user_id},
+            {"user_a": data.friend_user_id, "user_b": user["user_id"]}
+        ]
+    })
+    if not friendship:
+        raise HTTPException(status_code=403, detail="You can only invite friends")
+    
+    # Check for existing invitation for this match from this user
+    existing = await db.match_invitations.find_one({
+        "sender_id": user["user_id"],
+        "receiver_id": data.friend_user_id,
+        "match_id": data.match_id
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="You have already invited this friend to this match")
+    
+    # Create invitation record
+    import uuid
+    invitation_id = f"minv_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    invitation = {
+        "invitation_id": invitation_id,
+        "sender_id": user["user_id"],
+        "receiver_id": data.friend_user_id,
+        "match_id": data.match_id,
+        "home_team": data.home_team,
+        "away_team": data.away_team,
+        "match_date": data.match_date,
+        "status": "pending",
+        "created_at": now
+    }
+    
+    await db.match_invitations.insert_one(invitation)
+    
+    # Get friend info
+    friend = await get_user_by_id(db, data.friend_user_id)
+    friend_nickname = friend.get("nickname", "Friend") if friend else "Friend"
+    
+    # Create notification
+    from routes.notifications import create_notification
+    notif_message = f"🎯 {user.get('nickname')} invited you to predict on {data.home_team} vs {data.away_team}!"
+    
+    await create_notification(
+        db,
+        data.friend_user_id,
+        "match_invitation",
+        notif_message,
+        {
+            "invitation_id": invitation_id,
+            "sender_id": user["user_id"],
+            "sender_nickname": user.get("nickname"),
+            "match_id": data.match_id,
+            "home_team": data.home_team,
+            "away_team": data.away_team,
+            "match_date": data.match_date
+        }
+    )
+    
+    # Create chat message
+    try:
+        from routes.messages import send_system_message
+        chat_message = f"🎯 I invited you to predict on {data.home_team} vs {data.away_team}! Check it out and make your guess!"
+        await send_system_message(
+            db,
+            sender_id=user["user_id"],
+            receiver_id=data.friend_user_id,
+            message=chat_message,
+            message_type="match_invitation",
+            metadata={
+                "match_id": data.match_id,
+                "home_team": data.home_team,
+                "away_team": data.away_team
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send chat message for match invitation: {e}")
+    
+    # Send real-time notification
+    await friend_manager.notify_user(data.friend_user_id, {
+        "type": "match_invitation",
+        "invitation": {
+            "invitation_id": invitation_id,
+            "sender_nickname": user.get("nickname"),
+            "sender_picture": user.get("picture"),
+            "match_id": data.match_id,
+            "home_team": data.home_team,
+            "away_team": data.away_team,
+            "match_date": data.match_date
+        }
+    })
+    
+    logger.info(f"Match invitation sent from {user['user_id']} to {data.friend_user_id} for match {data.match_id}")
+    
+    return {
+        "success": True,
+        "message": f"Invitation sent to {friend_nickname}",
+        "invitation_id": invitation_id
+    }
+
+
+@router.get("/invitations/received")
+async def get_received_invitations(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get match invitations received by current user"""
+    user = await get_current_user(request, db)
+    
+    invitations = await db.match_invitations.find(
+        {"receiver_id": user["user_id"], "status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    # Enrich with sender info
+    result = []
+    for inv in invitations:
+        sender = await get_user_by_id(db, inv["sender_id"])
+        result.append({
+            **inv,
+            "sender_nickname": sender.get("nickname") if sender else "Unknown",
+            "sender_picture": sender.get("picture") if sender else None
+        })
+    
+    return {"invitations": result, "total": len(result)}
+
+
+@router.post("/invitations/{invitation_id}/dismiss")
+async def dismiss_invitation(
+    invitation_id: str,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Dismiss a match invitation"""
+    user = await get_current_user(request, db)
+    
+    result = await db.match_invitations.update_one(
+        {"invitation_id": invitation_id, "receiver_id": user["user_id"]},
+        {"$set": {"status": "dismissed", "dismissed_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    
+    return {"success": True, "message": "Invitation dismissed"}
