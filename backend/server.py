@@ -385,9 +385,9 @@ async def seed_admin_account(db):
     
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
     
-    ADMIN_EMAIL = "farhad.isgandar@gmail.com"
-    ADMIN_PASSWORD = "Salam123?"
-    ADMIN_NICKNAME = "admin"
+    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "farhad.isgandar@gmail.com")
+    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Salam123?")
+    ADMIN_NICKNAME = os.environ.get("ADMIN_NICKNAME", "admin")
     
     try:
         # Check if admin account exists

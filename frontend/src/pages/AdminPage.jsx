@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -16,7 +17,7 @@ import {
   Activity, MessageSquare, Heart, TrendingUp, ScrollText,
   Server, Star, StarOff, Flame, Lock, KeyRound, Filter,
   ChevronDown, ArrowUpDown, Plus, Power, PowerOff, Zap,
-  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight
+  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight, Gift
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -236,6 +237,12 @@ const UsersTab = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [userDetail, setUserDetail] = useState(null);
+  // Multi-select & Gift Points
+  const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [giftDialog, setGiftDialog] = useState(false);
+  const [giftPoints, setGiftPoints] = useState(50);
+  const [giftMessage, setGiftMessage] = useState('');
+  const [giftLoading, setGiftLoading] = useState(false);
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
@@ -300,12 +307,69 @@ const UsersTab = () => {
     } catch (e) { alert(e.message); }
   };
 
+  // Selection helpers
+  const toggleSelect = (userId) => {
+    setSelectedUsers(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUsers.size === users.length) {
+      setSelectedUsers(new Set());
+    } else {
+      setSelectedUsers(new Set(users.map(u => u.user_id)));
+    }
+  };
+
+  // Gift Points
+  const handleGiftPoints = async () => {
+    if (selectedUsers.size === 0) return;
+    if (!giftPoints || giftPoints <= 0) { alert('Points must be positive'); return; }
+    setGiftLoading(true);
+    try {
+      const result = await api('/gift-points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_ids: Array.from(selectedUsers),
+          points: giftPoints,
+          message: giftMessage,
+        }),
+      });
+      // Update local user list with new points
+      if (result.updated_users) {
+        const updatedMap = {};
+        result.updated_users.forEach(u => { updatedMap[u.user_id] = u; });
+        setUsers(prev => prev.map(u =>
+          updatedMap[u.user_id]
+            ? { ...u, points: updatedMap[u.user_id].points, level: updatedMap[u.user_id].level }
+            : u
+        ));
+      }
+      setGiftDialog(false);
+      setSelectedUsers(new Set());
+      setGiftPoints(50);
+      setGiftMessage('');
+      alert(`Successfully gifted ${result.points} points to ${result.recipients} user(s)!`);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setGiftLoading(false);
+    }
+  };
+
   const filterOptions = [
     { value: '', label: 'All Users' },
     { value: 'online', label: 'Online' },
     { value: 'offline', label: 'Offline' },
     { value: 'banned', label: 'Banned' },
   ];
+
+  const selectedNicknames = users.filter(u => selectedUsers.has(u.user_id)).map(u => u.nickname || u.email);
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300" data-testid="admin-users">
@@ -320,9 +384,34 @@ const UsersTab = () => {
             <Filter className="w-3.5 h-3.5" />Filters
             {filterStatus && <span className="w-2 h-2 rounded-full bg-primary" />}
           </Button>
+          {/* Send Points Button */}
+          {selectedUsers.size > 0 && (
+            <Button
+              size="sm"
+              onClick={() => setGiftDialog(true)}
+              className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+              data-testid="send-points-btn"
+            >
+              <Gift className="w-3.5 h-3.5" />
+              Send Points ({selectedUsers.size})
+            </Button>
+          )}
           <span className="text-xs text-muted-foreground">{total} users (sorted by points)</span>
         </div>
       </div>
+
+      {/* Selection info bar */}
+      {selectedUsers.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 animate-in fade-in duration-200" data-testid="selection-bar">
+          <Gift className="w-4 h-4 text-amber-500" />
+          <span className="text-xs font-medium text-amber-400">
+            {selectedUsers.size} user{selectedUsers.size > 1 ? 's' : ''} selected
+          </span>
+          <button onClick={() => setSelectedUsers(new Set())} className="text-xs text-muted-foreground hover:text-foreground ml-auto">
+            Clear selection
+          </button>
+        </div>
+      )}
 
       {/* Filter chips */}
       {showFilters && (
@@ -346,6 +435,15 @@ const UsersTab = () => {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border/40 bg-secondary/30">
+                  <th className="text-center px-2 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={users.length > 0 && selectedUsers.size === users.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded border-border accent-amber-500 cursor-pointer"
+                      data-testid="select-all-checkbox"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">User</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground hidden md:table-cell">Email</th>
                   <th className="text-center px-4 py-3 font-semibold text-muted-foreground">
@@ -358,7 +456,16 @@ const UsersTab = () => {
               </thead>
               <tbody>
                 {users.map(u => (
-                  <tr key={u.user_id} className="border-b border-border/20 hover:bg-secondary/20 transition-colors" data-testid={`user-row-${u.user_id}`}>
+                  <tr key={u.user_id} className={`border-b border-border/20 transition-colors ${selectedUsers.has(u.user_id) ? 'bg-amber-500/[0.06]' : 'hover:bg-secondary/20'}`} data-testid={`user-row-${u.user_id}`}>
+                    <td className="text-center px-2 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.has(u.user_id)}
+                        onChange={() => toggleSelect(u.user_id)}
+                        className="w-4 h-4 rounded border-border accent-amber-500 cursor-pointer"
+                        data-testid={`select-user-${u.user_id}`}
+                      />
+                    </td>
                     <td className="px-4 py-2.5">
                       <button onClick={() => openUserDetail(u.user_id)} className="flex items-center gap-2.5 text-left hover:opacity-80">
                         <Avatar className="w-8 h-8">
@@ -387,6 +494,10 @@ const UsersTab = () => {
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
+                        {/* Gift - quick single user gift */}
+                        <button onClick={() => { setSelectedUsers(new Set([u.user_id])); setGiftDialog(true); }} className="p-1.5 rounded-lg hover:bg-amber-500/10 text-muted-foreground hover:text-amber-500 transition-colors" title="Gift Points" data-testid={`gift-points-${u.user_id}`}>
+                          <Gift className="w-3.5 h-3.5" />
+                        </button>
                         {/* Eye - View Messages */}
                         <button onClick={() => openMessages(u.user_id, u.nickname)} className="p-1.5 rounded-lg hover:bg-sky-500/10 text-muted-foreground hover:text-sky-500 transition-colors" title="View Messages" data-testid={`view-messages-${u.user_id}`}>
                           <Eye className="w-3.5 h-3.5" />
@@ -414,7 +525,7 @@ const UsersTab = () => {
                   </tr>
                 ))}
                 {users.length === 0 && (
-                  <tr><td colSpan={6} className="text-center py-10 text-muted-foreground text-sm">No users found</td></tr>
+                  <tr><td colSpan={7} className="text-center py-10 text-muted-foreground text-sm">No users found</td></tr>
                 )}
               </tbody>
             </table>
@@ -428,6 +539,87 @@ const UsersTab = () => {
           </div>
         </div>
       )}
+
+      {/* Gift Points Dialog */}
+      <Dialog open={giftDialog} onOpenChange={(open) => { if (!open) { setGiftDialog(false); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Gift className="w-5 h-5 text-amber-500" />
+              Send Points
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Recipients */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Recipients ({selectedUsers.size})</label>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 rounded-lg bg-secondary/30 border border-border/30">
+                {selectedNicknames.length > 0 ? selectedNicknames.map((name, i) => (
+                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
+                    {name}
+                  </span>
+                )) : (
+                  <span className="text-xs text-muted-foreground">No users selected</span>
+                )}
+              </div>
+            </div>
+
+            {/* Points */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Points to send</label>
+              <Input
+                type="number"
+                min="1"
+                max="100000"
+                value={giftPoints}
+                onChange={e => setGiftPoints(Math.max(1, Math.min(100000, parseInt(e.target.value) || 0)))}
+                className="h-10 text-lg font-bold text-center"
+                data-testid="gift-points-input"
+              />
+            </div>
+
+            {/* Custom Message */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                Custom message <span className="text-muted-foreground/50">(optional)</span>
+              </label>
+              <Textarea
+                value={giftMessage}
+                onChange={e => setGiftMessage(e.target.value)}
+                placeholder={`You have received ${giftPoints} bonus points as a Gift`}
+                className="text-sm resize-none"
+                rows={2}
+                maxLength={500}
+                data-testid="gift-message-input"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Leave empty for default message. Max 500 characters.
+              </p>
+            </div>
+
+            {/* Preview */}
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <p className="text-[10px] uppercase tracking-wider text-amber-500 font-medium mb-1">Notification Preview</p>
+              <p className="text-sm text-foreground">
+                {giftMessage || `You have received ${giftPoints} bonus points as a Gift`}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setGiftDialog(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={handleGiftPoints}
+              disabled={giftLoading || selectedUsers.size === 0 || giftPoints <= 0}
+              className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+              data-testid="confirm-gift-btn"
+            >
+              {giftLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gift className="w-3.5 h-3.5" />}
+              Send {giftPoints} pts to {selectedUsers.size} user{selectedUsers.size > 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm Dialog */}
       {confirm && (

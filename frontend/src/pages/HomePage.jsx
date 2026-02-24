@@ -15,7 +15,7 @@ import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCached
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { toast } from 'sonner';
-import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock, Bookmark } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock, Bookmark, Radio, TrendingUp } from 'lucide-react';
 
 // League filters - maps to competition codes
 const leagueFilters = [
@@ -156,6 +156,44 @@ export const HomePage = () => {
       match.status !== 'PENALTY_SHOOTOUT'
     );
   }, [matches]);
+
+  // Tab-specific filtered matches
+  const tabFilteredMatches = useMemo(() => {
+    switch (activeTab) {
+      case 'popular': {
+        // Top 10 matches with highest number of user predictions, sorted by most guessed first
+        const sorted = [...activeMatches].sort((a, b) => (b.totalVotes || 0) - (a.totalVotes || 0));
+        return sorted.slice(0, 10);
+      }
+      case 'top-live': {
+        // Top 10 live matches with highest number of user predictions
+        const liveOnly = activeMatches.filter(m => m.status === 'LIVE' || m.status === 'IN_PLAY' || m.status === 'HALFTIME' || m.status === 'PAUSED');
+        const sorted = [...liveOnly].sort((a, b) => (b.totalVotes || 0) - (a.totalVotes || 0));
+        return sorted.slice(0, 10);
+      }
+      case 'soon': {
+        // All matches scheduled for the next 3 days
+        const now = new Date();
+        const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+        const scheduled = matches.filter(m => {
+          if (m.status !== 'NOT_STARTED' && m.status !== 'TIMED' && m.status !== 'SCHEDULED') return false;
+          const matchDate = m.utcDate ? new Date(m.utcDate) : null;
+          if (!matchDate) return false;
+          return matchDate >= now && matchDate <= threeDaysLater;
+        });
+        // Sort by date ascending (soonest first)
+        scheduled.sort((a, b) => {
+          const da = a.utcDate ? new Date(a.utcDate) : new Date(0);
+          const db = b.utcDate ? new Date(b.utcDate) : new Date(0);
+          return da - db;
+        });
+        return scheduled;
+      }
+      case 'top-matches':
+      default:
+        return activeMatches;
+    }
+  }, [activeTab, activeMatches, matches]);
 
 
   // Handle live WebSocket updates
@@ -576,6 +614,39 @@ export const HomePage = () => {
           </div>
         )}
 
+        {/* Tab-specific empty states */}
+        {!isLoadingMatches && matches.length > 0 && tabFilteredMatches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid={`no-${activeTab}-matches`}>
+            {activeTab === 'top-live' && (
+              <>
+                <Radio className="w-12 h-12 text-red-500/30" />
+                <p className="text-lg text-foreground font-medium">No live matches right now</p>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  There are no live matches at the moment. Check back during match hours!
+                </p>
+              </>
+            )}
+            {activeTab === 'popular' && (
+              <>
+                <TrendingUp className="w-12 h-12 text-primary/30" />
+                <p className="text-lg text-foreground font-medium">No popular matches yet</p>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Matches with user predictions will appear here. Start guessing to see popular matches!
+                </p>
+              </>
+            )}
+            {activeTab === 'soon' && (
+              <>
+                <Clock className="w-12 h-12 text-blue-500/30" />
+                <p className="text-lg text-foreground font-medium">No upcoming matches</p>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  No matches scheduled in the next 3 days. Check back later for new fixtures!
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Favorite Tab Content */}
         {activeTab === 'favorite' && isAuthenticated && (
           <div key={`filter-fav-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
@@ -715,11 +786,33 @@ export const HomePage = () => {
         )}
 
         {/* Match Content (non-favorite, non-ended tabs) */}
-        {activeMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div key={`filter-${activeLeague}-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
+        {tabFilteredMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+          <div key={`filter-${activeLeague}-${activeTab}-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
+            {/* Tab-specific headers */}
+            {activeTab === 'popular' && (
+              <div className="flex items-center gap-2 mt-4 mb-3" data-testid="popular-header">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                <h3 className="text-base font-semibold text-foreground">Most Predicted</h3>
+                <span className="text-xs text-muted-foreground">(Top {tabFilteredMatches.length} by predictions)</span>
+              </div>
+            )}
+            {activeTab === 'top-live' && (
+              <div className="flex items-center gap-2 mt-4 mb-3" data-testid="top-live-header">
+                <Radio className="w-4 h-4 text-red-500" />
+                <h3 className="text-base font-semibold text-foreground">Top Live</h3>
+                <span className="text-xs text-muted-foreground">({tabFilteredMatches.length} live matches)</span>
+              </div>
+            )}
+            {activeTab === 'soon' && (
+              <div className="flex items-center gap-2 mt-4 mb-3" data-testid="soon-header">
+                <Clock className="w-4 h-4 text-blue-500" />
+                <h3 className="text-base font-semibold text-foreground">Coming Up</h3>
+                <span className="text-xs text-muted-foreground">({tabFilteredMatches.length} matches in next 3 days)</span>
+              </div>
+            )}
             {/* Full Match List */}
             <MatchList
-              matches={activeMatches}
+              matches={tabFilteredMatches}
               savedPredictions={savedPredictions}
               onPredictionSaved={handlePredictionSaved}
               activeLeague={activeLeague}

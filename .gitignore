@@ -31,7 +31,11 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
-
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
 *token.json*
 *credentials.json*
 
@@ -41,10 +45,6 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 dump.rdb
-*.log
-
-# Backend logs
-/var/log/
 
 # System files
 .DS_Store
@@ -55,19 +55,6 @@ __pycache__/
 *pyc*
 venv/
 .venv/
-*.pyc
-
-# User uploads and avatars
-backend/uploads/avatars/*
-!backend/uploads/avatars/.gitkeep
-
-# Test data
-test_users.json
-backend_test.py
-messages_specific_test.py
-messages_ui_test.py
-test_reports/
-test_result.md
 
 # Development tools
 chainlit.md
@@ -94,50 +81,16 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ frontend/node_modules/.cache/default-development/1.pack
-frontend/node_modules/.cache/default-development/0.pack
+android-sdk/ frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/1.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/8.pack
-frontend/node_modules/.cache/default-development/4.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/2.pack
 frontend/node_modules/.cache/default-development/3.pack
+frontend/node_modules/.cache/default-development/4.pack
+frontend/node_modules/.cache/default-development/5.pack
 frontend/node_modules/.cache/default-development/6.pack
--e 
-# Environment files
-*.env
-*.env.*
 frontend/node_modules/.cache/default-development/7.pack
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/9.pack
-frontend/node_modules/.cache/default-development/10.pack
-frontend/node_modules/.cache/default-development/11.pack
+frontend/node_modules/.cache/default-development/8.pack
 -e 
 # Environment files
 *.env

@@ -270,7 +270,14 @@ async def get_my_predictions_detailed(
         {"_id": 0}
     ).to_list(1000)
 
-    if not predictions:
+    # Also fetch exact score predictions for this user
+    exact_score_preds = await db.exact_score_predictions.find(
+        {"user_id": user_id},
+        {"_id": 0}
+    ).to_list(1000)
+    exact_score_map = {ep["match_id"]: ep for ep in exact_score_preds}
+
+    if not predictions and not exact_score_preds:
         user_points = user.get("points", 0)
         user_level = user.get("level", 0)
         return {
@@ -292,7 +299,8 @@ async def get_my_predictions_detailed(
     match_map = {m["id"]: m for m in all_matches}
 
     # For any predicted matches not found in the bulk fetch, fetch individually by ID
-    missing_ids = [p["match_id"] for p in predictions if p["match_id"] not in match_map]
+    all_predicted_match_ids = set(p["match_id"] for p in predictions) | set(exact_score_map.keys())
+    missing_ids = [mid for mid in all_predicted_match_ids if mid not in match_map]
     for mid in missing_ids:
         try:
             data = await _api_get(f"/matches/{mid}")
@@ -318,12 +326,14 @@ async def get_my_predictions_detailed(
             "prediction_id": pred["prediction_id"],
             "match_id": match_id,
             "prediction": pred["prediction"],
+            "prediction_type": "winner",
             "created_at": created_at,
             "updated_at": updated_at,
             "match": None,
             "result": "pending",
             "points_awarded": pred.get("points_awarded", False),
             "points_value": pred.get("points_value", 0),
+            "exact_score": None,
         }
 
         if match_data:
@@ -432,6 +442,108 @@ async def get_my_predictions_detailed(
 
         results.append(entry)
 
+    # Attach exact score data to entries that have it
+    results_by_match = {r["match_id"]: r for r in results}
+    
+    for match_id, es_pred in exact_score_map.items():
+        es_data = {
+            "exact_score_id": es_pred.get("exact_score_id"),
+            "home_score": es_pred["home_score"],
+            "away_score": es_pred["away_score"],
+            "exact_score_points_awarded": es_pred.get("points_awarded", False),
+            "exact_score_points_value": es_pred.get("points_value", 0),
+        }
+        
+        if match_id in results_by_match:
+            # Attach exact score info to existing entry
+            results_by_match[match_id]["exact_score"] = es_data
+            results_by_match[match_id]["prediction_type"] = "both"
+        else:
+            # Create a new entry for exact-score-only prediction
+            match_data = match_map.get(match_id)
+            
+            es_created_at = es_pred.get("created_at", "")
+            
+            es_entry = {
+                "prediction_id": es_pred.get("exact_score_id", ""),
+                "match_id": match_id,
+                "prediction": None,
+                "prediction_type": "exact_score",
+                "created_at": es_created_at,
+                "updated_at": es_created_at,
+                "match": None,
+                "result": "pending",
+                "points_awarded": es_pred.get("points_awarded", False),
+                "points_value": es_pred.get("points_value", 0),
+                "exact_score": es_data,
+            }
+            
+            if match_data:
+                es_entry["match"] = {
+                    "homeTeam": match_data["homeTeam"],
+                    "awayTeam": match_data["awayTeam"],
+                    "competition": match_data["competition"],
+                    "competitionEmblem": match_data.get("competitionEmblem"),
+                    "dateTime": match_data["dateTime"],
+                    "utcDate": match_data.get("utcDate"),
+                    "status": match_data["status"],
+                    "statusDetail": match_data.get("statusDetail"),
+                    "matchMinute": match_data.get("matchMinute"),
+                    "score": match_data["score"],
+                    "votes": match_data["votes"],
+                    "totalVotes": match_data["totalVotes"],
+                }
+                
+                status = match_data["status"]
+                home_sc = match_data["score"].get("home")
+                away_sc = match_data["score"].get("away")
+                
+                if status == "FINISHED" and home_sc is not None and away_sc is not None:
+                    is_exact = (es_pred["home_score"] == home_sc and es_pred["away_score"] == away_sc)
+                    if is_exact:
+                        es_entry["result"] = "correct"
+                        correct += 1
+                    else:
+                        es_entry["result"] = "wrong"
+                        wrong += 1
+                    
+                    # Process exact score points if not yet awarded
+                    if not es_pred.get("points_awarded", False):
+                        if is_exact:
+                            es_bonus = points_config["exact_score_bonus"]
+                            await db.exact_score_predictions.update_one(
+                                {"exact_score_id": es_pred["exact_score_id"]},
+                                {"$set": {
+                                    "points_awarded": True,
+                                    "points_value": es_bonus,
+                                    "points_awarded_at": now.isoformat(),
+                                    "is_correct": True,
+                                }}
+                            )
+                            points_delta += es_bonus
+                            es_entry["points_awarded"] = True
+                            es_entry["points_value"] = es_bonus
+                            es_entry["exact_score"]["exact_score_points_awarded"] = True
+                            es_entry["exact_score"]["exact_score_points_value"] = es_bonus
+                        else:
+                            await db.exact_score_predictions.update_one(
+                                {"exact_score_id": es_pred["exact_score_id"]},
+                                {"$set": {
+                                    "points_awarded": True,
+                                    "points_value": 0,
+                                    "points_awarded_at": now.isoformat(),
+                                    "is_correct": False,
+                                }}
+                            )
+                            es_entry["exact_score"]["exact_score_points_awarded"] = True
+                            es_entry["exact_score"]["exact_score_points_value"] = 0
+                else:
+                    pending += 1
+            else:
+                pending += 1
+            
+            results.append(es_entry)
+
     # Update user points and level if there were changes
     if points_delta != 0:
         new_points = max(0, user.get("points", 0) + points_delta)
@@ -470,7 +582,7 @@ async def create_exact_score_prediction(
 ):
     """
     Create an exact score prediction for a match.
-    Can only be created once per match per user (cannot be updated).
+    Only one per match per user. Use PUT to update before match starts.
     """
     user = await get_current_user(request, db)
     user_id = user["user_id"]
@@ -484,7 +596,7 @@ async def create_exact_score_prediction(
     if existing:
         raise HTTPException(
             status_code=400, 
-            detail="Exact score prediction already submitted for this match. Cannot be changed."
+            detail="Exact score prediction already exists for this match. Use edit to change it."
         )
     
     # Create new exact score prediction
@@ -511,6 +623,60 @@ async def create_exact_score_prediction(
         points_awarded=False,
         points_value=0,
         created_at=exact_pred.created_at
+    )
+
+
+@router.put("/exact-score/match/{match_id}", response_model=ExactScoreResponse)
+async def update_exact_score_prediction(
+    match_id: int,
+    prediction_data: ExactScoreCreate,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """
+    Update an exact score prediction for a match.
+    Only allowed if the match hasn't started and points haven't been awarded.
+    """
+    user = await get_current_user(request, db)
+    user_id = user["user_id"]
+    
+    existing = await db.exact_score_predictions.find_one({
+        "user_id": user_id,
+        "match_id": match_id
+    }, {"_id": 0})
+    
+    if not existing:
+        raise HTTPException(status_code=404, detail="No exact score prediction found for this match")
+    
+    if existing.get("points_awarded"):
+        raise HTTPException(status_code=400, detail="Cannot edit - match already processed")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.exact_score_predictions.update_one(
+        {"user_id": user_id, "match_id": match_id},
+        {"$set": {
+            "home_score": prediction_data.home_score,
+            "away_score": prediction_data.away_score,
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    created_at = existing.get("created_at")
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+    
+    logger.info(f"User {user_id} updated exact score for match {match_id}: {prediction_data.home_score}-{prediction_data.away_score}")
+    
+    return ExactScoreResponse(
+        exact_score_id=existing["exact_score_id"],
+        user_id=user_id,
+        match_id=match_id,
+        home_score=prediction_data.home_score,
+        away_score=prediction_data.away_score,
+        points_awarded=False,
+        points_value=0,
+        created_at=created_at
     )
 
 

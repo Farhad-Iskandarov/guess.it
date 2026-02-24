@@ -182,6 +182,48 @@ export const getExactScorePrediction = async (matchId) => {
 };
 
 /**
+ * Delete exact score prediction for a match
+ */
+export const deleteExactScorePrediction = async (matchId) => {
+  const response = await fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete exact score prediction');
+  }
+
+  invalidateCache();
+  return await response.json();
+};
+
+/**
+ * Update an exact score prediction (only before match starts)
+ */
+export const updateExactScorePrediction = async (matchId, homeScore, awayScore) => {
+  const response = await fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      match_id: matchId,
+      home_score: homeScore,
+      away_score: awayScore
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to update exact score prediction');
+  }
+
+  invalidateCache();
+  return await response.json();
+};
+
+/**
  * Get all exact score predictions for current user
  */
 export const getMyExactScorePredictions = async () => {

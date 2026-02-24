@@ -10,8 +10,148 @@ A social football prediction platform where fans analyze, predict, and compete w
 - **Backend:** FastAPI (Python 3.11), Motor (async MongoDB driver), Pydantic v2
 - **Database:** MongoDB
 - **Real-time:** WebSockets (live matches, chat, notifications)
-- **Auth:** Session-based (httpOnly cookies) + Google OAuth via Emergent Auth
+- **Auth:** Session-based (httpOnly cookies) + Google OAuth
 - **Football Data:** football-data.org API (v4)
+- **Payments:** Stripe (subscription system)
+
+---
+
+## Run Locally
+
+### Prerequisites
+
+| Tool | Version | Install |
+|------|---------|---------|
+| **Python** | 3.11+ | [python.org](https://www.python.org/downloads/) |
+| **Node.js** | 18+ | [nodejs.org](https://nodejs.org/) |
+| **Yarn** | 1.22+ | `npm install -g yarn` |
+| **MongoDB** | 6.0+ | [mongodb.com/docs/manual/installation](https://www.mongodb.com/docs/manual/installation/) |
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/Farhad-Iskandarov/guess.it.git
+cd guess.it
+```
+
+### Step 2: Start MongoDB
+
+Make sure MongoDB is running locally on the default port (27017).
+
+**macOS (Homebrew):**
+```bash
+brew services start mongodb-community
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo systemctl start mongod
+```
+
+**Windows:**
+```bash
+net start MongoDB
+```
+
+**Docker (alternative):**
+```bash
+docker run -d --name guessit-mongo -p 27017:27017 mongo:6
+```
+
+Verify MongoDB is running:
+```bash
+mongosh --eval "db.runCommand({ ping: 1 })"
+```
+
+### Step 3: Configure Environment Variables
+
+**Backend:**
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `backend/.env` and fill in your values:
+
+```env
+MONGO_URL="mongodb://localhost:27017"
+DB_NAME="guessit"
+CORS_ORIGINS="*"
+SECRET_KEY=your-strong-random-secret-key
+FOOTBALL_API_KEY=your-football-data-api-key
+STRIPE_API_KEY=sk_test_your-stripe-test-key
+```
+
+> **Football API Key:** Register free at [football-data.org](https://www.football-data.org/client/register)
+> **Stripe Key:** Get test key at [stripe.com/dashboard](https://dashboard.stripe.com/test/apikeys)
+
+**Frontend:**
+```bash
+cd ../frontend
+cp .env.example .env
+```
+
+Edit `frontend/.env`:
+
+```env
+REACT_APP_BACKEND_URL=http://localhost:8001
+```
+
+### Step 4: Install Backend Dependencies
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate    # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Step 5: Install Frontend Dependencies
+
+```bash
+cd ../frontend
+yarn install
+```
+
+### Step 6: Start the Backend
+
+```bash
+cd backend
+source venv/bin/activate    # if not already active
+uvicorn server:app --reload --host 0.0.0.0 --port 8001
+```
+
+On first startup, the backend will automatically:
+- Seed the admin account
+- Seed the Football API key into the database
+- Seed default subscription plans (Standard, Champion, Elite)
+- Seed default points configuration
+
+### Step 7: Start the Frontend
+
+In a new terminal:
+```bash
+cd frontend
+yarn start
+```
+
+### Step 8: Access the Application
+
+| Page | URL |
+|------|-----|
+| **Homepage** | [http://localhost:3000](http://localhost:3000) |
+| **Admin Panel** | [http://localhost:3000/itguess/admin/login](http://localhost:3000/itguess/admin/login) |
+| **API Docs** | [http://localhost:8001/docs](http://localhost:8001/docs) |
+| **API Health** | [http://localhost:8001/api/health](http://localhost:8001/api/health) |
+
+### Admin Credentials (auto-seeded)
+
+| Field | Value |
+|-------|-------|
+| Email | `farhad.isgandar@gmail.com` |
+| Password | `Salam123?` |
+
+> You can override these via environment variables: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NICKNAME`
 
 ---
 
@@ -21,128 +161,74 @@ A social football prediction platform where fans analyze, predict, and compete w
 - User registration & login (email + Google OAuth)
 - Live football match browsing (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, UCL)
 - Match predictions with points system
-- Leaderboard (global rankings)
+- Global leaderboard
 - Friends system (send/accept/decline requests)
 - Real-time messaging & chat
 - In-app notifications
 - User profiles with avatar & banner uploads
-- Favorite matches
+- Favorite matches & teams
 - Dark/Light theme toggle
 
-### Content Features
-- **News/Blog system** (admin-managed, with article detail pages and related articles)
-- **Email subscriptions** (footer newsletter signup)
-- **Contact form** (saves to backend, viewable in admin)
-- **Editable contact info** (admin-controlled email, location)
-
-### Advanced Prediction Features (NEW - Feb 2026)
-- **Exact Score Predictions** - Predict exact match scores for +50 bonus points
-- **Advanced Match Options** - Expandable section with enhanced prediction features
+### Prediction System
+- **Winner Predictions (1/X/2)** - Predict match winners for points
+- **Exact Score Predictions** - Predict exact final scores for +50 bonus points
 - **Configurable Points System** - Admin can configure all point values dynamically
+- **My Predictions Page** - View, edit, remove all predictions before match starts
 
-### Subscription System (NEW - Feb 2026)
-- **3 Premium Plans** - Standard ($4.99/mo), Champion ($9.99/mo), Elite ($19.99/mo)
-- **Stripe Payment Integration** - Secure checkout with Stripe (test mode)
-- **Subscription Management** - Users can subscribe, view active plan, cancel
-- **Premium Badges** - Visual subscription tier badges on user profiles
-- **Admin Plan Management** - Edit prices, features, toggle plans on/off
+### Homepage Tabs
+- **Top Matches** - All active (non-finished) matches
+- **Popular** - Top 10 matches by prediction count
+- **Top Live** - Top 10 live matches by prediction count
+- **Soon** - Matches scheduled within next 3 days
+- **Ended** - Recently finished matches (last 24h)
+- **Favorite** - Matches from favorite teams & bookmarked matches
 
-### Chat & Social Improvements (NEW - Feb 2026)
-- **Expandable Match Cards in Chat** - Clicking a shared match card expands it in-place with full prediction UI (vote, exact score) instead of redirecting
-- **Invite Friend via Match Card** - Sending a guess invite from Advanced section now sends the actual match card in chat
-- **Visual Prediction Types** - Green background = normal winner prediction, Orange background = exact score prediction
+### Content Features
+- News/Blog system (admin-managed)
+- Email subscriptions (footer newsletter)
+- Contact form
+- Editable contact info (admin-controlled)
 
----
+### Subscription System
+- 3 Premium Plans: Standard ($4.99/mo), Champion ($9.99/mo), Elite ($19.99/mo)
+- Stripe Payment Integration (test mode)
+- Subscription management & premium badges
 
-## Recent Updates (February 2026)
+### Admin Panel
+- **Manual Points Gifting** - Gift points to individual or multiple users with custom messages, real-time notifications, and full audit trail
 
-### Exact Score Prediction UI Fix (Latest)
-- Fixed exact score prediction only updating the specific match card (not all cards)
-- Added visual differentiation: Green = winner prediction, Orange = exact score prediction
-- Mutual exclusivity per match: exact score locks out 1/X/2 votes and vice versa
-- Remove button clears BOTH normal prediction and exact score for that match only
-- Advance button disabled when normal prediction already saved (mutual exclusivity)
-- GuessItButton shows "Saved" with light orange for exact score, light green for normal guess
-- Backend: DELETE /api/predictions/exact-score/match/{id} endpoint for removing exact scores
-- Chat expanded match cards also show amber/orange styling for locked exact scores
-- +50 points auto-awarded when exact score matches final result (processed once, notifications sent)
-- State persists correctly after page refresh
-
-### Subscription System ✅
-- New `/subscribe` page with 3 premium plans (Standard, Champion, Elite)
-- Stripe integration for secure payment checkout
-- Admin can manage plans (edit prices, features, toggle active/inactive)
-- Dashboard shows subscription overview (total subscribers, revenue, per-plan stats)
-
-### Chat Match Card Fix ✅
-- Match cards shared in chat now expand in-place with smooth animation
-- Full prediction UI (vote 1/X/2, exact score) works directly inside chat
-- No page redirect or reload
-
-### Invite Friend Fix ✅
-- Invite from Advanced section sends actual match card in chat (not just text)
-- Consistent with chat card sharing system
-
-### P0: Admin Account Persistence ✅
-- Admin account auto-seeds on server startup
-- Credentials: `farhad.isgandar@gmail.com` / `Salam123?`
-
-### P1: Advanced Section Foundation ✅
-- Animated expand/collapse "Advanced" section on match cards
-- Smooth transitions and modern UI
-
-### P1: Exact Score Prediction ✅
-- Users can predict exact final scores
-- +50 bonus points for correct exact score predictions
-- One-time lock (cannot be changed after submission)
-- API: `POST /api/predictions/exact-score`
-
-### P1: Admin Points Management ✅
-- New "Points Settings" tab in admin panel
-- Configurable values:
-  - Correct prediction points (default: 10)
-  - Wrong prediction penalty (default: 5)
-  - Exact score bonus (default: 50)
-  - Penalty minimum level (default: 5)
-  - Level thresholds (11 levels, 0-10)
-- Save and Reset to Defaults functionality
-
-### Bug Fixes ✅
-- Fixed Football API key issue (typo: letter O vs number 0)
-- Fixed profile picture caching issue
+### Chat & Social
+- Real-time messaging with friends
+- Expandable match cards in chat with full prediction UI
+- Invite friends to guess via match card sharing
 
 ---
 
-## Admin Panel Access
-
-The Admin Panel has a dedicated, secure login page hidden from the regular UI.
+## Admin Panel
 
 ### How to access:
 
-1. Open your browser and go to: `/itguess/admin/login`
-2. Enter the admin credentials:
-   - **Email:** `farhad.isgandar@gmail.com`
-   - **Password:** `Salam123?`
-3. Click **"Sign In to Admin Panel"**
-4. You will be redirected to the Admin Dashboard
+1. Go to `/itguess/admin/login`
+2. Enter admin credentials (see above)
+3. Click "Sign In to Admin Panel"
 
-### Admin Panel Tabs:
+### Tabs:
 
 | Tab | Description |
-|---|---|
-| Dashboard | Overview stats, recent activity, audit log, **subscription overview** |
-| Users | Manage users (ban, promote, view) |
+|-----|-------------|
+| Dashboard | Overview stats, activity, audit log, subscription overview |
+| Users | Manage users (ban, gift points, view messages, change password) |
 | Matches | Match management and live match control |
-| **Points Settings** | Configure prediction points, penalties, bonuses |
+| Points Settings | Configure prediction points, penalties, bonuses |
 | Carousel Banners | Homepage banner image management |
-| News | Create, edit, delete, publish/unpublish news articles |
-| **Subscription Plans** | Manage premium plans: edit prices, features, toggle active/inactive (NEW) |
-| Subscribed Emails | View and manage newsletter subscriptions |
-| Contact Messages | View, flag, and delete contact form submissions |
-| Contact Settings | Edit support email, location info shown on Contact page |
+| News | Create, edit, delete, publish/unpublish articles |
+| Subscription Plans | Manage premium plans: prices, features, active/inactive |
+| Subscribed Emails | View newsletter subscriptions |
+| Contact Messages | View, flag, delete contact form submissions |
+| Contact Settings | Edit support email, location info |
 | System | API configuration and system settings |
 | Prediction Monitor | Monitor prediction streaks |
-| Favorites | View user favorite matches |
+| Favorites | View user favorites |
 | Notifications | Send notifications |
 | Analytics | Platform analytics and charts |
 
@@ -151,59 +237,69 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 ## Project Structure
 
 ```
-/app
+/
 ├── backend/
-│   ├── server.py              # Main FastAPI app, WebSocket endpoints, Admin seeding
-│   ├── .env                   # Environment variables
+│   ├── server.py              # Main FastAPI app, WebSocket, admin seeder
+│   ├── .env.example           # Environment template
 │   ├── requirements.txt       # Python dependencies
 │   ├── models/
 │   │   ├── auth.py            # User models
 │   │   ├── prediction.py      # Prediction + ExactScore models
-│   │   └── points_config.py   # Points configuration model (NEW)
+│   │   └── points_config.py   # Points configuration model
 │   ├── routes/
 │   │   ├── auth.py            # Register, Login, Google OAuth, Nickname
-│   │   ├── admin.py           # Admin panel (all management + points config)
-│   │   ├── public.py          # Subscribe, Contact, Contact Settings, News (public)
-│   │   ├── predictions.py     # Match predictions + exact score predictions
-│   │   ├── football.py        # Football API, live polling, banners
-│   │   ├── favorites.py       # Favorite matches
+│   │   ├── admin.py           # Admin panel + points config + gift points
+│   │   ├── public.py          # Subscribe, Contact, News (public)
+│   │   ├── predictions.py     # Predictions + exact score + detailed view
+│   │   ├── football.py        # Football API, live polling, banners, leaderboard
+│   │   ├── subscriptions.py   # Stripe subscription management
+│   │   ├── favorites.py       # Favorite clubs
 │   │   ├── friends.py         # Friend requests & friendships
 │   │   ├── messages.py        # Real-time chat messaging
 │   │   ├── notifications.py   # In-app notifications
 │   │   └── settings.py        # User settings
 │   ├── services/
-│   │   └── football_api.py    # Football-data.org API service
-│   ├── tests/
-│   │   └── test_p0_p1_features.py  # P0/P1 feature tests
+│   │   ├── football_api.py    # Football-data.org API service
+│   │   └── prediction_processor.py  # Points & exact score processing
+│   ├── tests/                 # Backend tests
 │   └── uploads/               # User avatars, banners, news images
 ├── frontend/
+│   ├── .env.example           # Environment template
+│   ├── package.json           # Node.js dependencies
+│   ├── craco.config.js        # CRACO configuration (path aliases)
+│   ├── tailwind.config.js     # Tailwind CSS configuration
 │   ├── src/
 │   │   ├── App.js             # Routes, AdminRoute, PublicLayout
 │   │   ├── pages/
-│   │   │   ├── AdminLoginPage.jsx    # Dedicated admin login
-│   │   │   ├── AdminPage.jsx         # Admin dashboard (all tabs + Points Settings)
-│   │   │   ├── HomePage.jsx          # Main page with matches
-│   │   │   ├── NewsPage.jsx          # Dynamic news list
-│   │   │   ├── NewsArticlePage.jsx   # Individual news article view
-│   │   │   ├── ContactPage.jsx       # Contact form + dynamic info
-│   │   │   ├── LoginPage.jsx         # Regular user login
-│   │   │   └── ...                   # Other pages
+│   │   │   ├── HomePage.jsx           # Main page with match tabs & filters
+│   │   │   ├── AdminLoginPage.jsx     # Admin login
+│   │   │   ├── AdminPage.jsx          # Admin dashboard (all tabs)
+│   │   │   ├── MyPredictionsPage.jsx  # User predictions with exact score
+│   │   │   ├── SubscribePage.jsx      # Premium subscription plans
+│   │   │   ├── NewsPage.jsx           # News list
+│   │   │   ├── NewsArticlePage.jsx    # Article detail
+│   │   │   ├── ContactPage.jsx        # Contact form
+│   │   │   ├── LoginPage.jsx          # User login
+│   │   │   ├── RegisterPage.jsx       # User registration
+│   │   │   ├── LeaderboardPage.jsx    # Global leaderboard
+│   │   │   ├── ProfilePage.jsx        # User profile
+│   │   │   ├── FriendsPage.jsx        # Friends management
+│   │   │   ├── ChatPage.jsx           # Real-time chat
+│   │   │   ├── NotificationsPage.jsx  # Notifications
+│   │   │   ├── SettingsPage.jsx       # User settings
+│   │   │   ├── HowItWorksPage.jsx     # How it works
+│   │   │   └── AboutPage.jsx          # About page
 │   │   ├── components/
-│   │   │   ├── layout/        # Header, Footer (with working subscribe)
-│   │   │   ├── home/          
-│   │   │   │   ├── MatchList.jsx     # Match cards with Advanced modal (NEW)
-│   │   │   │   └── MatchCard.jsx     # Alternative match card component
+│   │   │   ├── layout/        # Header, Footer
+│   │   │   ├── home/
+│   │   │   │   └── MatchList.jsx  # Match cards with prediction UI
 │   │   │   └── ui/            # shadcn/ui components
-│   │   ├── lib/               # AuthContext, FriendsContext, etc.
-│   │   └── services/
-│   │       ├── predictions.js  # Prediction API + exact score functions (NEW)
-│   │       └── ...            # Other services
-│   └── .env                   # Frontend env
+│   │   ├── lib/               # AuthContext, FriendsContext, utils
+│   │   └── services/          # API service functions
+│   └── public/                # Static assets
 ├── memory/
 │   └── PRD.md                 # Product requirements document
-└── test_reports/
-    ├── iteration_1.json       # Initial test results
-    └── iteration_2.json       # P0/P1 test results (100% pass)
+└── tests/                     # Integration tests
 ```
 
 ---
@@ -211,97 +307,122 @@ The Admin Panel has a dedicated, secure login page hidden from the regular UI.
 ## API Endpoints
 
 ### Public
-- `POST /api/subscribe` — Subscribe to newsletter
-- `POST /api/contact` — Submit contact form
-- `GET /api/contact-settings` — Get public contact info
-- `GET /api/news` — List published news articles
-- `GET /api/news/{article_id}` — Get single article + related
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/` | API root |
+| POST | `/api/subscribe` | Subscribe to newsletter |
+| POST | `/api/contact` | Submit contact form |
+| GET | `/api/contact-settings` | Get contact info |
+| GET | `/api/news` | List published articles |
+| GET | `/api/news/{article_id}` | Get single article |
+| GET | `/api/subscriptions/plans` | Get subscription plans |
 
 ### Auth
-- `POST /api/auth/register` — Register
-- `POST /api/auth/login` — Login
-- `GET /api/auth/me` — Get current user
-- `POST /api/auth/logout` — Logout
-
-### Predictions
-- `POST /api/predictions` — Create/update prediction
-- `GET /api/predictions/me` — Get user's predictions
-- `GET /api/predictions/me/detailed` — Get detailed predictions with match data
-- `DELETE /api/predictions/match/{match_id}` — Delete prediction
-- **`POST /api/predictions/exact-score`** — Create exact score prediction (NEW)
-- **`GET /api/predictions/exact-score/match/{match_id}`** — Get exact score for match (NEW)
-- **`GET /api/predictions/exact-score/me`** — Get all exact score predictions (NEW)
-
-### Admin (requires `role: admin`)
-- `GET /api/admin/dashboard` — Dashboard stats
-- `GET/POST/PUT/DELETE /api/admin/news` — News CRUD
-- `PUT /api/admin/news/{id}/toggle` — Publish/unpublish
-- `GET/DELETE /api/admin/subscriptions` — Subscription management
-- `GET/PUT/DELETE /api/admin/contact-messages` — Contact messages
-- `GET/PUT /api/admin/contact-settings` — Contact settings
-- `GET/POST/PUT/DELETE /api/admin/banners` — Banner management
-- `GET /api/admin/users` — User management
-- `GET /api/admin/analytics` — Analytics
-- **`GET /api/admin/points-config`** — Get points configuration (NEW)
-- **`PUT /api/admin/points-config`** — Update points configuration (NEW)
-- **`POST /api/admin/points-config/reset`** — Reset to defaults (NEW)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register |
+| POST | `/api/auth/login` | Login |
+| GET | `/api/auth/me` | Get current user |
+| POST | `/api/auth/logout` | Logout |
 
 ### Football
-- `GET /api/football/matches` — Get matches
-- `GET /api/football/banners` — Get active banners
-- `WS /api/ws/matches` — Live match updates
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/football/matches` | All matches (filterable) |
+| GET | `/api/football/matches/today` | Today's matches |
+| GET | `/api/football/matches/live` | Live matches |
+| GET | `/api/football/matches/upcoming` | Upcoming matches |
+| GET | `/api/football/matches/ended` | Ended matches (24h) |
+| GET | `/api/football/matches/competition/{code}` | By competition |
+| GET | `/api/football/search?q=` | Search by team name |
+| GET | `/api/football/competitions` | Available competitions |
+| GET | `/api/football/banners` | Active banners |
+| GET | `/api/football/leaderboard` | Global leaderboard |
+| WS | `/api/ws/matches` | Live match updates |
+
+### Predictions (authenticated)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/predictions` | Create/update prediction |
+| GET | `/api/predictions/me` | Get user predictions |
+| GET | `/api/predictions/me/detailed` | Detailed with match data |
+| DELETE | `/api/predictions/match/{id}` | Delete prediction |
+| POST | `/api/predictions/exact-score` | Create exact score |
+| PUT | `/api/predictions/exact-score/match/{id}` | Update exact score |
+| DELETE | `/api/predictions/exact-score/match/{id}` | Delete exact score |
+| GET | `/api/predictions/exact-score/me` | All exact scores |
+
+### Admin (requires admin role)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/dashboard` | Dashboard stats |
+| GET/POST/PUT/DELETE | `/api/admin/news` | News CRUD |
+| GET/DELETE | `/api/admin/subscriptions` | Email subscriptions |
+| GET/PUT/DELETE | `/api/admin/contact-messages` | Contact messages |
+| GET/PUT | `/api/admin/contact-settings` | Contact settings |
+| GET/POST/PUT/DELETE | `/api/admin/banners` | Banner management |
+| GET | `/api/admin/users` | User management |
+| GET | `/api/admin/analytics` | Analytics |
+| GET/PUT | `/api/admin/points-config` | Points configuration |
+| POST | `/api/admin/points-config/reset` | Reset points to defaults |
+| POST | `/api/admin/gift-points` | Gift points to users |
+| GET | `/api/admin/gift-points/log` | Gift points audit trail |
 
 ---
 
-## Environment Variables
+## Environment Variables Reference
 
-### Backend (.env)
-```
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=test_database
-SECRET_KEY=your-secret-key
-FOOTBALL_API_KEY=your-football-data-api-key
-ALLOWED_ORIGINS=*
-```
+### Backend (`backend/.env`)
 
-### Frontend (.env)
-```
-REACT_APP_BACKEND_URL=https://your-app.preview.emergentagent.com
-```
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `MONGO_URL` | Yes | MongoDB connection string | `mongodb://localhost:27017` |
+| `DB_NAME` | Yes | Database name | `guessit` |
+| `CORS_ORIGINS` | Yes | Allowed origins | `*` or `http://localhost:3000` |
+| `SECRET_KEY` | Yes | Session/JWT secret | Random string |
+| `FOOTBALL_API_KEY` | Yes | football-data.org API key | Get from football-data.org |
+| `STRIPE_API_KEY` | Yes | Stripe secret key (test) | `sk_test_...` |
+| `ADMIN_EMAIL` | No | Admin seed email | `admin@example.com` |
+| `ADMIN_PASSWORD` | No | Admin seed password | `StrongPass123!` |
+| `ADMIN_NICKNAME` | No | Admin seed nickname | `admin` |
 
----
+### Frontend (`frontend/.env`)
 
-## Running the Application
-
-### Development
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn server:app --reload --port 8001
-
-# Frontend
-cd frontend
-yarn install
-yarn start
-```
-
-### Production
-The application is deployed on Emergent Platform with:
-- Backend on port 8001 (supervised)
-- Frontend on port 3000 (supervised)
-- MongoDB local instance
-- Nginx reverse proxy
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `REACT_APP_BACKEND_URL` | Yes | Backend API URL | `http://localhost:8001` |
 
 ---
 
-## Upcoming Features (P2)
+## Troubleshooting
 
-1. **Prediction Result Notifications** - Notify users when their predictions resolve
-2. **Invite Friend to Guess** - Share matches with friends via notifications & chat
-3. **Friends Activity on Match Card** - See which friends predicted on a match
-4. **Profile Privacy Settings** - Control profile visibility
-5. **Smart Advice** - Get prediction tips from top performers
+### MongoDB won't connect
+- Ensure MongoDB is running: `mongosh --eval "db.runCommand({ ping: 1 })"`
+- Check `MONGO_URL` in `backend/.env`
+
+### Football API returns empty matches
+- Verify your API key at [football-data.org](https://www.football-data.org/client/login)
+- Free tier has rate limits (10 requests/minute). Wait and retry.
+
+### Frontend can't reach backend
+- Ensure backend is running on port 8001
+- Check `REACT_APP_BACKEND_URL` in `frontend/.env` matches your backend URL
+- For CORS issues, set `CORS_ORIGINS=*` in `backend/.env`
+
+### Admin login fails
+- The admin account is seeded on first startup. If you changed the database, restart the backend.
+- Default: `farhad.isgandar@gmail.com` / `Salam123?`
+
+---
+
+## Notes for Developers
+
+- **Hot Reload:** Both backend (`--reload` flag) and frontend (`yarn start`) support hot reload.
+- **Database Reset:** Drop the database to start fresh: `mongosh --eval "use guessit; db.dropDatabase()"`
+- **API Docs:** FastAPI auto-generates docs at `http://localhost:8001/docs`
+- **Path Aliases:** Frontend uses `@/` alias for `src/` (configured in `craco.config.js` and `jsconfig.json`)
+- **Uploads:** User avatars and news images are stored in `backend/uploads/`
 
 ---
 

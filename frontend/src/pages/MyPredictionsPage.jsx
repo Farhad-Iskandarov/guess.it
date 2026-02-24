@@ -3,14 +3,15 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
-import { savePrediction, deletePrediction, getMyDetailedPredictions } from '@/services/predictions';
+import { savePrediction, deletePrediction, getMyDetailedPredictions, deleteExactScorePrediction, updateExactScorePrediction } from '@/services/predictions';
 import { toast } from 'sonner';
 import {
   Trophy, Clock, CheckCircle2, XCircle, AlertCircle,
   Radio, ArrowRight, Filter, TrendingUp, Calendar, Search, X,
-  Pencil, Trash2, Check, Loader2, LayoutGrid, List, Star
+  Pencil, Trash2, Check, Loader2, LayoutGrid, List, Star, Target
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 // ============ Filter Tab ============
 const FilterTab = memo(({ label, value, active, count, onClick }) => (
@@ -160,17 +161,31 @@ const EditVoteButton = memo(({ type, isSelected, onClick }) => {
 EditVoteButton.displayName = 'EditVoteButton';
 
 // ============ Prediction Card ============
-const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove }) => {
+const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove, onEditExactScore, onRemoveExactScore }) => {
   const { prediction, match, result, created_at } = data;
+  const exactScore = data.exact_score;
+  const predictionType = data.prediction_type || (prediction ? 'winner' : 'exact_score');
+  const isExactScoreOnly = predictionType === 'exact_score' && !prediction;
+  
   const [isEditing, setIsEditing] = useState(false);
   const [editSelection, setEditSelection] = useState(prediction);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  
+  // Exact score edit state
+  const [isEditingExactScore, setIsEditingExactScore] = useState(false);
+  const [editHomeScore, setEditHomeScore] = useState(exactScore?.home_score || 0);
+  const [editAwayScore, setEditAwayScore] = useState(exactScore?.away_score || 0);
+  const [isSavingExactScore, setIsSavingExactScore] = useState(false);
+  const [isRemovingExactScore, setIsRemovingExactScore] = useState(false);
 
   const isUpcoming = match && match.status === 'NOT_STARTED';
   const isFinished = match && match.status === 'FINISHED';
   const canEdit = isUpcoming && !match.predictionLocked;
   const isList = viewMode === 'list';
+  
+  // For exact score: can only edit if not yet awarded points
+  const canEditExactScore = canEdit && exactScore && !exactScore.exact_score_points_awarded;
 
   if (!match) {
     return (
@@ -179,30 +194,48 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
         data-testid={`prediction-card-${index}`}
       >
         <p className="text-sm text-muted-foreground">Match data unavailable (match ID: {data.match_id})</p>
-        <PredictionBadge prediction={prediction} result="pending" />
+        {!isExactScoreOnly && <PredictionBadge prediction={prediction} result="pending" />}
+        {exactScore && (
+          <div className="mt-2 flex items-center gap-2 text-amber-500">
+            <Target className="w-4 h-4" />
+            <span className="font-semibold">Exact Score: {exactScore.home_score} - {exactScore.away_score}</span>
+          </div>
+        )}
       </div>
     );
   }
 
-  // Enhanced styling for finished matches
-  const borderColor = {
-    correct: isFinished ? 'border-emerald-500/40 hover:border-emerald-500/60' : 'border-emerald-500/30 hover:border-emerald-500/50',
-    wrong: isFinished ? 'border-red-500/40 hover:border-red-500/60' : 'border-red-500/20 hover:border-red-500/40',
-    pending: 'border-border/50 hover:border-border',
-  };
+  // Enhanced styling for finished matches - use orange for exact score only
+  const cardAccentColor = isExactScoreOnly ? 'amber' : (result === 'correct' ? 'emerald' : result === 'wrong' ? 'red' : null);
+  
+  const borderColor = isExactScoreOnly
+    ? (isFinished 
+        ? (result === 'correct' ? 'border-emerald-500/40 hover:border-emerald-500/60' : result === 'wrong' ? 'border-red-500/40 hover:border-red-500/60' : 'border-amber-500/40 hover:border-amber-500/60')
+        : 'border-amber-500/30 hover:border-amber-500/50')
+    : {
+        correct: isFinished ? 'border-emerald-500/40 hover:border-emerald-500/60' : 'border-emerald-500/30 hover:border-emerald-500/50',
+        wrong: isFinished ? 'border-red-500/40 hover:border-red-500/60' : 'border-red-500/20 hover:border-red-500/40',
+        pending: 'border-border/50 hover:border-border',
+      }[result] || 'border-border/50 hover:border-border';
 
-  const bgAccent = {
-    correct: isFinished ? 'bg-emerald-500/[0.08]' : 'bg-emerald-500/[0.03]',
-    wrong: isFinished ? 'bg-red-500/[0.07]' : 'bg-red-500/[0.02]',
-    pending: '',
-  };
+  const bgAccent = isExactScoreOnly
+    ? (isFinished
+        ? (result === 'correct' ? 'bg-emerald-500/[0.08]' : result === 'wrong' ? 'bg-red-500/[0.07]' : 'bg-amber-500/[0.06]')
+        : 'bg-amber-500/[0.04]')
+    : {
+        correct: isFinished ? 'bg-emerald-500/[0.08]' : 'bg-emerald-500/[0.03]',
+        wrong: isFinished ? 'bg-red-500/[0.07]' : 'bg-red-500/[0.02]',
+        pending: '',
+      }[result] || '';
 
   // Left accent bar color for finished matches
   const accentBar = isFinished && result === 'correct'
     ? 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-emerald-500 before:rounded-l-xl'
     : isFinished && result === 'wrong'
       ? 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-red-500 before:rounded-l-xl'
-      : '';
+      : isExactScoreOnly && !isFinished
+        ? 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-amber-500 before:rounded-l-xl'
+        : '';
 
   const votedDate = created_at ? new Date(created_at) : null;
   const votedStr = votedDate
@@ -212,13 +245,20 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
     : '';
 
   const handleStartEdit = () => {
-    setEditSelection(prediction);
-    setIsEditing(true);
+    if (isExactScoreOnly) {
+      setEditHomeScore(exactScore?.home_score || 0);
+      setEditAwayScore(exactScore?.away_score || 0);
+      setIsEditingExactScore(true);
+    } else {
+      setEditSelection(prediction);
+      setIsEditing(true);
+    }
   };
 
   const handleCancelEdit = () => {
     setEditSelection(prediction);
     setIsEditing(false);
+    setIsEditingExactScore(false);
   };
 
   const handleSubmitEdit = async () => {
@@ -234,31 +274,54 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
       setIsSaving(false);
     }
   };
-
-  const handleRemove = async () => {
-    setIsRemoving(true);
+  
+  const handleSubmitExactScoreEdit = async () => {
+    if (editHomeScore === exactScore?.home_score && editAwayScore === exactScore?.away_score) {
+      setIsEditingExactScore(false);
+      return;
+    }
+    setIsSavingExactScore(true);
     try {
-      await onRemove(data.match_id);
+      await onEditExactScore(data.match_id, editHomeScore, editAwayScore);
+      setIsEditingExactScore(false);
     } finally {
-      setIsRemoving(false);
+      setIsSavingExactScore(false);
     }
   };
 
-  const predLabels = { home: '1', draw: 'X', away: '2' };
+  const handleRemove = async () => {
+    if (isExactScoreOnly) {
+      setIsRemovingExactScore(true);
+      try {
+        await onRemoveExactScore(data.match_id);
+      } finally {
+        setIsRemovingExactScore(false);
+      }
+    } else {
+      setIsRemoving(true);
+      try {
+        await onRemove(data.match_id);
+      } finally {
+        setIsRemoving(false);
+      }
+    }
+  };
+
+  const isRemovingAny = isRemoving || isRemovingExactScore;
 
   return (
     <div
-      className={`prediction-card relative ${bgAccent[result]} rounded-xl border overflow-hidden ${borderColor[result]} ${isEditing ? 'ring-1 ring-primary/30' : ''} ${accentBar}`}
+      className={`prediction-card relative ${bgAccent} rounded-xl border overflow-hidden ${borderColor} ${(isEditing || isEditingExactScore) ? 'ring-1 ring-primary/30' : ''} ${accentBar}`}
       data-testid={`prediction-card-${index}`}
       style={{
         animationDelay: `${index * 60}ms`,
         transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
       }}
-      onMouseEnter={e => { if (!isEditing) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px -8px rgba(0,0,0,0.2)'; }}}
+      onMouseEnter={e => { if (!isEditing && !isEditingExactScore) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 30px -8px rgba(0,0,0,0.2)'; }}}
       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ''; }}
     >
       {/* ======= LIST VIEW ======= */}
-      {isList && !isEditing && (
+      {isList && !isEditing && !isEditingExactScore && (
         <div className="px-4 py-3">
           {/* League name on top */}
           <div className="flex items-center gap-2 mb-2">
@@ -296,7 +359,17 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
             </div>
 
             {/* Pick */}
-            <PredictionBadge prediction={prediction} result={result} />
+            {prediction && <PredictionBadge prediction={prediction} result={result} />}
+            {exactScore && (
+              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${
+                result === 'correct' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' :
+                result === 'wrong' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
+                'bg-amber-500/15 text-amber-400 border-amber-500/30'
+              }`} data-testid="exact-score-badge">
+                <Target className="w-4 h-4" />
+                <span className="font-bold text-lg">{exactScore.home_score}-{exactScore.away_score}</span>
+              </div>
+            )}
 
             {/* Actions */}
             {canEdit && (
@@ -311,11 +384,11 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
                 </button>
                 <button
                   onClick={handleRemove}
-                  disabled={isRemoving}
+                  disabled={isRemovingAny}
                   data-testid={`remove-prediction-${data.match_id}`}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all disabled:opacity-50"
                 >
-                  {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  {isRemovingAny ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                   Remove
                 </button>
               </div>
@@ -335,7 +408,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
       )}
 
       {/* ======= GRID VIEW (or editing in list) ======= */}
-      {(!isList || isEditing) && (
+      {(!isList || isEditing || isEditingExactScore) && (
         <>
           {/* League name at top */}
           <div className="px-5 pt-3 pb-0">
@@ -361,7 +434,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
                   <XCircle className="w-3.5 h-3.5" /> Wrong
                 </span>
               )}
-              {canEdit && !isEditing && (
+              {canEdit && !isEditing && !isEditingExactScore && (
                 <div className="flex items-center gap-1.5 ml-2">
                   <button
                     onClick={handleStartEdit}
@@ -373,11 +446,11 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
                   </button>
                   <button
                     onClick={handleRemove}
-                    disabled={isRemoving}
+                    disabled={isRemovingAny}
                     data-testid={`remove-prediction-${data.match_id}`}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all disabled:opacity-50"
                   >
-                    {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    {isRemovingAny ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                     Remove
                   </button>
                 </div>
@@ -424,16 +497,27 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
               </div>
 
               {/* User prediction */}
-              {!isEditing && (
-                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              {!isEditing && !isEditingExactScore && (
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Your Pick</span>
-                  <PredictionBadge prediction={prediction} result={result} />
+                  {prediction && <PredictionBadge prediction={prediction} result={result} />}
+                  {exactScore && (
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${
+                      result === 'correct' && isExactScoreOnly ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' :
+                      result === 'wrong' && isExactScoreOnly ? 'bg-red-500/15 text-red-400 border-red-500/30' :
+                      'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                    }`} data-testid="exact-score-pick">
+                      <Target className="w-4 h-4" />
+                      <span className="font-bold">{exactScore.home_score} - {exactScore.away_score}</span>
+                      <span className="text-xs opacity-80">Exact</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Edit Mode */}
+          {/* Edit Mode - Normal Prediction */}
           {isEditing && (
             <div className="px-5 pb-3" data-testid={`edit-panel-${data.match_id}`}>
               <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
@@ -465,6 +549,64 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
               </div>
             </div>
           )}
+          
+          {/* Edit Mode - Exact Score */}
+          {isEditingExactScore && (
+            <div className="px-5 pb-3" data-testid={`edit-exact-score-panel-${data.match_id}`}>
+              <div className="bg-amber-500/5 rounded-lg p-4 border border-amber-500/20">
+                <p className="text-xs font-medium text-amber-500 mb-3 uppercase tracking-wider flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5" />
+                  Edit Exact Score
+                </p>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-1 text-center">
+                    <label className="text-xs text-muted-foreground block mb-1 truncate">{match.homeTeam.name}</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={editHomeScore}
+                      onChange={e => setEditHomeScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                      className="h-10 text-lg font-bold text-center"
+                      data-testid={`edit-exact-home-${data.match_id}`}
+                    />
+                  </div>
+                  <span className="text-xl font-bold text-muted-foreground pt-5">-</span>
+                  <div className="flex-1 text-center">
+                    <label className="text-xs text-muted-foreground block mb-1 truncate">{match.awayTeam.name}</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={editAwayScore}
+                      onChange={e => setEditAwayScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                      className="h-10 text-lg font-bold text-center"
+                      data-testid={`edit-exact-away-${data.match_id}`}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleSubmitExactScoreEdit}
+                    disabled={isSavingExactScore}
+                    data-testid={`submit-exact-edit-${data.match_id}`}
+                    className="bg-amber-500 hover:bg-amber-500/90 text-white gap-1.5 h-9 text-sm"
+                  >
+                    {isSavingExactScore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    {(editHomeScore !== exactScore?.home_score || editAwayScore !== exactScore?.away_score) ? 'Update Score' : 'No Change'}
+                  </Button>
+                  <Button
+                    onClick={handleCancelEdit}
+                    variant="outline"
+                    data-testid={`cancel-exact-edit-${data.match_id}`}
+                    className="text-muted-foreground h-9 text-sm"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex items-center justify-between px-5 py-2.5 border-t border-border/30 bg-muted/20">
@@ -479,6 +621,11 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove 
                   data-testid={`points-badge-${data.match_id}`}
                 >
                   {data.points_value > 0 ? '+' : ''}{data.points_value} pts
+                </span>
+              )}
+              {exactScore?.exact_score_points_awarded && exactScore?.exact_score_points_value > 0 && (
+                <span className="font-semibold text-amber-400" data-testid={`exact-score-bonus-${data.match_id}`}>
+                  +{exactScore.exact_score_points_value} bonus
                 </span>
               )}
               <span>Total votes: <span className="text-foreground font-medium">{match.totalVotes}</span></span>
@@ -657,6 +804,63 @@ export const MyPredictionsPage = () => {
       throw err;
     }
   }, []);
+
+  // Edit exact score handler
+  const handleEditExactScore = useCallback(async (matchId, homeScore, awayScore) => {
+    try {
+      await updateExactScorePrediction(matchId, homeScore, awayScore);
+      setPredictions(prev => prev.map(p =>
+        p.match_id === matchId
+          ? {
+              ...p,
+              exact_score: p.exact_score
+                ? { ...p.exact_score, home_score: homeScore, away_score: awayScore }
+                : { home_score: homeScore, away_score: awayScore }
+            }
+          : p
+      ));
+      toast.success('Exact score updated!', {
+        description: `New prediction: ${homeScore} - ${awayScore}`,
+        duration: 2000,
+      });
+    } catch (err) {
+      toast.error('Failed to update exact score', { description: err.message, duration: 3000 });
+      throw err;
+    }
+  }, []);
+
+  // Remove exact score handler
+  const handleRemoveExactScore = useCallback(async (matchId) => {
+    try {
+      await deleteExactScorePrediction(matchId);
+      // If this prediction also has a normal prediction, just remove exact_score data
+      setPredictions(prev => {
+        const pred = prev.find(p => p.match_id === matchId);
+        if (pred && pred.prediction) {
+          // Has a normal prediction too - just remove exact score data
+          return prev.map(p =>
+            p.match_id === matchId
+              ? { ...p, exact_score: null, prediction_type: 'winner' }
+              : p
+          );
+        } else {
+          // Exact score only - remove entirely
+          return prev.filter(p => p.match_id !== matchId);
+        }
+      });
+      setTotal(prev => {
+        const pred = predictions.find(p => p.match_id === matchId);
+        return (pred && !pred.prediction) ? prev - 1 : prev;
+      });
+      toast.success('Exact score prediction removed', {
+        description: 'Your exact score prediction has been deleted.',
+        duration: 2000,
+      });
+    } catch (err) {
+      toast.error('Failed to remove exact score', { description: err.message, duration: 3000 });
+      throw err;
+    }
+  }, [predictions]);
 
   // Filter + search predictions
   const filtered = useMemo(() => {
@@ -895,6 +1099,8 @@ export const MyPredictionsPage = () => {
                 viewMode={viewMode}
                 onEdit={handleEditPrediction}
                 onRemove={handleRemovePrediction}
+                onEditExactScore={handleEditExactScore}
+                onRemoveExactScore={handleRemoveExactScore}
               />
             ))}
           </div>

@@ -586,10 +586,13 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                   <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
                     <div className="flex items-center gap-2 text-amber-500 font-medium">
                       <Check className="w-4 h-4" />
-                      Prediction Locked
+                      Exact Score Saved
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">
                       Your prediction: {match.homeTeam.name} <strong>{existingPrediction.home_score}</strong> - <strong>{existingPrediction.away_score}</strong> {match.awayTeam.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      You can edit this prediction from the <strong>My Predictions</strong> page before the match starts.
                     </p>
                   </div>
                 ) : (
@@ -627,10 +630,10 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                       className="w-full gap-2"
                     >
                       <Target className="w-4 h-4" />
-                      {isSubmitting ? 'Submitting...' : 'Lock Exact Score Prediction'}
+                      {isSubmitting ? 'Submitting...' : 'Guess Exact Score'}
                     </Button>
                     <p className="text-[10px] text-muted-foreground text-center">
-                      Once submitted, exact score predictions cannot be changed.
+                      You can edit your exact score prediction before the match starts.
                     </p>
                   </>
                 )}

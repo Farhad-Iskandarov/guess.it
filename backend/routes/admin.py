@@ -1075,6 +1075,135 @@ async def get_audit_log(
     return {"logs": logs, "total": total, "page": page}
 
 
+# ==================== Gift Points ====================
+
+@router.post("/gift-points")
+async def gift_points(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Admin gifts points to one or more users with a custom message and audit trail."""
+    admin = await get_admin_user(request, db)
+    body = await request.json()
+
+    user_ids = body.get("user_ids", [])
+    points = body.get("points", 0)
+    message = sanitize_input(body.get("message", ""))
+
+    if not user_ids or not isinstance(user_ids, list):
+        raise HTTPException(status_code=400, detail="At least one user_id is required")
+    if not isinstance(points, (int, float)) or points <= 0:
+        raise HTTPException(status_code=400, detail="Points must be a positive number")
+    if points > 100000:
+        raise HTTPException(status_code=400, detail="Maximum 100,000 points per gift")
+    if len(user_ids) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 users per batch")
+
+    points = int(points)
+    now = datetime.now(timezone.utc).isoformat()
+    gift_id = f"gift_{uuid.uuid4().hex[:12]}"
+    default_message = f"You have received {points} bonus points as a Gift"
+    notification_message = message if message else default_message
+
+    # Verify all users exist
+    existing_users = await db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "nickname": 1, "points": 1}
+    ).to_list(500)
+    existing_ids = {u["user_id"] for u in existing_users}
+    missing = [uid for uid in user_ids if uid not in existing_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Users not found: {', '.join(missing[:5])}")
+
+    # Award points to all users in bulk
+    await db.users.update_many(
+        {"user_id": {"$in": user_ids}},
+        {"$inc": {"points": points}}
+    )
+
+    # Store audit trail in points_gifts collection
+    gift_doc = {
+        "gift_id": gift_id,
+        "admin_id": admin["user_id"],
+        "admin_nickname": admin.get("nickname", admin["user_id"]),
+        "user_ids": user_ids,
+        "user_count": len(user_ids),
+        "points": points,
+        "message": notification_message,
+        "created_at": now,
+    }
+    await db.points_gifts.insert_one(gift_doc)
+
+    # Create notifications for each user
+    notifications = []
+    for uid in user_ids:
+        notifications.append({
+            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+            "user_id": uid,
+            "type": "points_gift",
+            "message": notification_message,
+            "data": {
+                "from_admin": True,
+                "gift_id": gift_id,
+                "points": points,
+            },
+            "read": False,
+            "created_at": now,
+        })
+    if notifications:
+        await db.notifications.insert_many(notifications)
+
+    # Send real-time WebSocket notifications
+    try:
+        from routes.messages import notification_manager
+        for notif in notifications:
+            n_copy = {k: v for k, v in notif.items() if k != "_id"}
+            await notification_manager.notify(notif["user_id"], {"type": "notification", "notification": n_copy})
+    except Exception as e:
+        logger.warning(f"WS gift notification error: {e}")
+
+    # Log admin action
+    user_names = [u.get("nickname") or u["user_id"] for u in existing_users[:5]]
+    names_str = ", ".join(user_names)
+    if len(user_ids) > 5:
+        names_str += f" (+{len(user_ids) - 5} more)"
+    await log_admin_action(
+        db, admin["user_id"], "gift_points",
+        f"{len(user_ids)} users",
+        f"Gifted {points} pts to {names_str}. Message: {notification_message[:100]}"
+    )
+
+    # Get updated user data
+    updated_users = await db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "nickname": 1, "points": 1, "level": 1}
+    ).to_list(500)
+
+    return {
+        "success": True,
+        "gift_id": gift_id,
+        "points": points,
+        "recipients": len(user_ids),
+        "message": notification_message,
+        "updated_users": updated_users,
+    }
+
+
+@router.get("/gift-points/log")
+async def get_gift_points_log(
+    request: Request,
+    page: int = 1,
+    limit: int = 20,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get audit log of all points gifts"""
+    admin = await get_admin_user(request, db)
+
+    skip = (max(1, page) - 1) * min(limit, 50)
+    gifts = await db.points_gifts.find({}, {"_id": 0}).sort("created_at", -1).skip(skip).limit(min(limit, 50)).to_list(50)
+    total = await db.points_gifts.count_documents({})
+
+    return {"gifts": gifts, "total": total, "page": page}
+
+
+
 # ==================== Carousel Banner Management ====================
 
 @router.get("/banners")
