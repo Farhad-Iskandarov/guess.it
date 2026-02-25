@@ -14,6 +14,7 @@ import {
   Search, Send, ChevronLeft, MessageSquare, Loader2, ArrowDown, Circle,
   Check, CheckCheck, Plus, X, Trophy, Users
 } from 'lucide-react';
+import { MatchCard } from '@/components/home/MatchCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -86,26 +87,132 @@ const MessageStatus = memo(({ delivered, read, isMine }) => {
 });
 MessageStatus.displayName = 'MessageStatus';
 
-/* ─────── Shared Match Card (Full Feature - Same as Main Page) ─────── */
-const SharedMatchCard = memo(({ matchData, isMine }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [selectedVote, setSelectedVote] = useState(null);
-  const [savedPrediction, setSavedPrediction] = useState(null);
-  const [exactScoreLocked, setExactScoreLocked] = useState(false);
-  const [homeScoreInput, setHomeScoreInput] = useState(0);
-  const [awayScoreInput, setAwayScoreInput] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showAdvance, setShowAdvance] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+/* ─────── Chat Match Card Wrapper (uses same MatchCard as Main Page) ─────── */
+const ChatMatchCardWrapper = memo(({ matchData }) => {
+  const { user } = useAuth();
+  const [userVote, setUserVote] = useState(null);
+  const [matchState, setMatchState] = useState(null);
+  const [exactScorePrediction, setExactScorePrediction] = useState(null);
 
-  if (!matchData) return null;
+  const matchId = matchData?.match_id || matchData?.id;
 
-  const matchId = matchData.match_id || matchData.id;
-  const isLocked = matchData.status === 'FINISHED' || matchData.status === 'LIVE' || matchData.status === 'IN_PLAY';
-  const homeName = matchData.homeTeam?.name || matchData.home_team || '';
-  const awayName = matchData.awayTeam?.name || matchData.away_team || '';
+  useEffect(() => {
+    if (!matchId) return;
+    let cancelled = false;
 
-  // Load existing predictions when card expands
+    const load = async () => {
+      try {
+        const matchRes = await fetch(`${API_URL}/api/football/match/${matchId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null);
+        if (cancelled) return;
+
+        const defaultVotes = { count: 0, percentage: 0 };
+        const base = {
+          id: matchId,
+          homeTeam: matchData.homeTeam || { name: matchData.home_team || '' },
+          awayTeam: matchData.awayTeam || { name: matchData.away_team || '' },
+          dateTime: matchData.dateTime || '',
+          competition: matchData.competition || '',
+          sport: 'Football',
+          status: matchData.status || 'SCHEDULED',
+          score: matchData.score || {},
+          votes: { home: { ...defaultVotes }, draw: { ...defaultVotes }, away: { ...defaultVotes } },
+          totalVotes: 0,
+          mostPicked: '-'
+        };
+
+        if (matchRes?.match) {
+          const m = matchRes.match;
+          base.homeTeam = m.homeTeam || base.homeTeam;
+          base.awayTeam = m.awayTeam || base.awayTeam;
+          base.dateTime = m.dateTime || base.dateTime;
+          base.competition = m.competition || base.competition;
+          base.status = m.status || base.status;
+          base.score = m.score || base.score;
+          base.votes = m.votes || base.votes;
+          base.totalVotes = m.totalVotes || 0;
+          base.mostPicked = m.mostPicked || '-';
+        }
+
+        setMatchState(base);
+
+        if (user) {
+          const [predRes, exactRes] = await Promise.all([
+            fetch(`${API_URL}/api/predictions/match/${matchId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null),
+          ]);
+          if (cancelled) return;
+          if (predRes?.prediction) setUserVote(predRes.prediction);
+          if (exactRes?.home_score !== undefined && exactRes?.home_score !== null) {
+            setExactScorePrediction({ home_score: exactRes.home_score, away_score: exactRes.away_score });
+          }
+        }
+      } catch (err) { console.error('ChatMatchCard load error:', err); }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [matchId, user, matchData]);
+
+  const handleVote = async (mId, voteType) => {
+    try {
+      const res = await fetch(`${API_URL}/api/predictions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ match_id: mId, prediction: voteType }),
+      });
+      if (res.ok) setUserVote(voteType);
+    } catch (err) { console.error('Vote failed:', err); }
+  };
+
+  const handleExactScoreSubmit = async (mId, homeScore, awayScore) => {
+    const res = await fetch(`${API_URL}/api/predictions/exact-score`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ match_id: mId, home_score: homeScore, away_score: awayScore }),
+    });
+    if (res.ok) setExactScorePrediction({ home_score: homeScore, away_score: awayScore });
+  };
+
+  if (!matchState) {
+    const homeName = matchData?.homeTeam?.name || matchData?.home_team || '';
+    const awayName = matchData?.awayTeam?.name || matchData?.away_team || '';
+    return (
+      <div className="p-3 rounded-xl bg-card border border-border/30 animate-pulse" data-testid="shared-match-card">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Trophy className="w-3 h-3 text-amber-400" />
+          <span>{matchData?.competition || 'Loading...'}</span>
+        </div>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            {matchData?.homeTeam?.crest && <img src={matchData.homeTeam.crest} alt="" className="w-5 h-5 object-contain" />}
+            <span className="text-sm font-medium">{homeName}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {matchData?.awayTeam?.crest && <img src={matchData.awayTeam.crest} alt="" className="w-5 h-5 object-contain" />}
+            <span className="text-sm font-medium">{awayName}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full" data-testid="shared-match-card" onClick={(e) => e.stopPropagation()}>
+      <MatchCard
+        match={matchState}
+        userVote={userVote}
+        onVote={handleVote}
+        onExactScoreSubmit={handleExactScoreSubmit}
+        exactScorePrediction={exactScorePrediction}
+        friendsOnMatch={[]}
+        isAuthenticated={!!user}
+      />
+    </div>
+  );
+});
+ChatMatchCardWrapper.displayName = 'ChatMatchCardWrapper';
+
+/* ─────── Conversation Item ─────── */
+const ConversationItem = memo(({ convo, isActive, onClick }) => {
+  const initials = (convo.nickname || 'U').charAt(0).toUpperCase();
   const loadExisting = async () => {
     if (loaded || !matchId) return;
     try {
@@ -197,7 +304,7 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
       ? 'border-amber-500/30 bg-amber-500/[0.06] backdrop-blur-xl shadow-[0_0_30px_rgba(245,158,11,0.1)]'
       : savedPrediction
         ? 'border-emerald-500/30 bg-emerald-500/[0.06] backdrop-blur-xl shadow-[0_0_30px_rgba(34,197,94,0.1)]'
-        : 'border-primary/30 bg-[#1a242d]/90 backdrop-blur-xl shadow-[0_0_30px_rgba(34,197,94,0.1)]'
+        : 'border-primary/20 bg-secondary/60 backdrop-blur-xl shadow-[0_0_20px_rgba(34,197,94,0.06)]'
     : exactScoreLocked
       ? 'border-amber-500/25 bg-amber-500/[0.04] backdrop-blur-sm hover:border-amber-500/40'
       : savedPrediction
@@ -260,7 +367,7 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
         className={`transition-all duration-400 ease-out overflow-hidden ${isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}
         style={{ transitionProperty: 'max-height, opacity' }}
       >
-        <div className="px-3 pb-3 space-y-2.5 border-t border-border/20 pt-3" onClick={(e) => e.stopPropagation()}>
+        <div className="px-3 pb-3.5 space-y-3.5 border-t border-border/20 pt-3.5" onClick={(e) => e.stopPropagation()}>
 
           {isLocked ? (
             <p className="text-[11px] text-muted-foreground text-center py-2">
@@ -273,14 +380,14 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                 <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-muted-foreground">
                   Winner Prediction
                 </p>
-                <div className="flex gap-1.5">
+                <div className="flex gap-2.5">
                   {['home', 'draw', 'away'].map((type) => (
                     <button
                       key={type}
                       onClick={() => !exactScoreLocked && setSelectedVote(type)}
                       disabled={exactScoreLocked}
                       data-testid={`chat-vote-btn-${type}`}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all duration-200 border ${
+                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 border ${
                         exactScoreLocked
                           ? 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
                           : selectedVote === type
@@ -313,12 +420,12 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
               </button>
 
               {/* ── Action Buttons Row: Advance + Remove ── */}
-              <div className="flex gap-1.5">
+              <div className="flex gap-2.5">
                 <button
                   onClick={() => setShowAdvance(!showAdvance)}
                   disabled={savedPrediction}
                   data-testid="chat-advance-btn"
-                  className={`flex-1 py-2 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
+                  className={`flex-1 py-2.5 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
                     savedPrediction
                       ? 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
                       : showAdvance
@@ -332,7 +439,7 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                   onClick={handleRemove}
                   disabled={isSubmitting || !canRemove}
                   data-testid="chat-remove-btn"
-                  className={`flex-1 py-2 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
+                  className={`flex-1 py-2.5 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
                     canRemove
                       ? 'bg-transparent border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50'
                       : 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'

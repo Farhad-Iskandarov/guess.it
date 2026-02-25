@@ -70,7 +70,7 @@ const MatchSkeletonGrid = () => (
 );
 
 export const HomePage = () => {
-  const [activeTab, setActiveTab] = useState('popular');
+  const [activeTab, setActiveTab] = useState('top-matches');
   const [activeLeague, setActiveLeague] = useState('all');
   // Initialize from cache to prevent loading flash on navigation
   const [matches, setMatches] = useState(() => {

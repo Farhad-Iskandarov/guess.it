@@ -123,6 +123,20 @@ async def _get_active_config(db=None) -> dict:
     }
 
 
+def _normalize_base_url(base_url: str) -> str:
+    """Normalize base_url: ensure protocol and correct API path."""
+    if not base_url:
+        return base_url
+    url = base_url.strip().rstrip("/")
+    # Add https:// if no protocol
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+    # football-data.org: always resolve to the correct v4 API endpoint
+    if "football-data.org" in url.lower():
+        url = "https://api.football-data.org/v4"
+    return url
+
+
 def _detect_provider(base_url: str) -> str:
     """Detect which provider based on base_url."""
     if not base_url:
@@ -230,7 +244,7 @@ def _enrich_with_votes(match: dict, vote_counts: dict) -> dict:
 
 async def _fdo_fetch_matches(config: dict, date_from: str, date_to: str, competition: str = None) -> list[dict]:
     """Fetch matches from football-data.org v4."""
-    base_url = config.get("base_url", "https://api.football-data.org/v4").rstrip("/")
+    base_url = _normalize_base_url(config.get("base_url", "https://api.football-data.org/v4"))
     api_key = config.get("api_key", "")
     headers = {"X-Auth-Token": api_key}
 
@@ -269,7 +283,7 @@ async def _fdo_fetch_matches(config: dict, date_from: str, date_to: str, competi
 
 async def _fdo_fetch_live(config: dict) -> list[dict]:
     """Fetch live matches from football-data.org (filter IN_PLAY/PAUSED from today)."""
-    base_url = config.get("base_url", "https://api.football-data.org/v4").rstrip("/")
+    base_url = _normalize_base_url(config.get("base_url", "https://api.football-data.org/v4"))
     api_key = config.get("api_key", "")
     headers = {"X-Auth-Token": api_key}
 
@@ -675,12 +689,16 @@ async def validate_api_key(api_key: str, base_url: str = "") -> dict:
     """Validate an API key against the correct provider."""
     provider = _detect_provider(base_url)
 
+    # Normalize URL before validation
+    base_url = _normalize_base_url(base_url)
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if provider == PROVIDER_FDO:
                 # football-data.org: test with /competitions
+                fdo_url = base_url if base_url else "https://api.football-data.org/v4"
                 resp = await client.get(
-                    f"{base_url.rstrip('/')}/competitions" if base_url else "https://api.football-data.org/v4/competitions",
+                    f"{fdo_url}/competitions",
                     headers={"X-Auth-Token": api_key},
                 )
                 if resp.status_code == 403:
@@ -745,7 +763,7 @@ async def get_match_by_id(db, match_id: int) -> Optional[dict]:
 
     match = None
     if provider == PROVIDER_FDO:
-        base_url = config.get("base_url", "https://api.football-data.org/v4").rstrip("/")
+        base_url = _normalize_base_url(config.get("base_url", "https://api.football-data.org/v4"))
         api_key = config.get("api_key", "")
         data = await _http_get(f"{base_url}/matches/{match_id}", {"X-Auth-Token": api_key})
         if data and "homeTeam" in data:

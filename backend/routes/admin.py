@@ -660,6 +660,12 @@ async def add_api(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     if not name or not base_url:
         raise HTTPException(status_code=400, detail="Name and base URL are required")
 
+    # Normalize base_url: add protocol if missing, fix football-data.org to correct API endpoint
+    if base_url and not base_url.startswith("http://") and not base_url.startswith("https://"):
+        base_url = "https://" + base_url
+    if "football-data.org" in base_url.lower():
+        base_url = "https://api.football-data.org/v4"
+
     api_id = f"api_{uuid.uuid4().hex[:12]}"
     doc = {
         "api_id": api_id,

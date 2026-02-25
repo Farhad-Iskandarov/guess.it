@@ -492,7 +492,16 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
           match_id: match.id,
           home_team: match.homeTeam.name,
           away_team: match.awayTeam.name,
-          match_date: match.dateTime || match.utcDate
+          match_date: match.dateTime || match.utcDate,
+          match_card: {
+            match_id: match.id,
+            homeTeam: { name: match.homeTeam?.name, crest: match.homeTeam?.crest || match.homeTeam?.logo },
+            awayTeam: { name: match.awayTeam?.name, crest: match.awayTeam?.crest || match.awayTeam?.logo },
+            competition: match.competition || '',
+            dateTime: match.dateTime || '',
+            status: match.status || 'NOT_STARTED',
+            score: match.score || {}
+          }
         })
       });
       

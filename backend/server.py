@@ -356,10 +356,14 @@ async def seed_default_api_key(db):
         count = await db.admin_api_configs.count_documents({})
         
         if count == 0 and api_key:
+            base_url = os.environ.get("FOOTBALL_API_BASE_URL", "https://v3.football.api-sports.io")
+            # Normalize football-data.org URLs
+            if "football-data.org" in base_url.lower():
+                base_url = "https://api.football-data.org/v4"
             doc = {
                 "api_id": f"api_{uuid.uuid4().hex[:12]}",
                 "name": "Default Football API",
-                "base_url": "https://v3.football.api-sports.io",
+                "base_url": base_url,
                 "api_key": api_key,
                 "enabled": True,
                 "is_active": True,

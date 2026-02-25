@@ -694,6 +694,7 @@ class MatchInvitationModel(BaseModel):
     home_team: str = ""
     away_team: str = ""
     match_date: str = ""
+    match_card: dict = None
 
 
 @router.post("/invite/match")
@@ -775,15 +776,18 @@ async def invite_friend_to_match(
     try:
         from routes.messages import send_system_message
         chat_message = f"I invited you to predict on {data.home_team} vs {data.away_team}! Make your guess!"
-        match_card_data = {
-            "match_id": data.match_id,
-            "homeTeam": {"name": data.home_team},
-            "awayTeam": {"name": data.away_team},
-            "competition": "",
-            "dateTime": data.match_date,
-            "status": "SCHEDULED",
-            "score": {}
-        }
+        if data.match_card:
+            match_card_data = data.match_card
+        else:
+            match_card_data = {
+                "match_id": data.match_id,
+                "homeTeam": {"name": data.home_team},
+                "awayTeam": {"name": data.away_team},
+                "competition": "",
+                "dateTime": data.match_date,
+                "status": "SCHEDULED",
+                "score": {}
+            }
         await send_system_message(
             db,
             sender_id=user["user_id"],
