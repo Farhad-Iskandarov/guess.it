@@ -1,7 +1,9 @@
 """
-Football-Data.org API Service
-Handles fetching, caching, and transforming match data.
-Free tier: 10 requests/min.
+Multi-provider Football API Service
+Supports:
+  - football-data.org (v4)
+  - API-Football / api-sports.io (v3)
+Auto-detects provider from the active config's base_url.
 """
 import httpx
 import os
@@ -12,47 +14,57 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Football-Data.org API config
-BASE_URL = "https://api.football-data.org/v4"
+# ==================== Provider Constants ====================
 
-# Free tier competitions
-FREE_COMPETITIONS = {
-    "PL": {"id": 2021, "name": "Premier League", "code": "PL"},
-    "BL1": {"id": 2002, "name": "Bundesliga", "code": "BL1"},
-    "SA": {"id": 2019, "name": "Serie A", "code": "SA"},
-    "PD": {"id": 2014, "name": "La Liga", "code": "PD"},
-    "FL1": {"id": 2015, "name": "Ligue 1", "code": "FL1"},
-    "CL": {"id": 2001, "name": "Champions League", "code": "CL"},
-    "EC": {"id": 2018, "name": "European Championship", "code": "EC"},
-    "WC": {"id": 2000, "name": "FIFA World Cup", "code": "WC"},
+PROVIDER_FDO = "football-data"  # football-data.org
+PROVIDER_AFS = "api-sports"     # api-sports.io
+
+# Competition codes used by frontend (shared across providers)
+COMPETITION_CODES = ["PL", "BL1", "SA", "PD", "FL1", "CL", "EC", "WC"]
+
+COMPETITION_NAMES = {
+    "PL": "Premier League", "BL1": "Bundesliga", "SA": "Serie A",
+    "PD": "La Liga", "FL1": "Ligue 1", "CL": "Champions League",
+    "EC": "European Championship", "WC": "FIFA World Cup",
 }
 
-# Status mapping from Football-Data.org to our app
-STATUS_MAP = {
-    "SCHEDULED": "NOT_STARTED",
-    "TIMED": "NOT_STARTED",
-    "IN_PLAY": "LIVE",
-    "PAUSED": "LIVE",  # Half-time counts as live
-    "FINISHED": "FINISHED",
-    "SUSPENDED": "LIVE",
-    "POSTPONED": "NOT_STARTED",
-    "CANCELLED": "FINISHED",
-    "AWARDED": "FINISHED",
+# API-Football league IDs (for api-sports.io provider)
+AFS_LEAGUE_IDS = {
+    "PL": 39, "BL1": 78, "SA": 135, "PD": 140,
+    "FL1": 61, "CL": 2, "EC": 4, "WC": 1,
+}
+AFS_ID_TO_CODE = {v: k for k, v in AFS_LEAGUE_IDS.items()}
+
+# football-data.org status → app status
+FDO_STATUS_MAP = {
+    "SCHEDULED": "NOT_STARTED", "TIMED": "NOT_STARTED",
+    "IN_PLAY": "LIVE", "PAUSED": "LIVE", "LIVE": "LIVE",
+    "EXTRA_TIME": "LIVE", "PENALTY_SHOOTOUT": "LIVE", "SUSPENDED": "LIVE",
+    "FINISHED": "FINISHED", "AWARDED": "FINISHED",
+    "POSTPONED": "NOT_STARTED", "CANCELLED": "FINISHED",
 }
 
-# Prediction lock window (minutes before match start)
+# API-Football status → app status
+AFS_STATUS_MAP = {
+    "TBD": "NOT_STARTED", "NS": "NOT_STARTED", "PST": "NOT_STARTED",
+    "1H": "LIVE", "HT": "LIVE", "2H": "LIVE", "ET": "LIVE",
+    "BT": "LIVE", "P": "LIVE", "SUSP": "LIVE", "INT": "LIVE", "LIVE": "LIVE",
+    "FT": "FINISHED", "AET": "FINISHED", "PEN": "FINISHED",
+    "CANC": "FINISHED", "ABD": "FINISHED", "AWD": "FINISHED", "WO": "FINISHED",
+}
+
 PREDICTION_LOCK_MINUTES = 10
 
 
-class MatchCache:
-    """Simple in-memory cache with TTL"""
+# ==================== Cache & Rate Limiting ====================
 
+class MatchCache:
     def __init__(self):
         self._cache: dict = {}
         self._timestamps: dict[str, datetime] = {}
         self._lock = asyncio.Lock()
 
-    async def get(self, key: str, max_age_seconds: int = 60) -> Optional[dict]:
+    async def get(self, key: str, max_age_seconds: int = 60):
         async with self._lock:
             if key in self._cache and key in self._timestamps:
                 age = (datetime.now(timezone.utc) - self._timestamps[key]).total_seconds()
@@ -60,7 +72,7 @@ class MatchCache:
                     return self._cache[key]
             return None
 
-    async def set(self, key: str, value: dict):
+    async def set(self, key: str, value):
         async with self._lock:
             self._cache[key] = value
             self._timestamps[key] = datetime.now(timezone.utc)
@@ -71,92 +83,99 @@ class MatchCache:
             self._timestamps.clear()
 
 
-# Global cache instance
 cache = MatchCache()
-
-# Rate limiter: track request timestamps
 _request_times: list[datetime] = []
 _rate_lock = asyncio.Lock()
+_suspended_until: Optional[datetime] = None
 
 
 async def _check_rate_limit():
-    """Ensure we don't exceed 10 requests per minute"""
     async with _rate_lock:
         now = datetime.now(timezone.utc)
-        # Remove entries older than 60 seconds
         _request_times[:] = [t for t in _request_times if (now - t).total_seconds() < 60]
-        if len(_request_times) >= 9:  # Leave 1 buffer
+        if len(_request_times) >= 9:
             oldest = _request_times[0]
             wait_time = 60 - (now - oldest).total_seconds()
             if wait_time > 0:
-                logger.warning(f"Rate limit approaching, waiting {wait_time:.1f}s")
                 await asyncio.sleep(wait_time)
         _request_times.append(now)
 
 
-async def _get_headers(db=None) -> dict:
-    """Get headers with API key from database or .env fallback"""
-    api_key = None
-    
-    # Try to get active API key from database first
+# ==================== Config Detection ====================
+
+async def _get_active_config(db=None) -> dict:
+    """Get the active API config from DB, or build one from env."""
     if db is not None:
         try:
-            active_api = await db.admin_api_configs.find_one(
-                {"is_active": True, "enabled": True},
-                {"_id": 0, "api_key": 1}
+            cfg = await db.admin_api_configs.find_one(
+                {"is_active": True, "enabled": True}, {"_id": 0}
             )
-            if active_api and active_api.get("api_key"):
-                api_key = active_api["api_key"]
-                logger.info("Using active API key from database")
+            if cfg and cfg.get("api_key"):
+                return cfg
         except Exception as e:
-            logger.warning(f"Failed to fetch API key from database: {e}")
-    
-    # Fallback to environment variable
-    if not api_key:
-        api_key = os.environ.get("FOOTBALL_API_KEY", "")
-        if api_key:
-            logger.info("Using API key from environment variable")
-        else:
-            logger.warning("No API key found in database or environment")
-    
-    return {"X-Auth-Token": api_key}
+            logger.warning(f"Failed to fetch API config from DB: {e}")
+
+    # Fallback to env
+    return {
+        "api_key": os.environ.get("FOOTBALL_API_KEY", ""),
+        "base_url": os.environ.get("FOOTBALL_API_BASE_URL", "https://v3.football.api-sports.io"),
+        "name": "Environment Default",
+    }
 
 
-async def _api_get(endpoint: str, params: dict = None, db=None) -> dict:
-    """Make a GET request to Football-Data.org with rate limiting"""
+def _detect_provider(base_url: str) -> str:
+    """Detect which provider based on base_url."""
+    if not base_url:
+        return PROVIDER_AFS
+    url_lower = base_url.lower()
+    if "football-data.org" in url_lower:
+        return PROVIDER_FDO
+    return PROVIDER_AFS
+
+
+# ==================== Generic HTTP ====================
+
+async def _http_get(url: str, headers: dict, params: dict = None) -> dict:
+    """Make a GET request with rate limiting and error handling."""
+    global _suspended_until
+
+    if _suspended_until and datetime.now(timezone.utc) < _suspended_until:
+        return {}
+
     await _check_rate_limit()
 
-    url = f"{BASE_URL}{endpoint}"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            headers = await _get_headers(db)
-            response = await client.get(url, headers=headers, params=params)
-
-            if response.status_code == 429:
-                logger.warning("Rate limited by Football-Data.org, waiting 60s")
+            resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code == 429:
                 await asyncio.sleep(60)
-                headers = await _get_headers(db)
-                response = await client.get(url, headers=headers, params=params)
-
-            if response.status_code != 200:
-                logger.error(f"Football API error: {response.status_code} - {response.text[:200]}")
+                resp = await client.get(url, headers=headers, params=params)
+            if resp.status_code != 200:
+                logger.error(f"API error {resp.status_code}: {resp.text[:300]}")
                 return {}
-
-            return response.json()
+            data = resp.json()
+            # Check for API-Football style errors
+            errors = data.get("errors", {})
+            if errors and isinstance(errors, dict) and len(errors) > 0:
+                if "suspended" in str(errors).lower():
+                    _suspended_until = datetime.now(timezone.utc) + timedelta(minutes=2)
+                logger.warning(f"API errors: {errors}")
+                return {}
+            _suspended_until = None
+            return data
     except httpx.RequestError as e:
-        logger.error(f"Football API request error: {e}")
+        logger.error(f"HTTP request error: {e}")
         return {}
 
 
+# ==================== Shared Helpers ====================
+
 def _format_datetime(utc_date_str: str) -> str:
-    """Format UTC date string to readable format"""
     try:
         dt = datetime.fromisoformat(utc_date_str.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         diff = dt.date() - now.date()
-
         time_str = dt.strftime("%H:%M")
-
         if diff.days == 0:
             return f"Today, {time_str}"
         elif diff.days == 1:
@@ -171,164 +190,365 @@ def _format_datetime(utc_date_str: str) -> str:
         return utc_date_str
 
 
-def _get_match_status_detail(api_status: str) -> str:
-    """Get more specific status text for display"""
-    if api_status == "PAUSED":
-        return "HT"  # Half-time
-    if api_status == "IN_PLAY":
-        return "LIVE"
-    if api_status == "FINISHED":
-        return "FT"
-    if api_status in ("SCHEDULED", "TIMED"):
-        return "NS"  # Not started
-    return api_status
-
-
-def _estimate_match_minute(utc_date_str: str, api_status: str) -> Optional[str]:
-    """
-    Estimate current match minute from kick-off time.
-    Returns string like "67'" or "45+2'" or "HT" or None.
-    """
-    if api_status not in ("IN_PLAY", "PAUSED"):
-        return None
-
-    if api_status == "PAUSED":
-        return "HT"
-
-    try:
-        kick_off = datetime.fromisoformat(utc_date_str.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        elapsed = (now - kick_off).total_seconds() / 60
-
-        if elapsed < 0:
-            return "0'"
-
-        # Cap at reasonable match duration (120 min = extra time max)
-        if elapsed > 150:
-            return "90+'"
-
-        if elapsed <= 45:
-            return f"{int(elapsed)}'"
-        elif elapsed <= 48:
-            extra = int(elapsed - 45)
-            return f"45+{extra}'"
-        elif elapsed <= 63:
-            # Half-time break (~15 min)
-            return "HT"
-        else:
-            # Second half: subtract ~18 min for half-time
-            second_half_min = int(elapsed - 18)
-            if second_half_min > 90:
-                extra = min(second_half_min - 90, 15)
-                return f"90+{extra}'"
-            return f"{second_half_min}'"
-    except Exception:
-        return None
-
-
-def _is_prediction_locked(utc_date_str: str, api_status: str) -> bool:
-    """Check if predictions should be locked for this match"""
-    # Always locked for live/finished
-    if api_status in ("IN_PLAY", "PAUSED", "FINISHED", "SUSPENDED", "AWARDED"):
+def _is_prediction_locked(utc_date_str: str, app_status: str) -> bool:
+    if app_status in ("LIVE", "FINISHED"):
         return True
-
     try:
         match_time = datetime.fromisoformat(utc_date_str.replace("Z", "+00:00"))
-        lock_time = match_time - timedelta(minutes=PREDICTION_LOCK_MINUTES)
-        return datetime.now(timezone.utc) >= lock_time
+        return datetime.now(timezone.utc) >= match_time - timedelta(minutes=PREDICTION_LOCK_MINUTES)
     except Exception:
         return False
 
 
-def _transform_match(match_data: dict, vote_counts: dict = None) -> dict:
-    """Transform Football-Data.org match to our app format"""
-    match_id = match_data.get("id", 0)
-    api_status = match_data.get("status", "TIMED")
-    utc_date = match_data.get("utcDate", "")
-    score = match_data.get("score", {})
-    full_time = score.get("fullTime", {})
-    half_time = score.get("halfTime", {})
-    home_team = match_data.get("homeTeam", {})
-    away_team = match_data.get("awayTeam", {})
-    competition = match_data.get("competition", {})
+def _enrich_with_votes(match: dict, vote_counts: dict) -> dict:
+    """Add vote data to a transformed match dict."""
+    mid = match["id"]
+    votes = vote_counts.get(mid, {})
+    hv = votes.get("home", 0)
+    dv = votes.get("draw", 0)
+    av = votes.get("away", 0)
+    total = hv + dv + av
+    hp = round((hv / total * 100) if total > 0 else 0)
+    dp = round((dv / total * 100) if total > 0 else 0)
+    ap = 100 - hp - dp if total > 0 else 0
+    most = "Home"
+    if dv >= hv and dv >= av:
+        most = "Draw"
+    elif av >= hv:
+        most = "Away"
+    match["votes"] = {
+        "home": {"count": hv, "percentage": hp},
+        "draw": {"count": dv, "percentage": dp},
+        "away": {"count": av, "percentage": ap},
+    }
+    match["totalVotes"] = total
+    match["mostPicked"] = most
+    return match
 
-    # Get vote counts from our DB or default
-    votes = vote_counts.get(match_id, {}) if vote_counts else {}
-    home_votes = votes.get("home", 0)
-    draw_votes = votes.get("draw", 0)
-    away_votes = votes.get("away", 0)
-    total = home_votes + draw_votes + away_votes
 
-    home_pct = round((home_votes / total * 100) if total > 0 else 0)
-    draw_pct = round((draw_votes / total * 100) if total > 0 else 0)
-    away_pct = 100 - home_pct - draw_pct if total > 0 else 0
+# ==================== football-data.org Provider ====================
 
-    most_picked = "Home"
-    if draw_votes >= home_votes and draw_votes >= away_votes:
-        most_picked = "Draw"
-    elif away_votes >= home_votes:
-        most_picked = "Away"
+async def _fdo_fetch_matches(config: dict, date_from: str, date_to: str, competition: str = None) -> list[dict]:
+    """Fetch matches from football-data.org v4."""
+    base_url = config.get("base_url", "https://api.football-data.org/v4").rstrip("/")
+    api_key = config.get("api_key", "")
+    headers = {"X-Auth-Token": api_key}
 
-    # Determine scores
+    # football-data.org dateTo is EXCLUSIVE, so add 1 day to include the end date
+    try:
+        end_dt = datetime.strptime(date_to, "%Y-%m-%d")
+        date_to_api = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+    except ValueError:
+        date_to_api = date_to
+
+    params = {}
+    if date_from:
+        params["dateFrom"] = date_from
+    if date_to_api:
+        params["dateTo"] = date_to_api
+
+    # Use competitions filter for efficiency
+    if competition and competition in COMPETITION_CODES:
+        params["competitions"] = competition
+    else:
+        # Only use codes that football-data.org supports on free tier
+        params["competitions"] = ",".join(["PL", "BL1", "SA", "PD", "FL1", "CL"])
+
+    cache_key = f"fdo:{date_from}:{date_to}:{competition}"
+    cached = await cache.get(cache_key, 180)
+    if cached is not None:
+        return cached
+
+    data = await _http_get(f"{base_url}/matches", headers, params)
+    raw_matches = data.get("matches", [])
+
+    matches = [_fdo_transform(m) for m in raw_matches]
+    await cache.set(cache_key, matches)
+    return matches
+
+
+async def _fdo_fetch_live(config: dict) -> list[dict]:
+    """Fetch live matches from football-data.org (filter IN_PLAY/PAUSED from today)."""
+    base_url = config.get("base_url", "https://api.football-data.org/v4").rstrip("/")
+    api_key = config.get("api_key", "")
+    headers = {"X-Auth-Token": api_key}
+
+    cache_key = "fdo_live"
+    cached = await cache.get(cache_key, 25)
+    if cached is not None:
+        return cached
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    params = {
+        "dateFrom": today,
+        "dateTo": tomorrow,
+        "competitions": ",".join(["PL", "BL1", "SA", "PD", "FL1", "CL"]),
+    }
+
+    data = await _http_get(f"{base_url}/matches", headers, params)
+    raw = data.get("matches", [])
+
+    live = [_fdo_transform(m) for m in raw if m.get("status") in ("IN_PLAY", "PAUSED", "LIVE", "EXTRA_TIME", "PENALTY_SHOOTOUT")]
+    await cache.set(cache_key, live)
+    return live
+
+
+def _fdo_transform(m: dict) -> dict:
+    """Transform a football-data.org match to app format."""
+    match_id = m.get("id", 0)
+    status_raw = m.get("status", "SCHEDULED")
+    utc_date = m.get("utcDate", "")
+
+    home = m.get("homeTeam", {})
+    away = m.get("awayTeam", {})
+    comp = m.get("competition", {})
+
+    full_time = m.get("score", {}).get("fullTime", {}) or {}
+    half_time = m.get("score", {}).get("halfTime", {}) or {}
+
     home_score = full_time.get("home")
     away_score = full_time.get("away")
-    # For live matches, use fullTime score (it's updated during the match)
-    if home_score is None and api_status in ("IN_PLAY", "PAUSED"):
-        home_score = full_time.get("home", 0)
-        away_score = full_time.get("away", 0)
+
+    app_status = FDO_STATUS_MAP.get(status_raw, "NOT_STARTED")
+
+    # Status detail for display
+    detail_map = {
+        "SCHEDULED": "NS", "TIMED": "NS", "IN_PLAY": "LIVE", "PAUSED": "HT",
+        "LIVE": "LIVE", "EXTRA_TIME": "ET", "PENALTY_SHOOTOUT": "PEN",
+        "FINISHED": "FT", "SUSPENDED": "SUSP", "POSTPONED": "PST",
+        "CANCELLED": "CANC", "AWARDED": "FT",
+    }
+    status_detail = detail_map.get(status_raw, status_raw)
+
+    # Match minute
+    match_minute = None
+    if status_raw == "PAUSED":
+        match_minute = "HT"
+    elif status_raw in ("IN_PLAY", "LIVE"):
+        minute = m.get("minute")
+        if minute:
+            match_minute = f"{minute}'"
+
+    locked = _is_prediction_locked(utc_date, app_status)
+    lock_reason = None
+    if app_status == "LIVE":
+        lock_reason = "Match is live"
+    elif app_status == "FINISHED":
+        lock_reason = "Match has ended"
+    elif locked:
+        lock_reason = "Prediction closed"
+
+    def short_name(name):
+        return (name or "UNK")[:3].upper()
+
+    comp_code = comp.get("code", "")
 
     return {
         "id": match_id,
         "homeTeam": {
-            "id": home_team.get("id"),
-            "name": home_team.get("name", "Unknown"),
-            "shortName": home_team.get("tla", home_team.get("shortName", "UNK")),
+            "id": home.get("id"),
+            "name": home.get("name", "Unknown"),
+            "shortName": home.get("shortName") or short_name(home.get("name")),
             "flag": None,
-            "logo": None,
-            "crest": home_team.get("crest"),
+            "logo": home.get("crest"),
+            "crest": home.get("crest"),
         },
         "awayTeam": {
-            "id": away_team.get("id"),
-            "name": away_team.get("name", "Unknown"),
-            "shortName": away_team.get("tla", away_team.get("shortName", "UNK")),
+            "id": away.get("id"),
+            "name": away.get("name", "Unknown"),
+            "shortName": away.get("shortName") or short_name(away.get("name")),
             "flag": None,
-            "logo": None,
-            "crest": away_team.get("crest"),
+            "logo": away.get("crest"),
+            "crest": away.get("crest"),
         },
-        "competition": competition.get("name", "Unknown"),
-        "competitionCode": competition.get("code", ""),
-        "competitionEmblem": competition.get("emblem"),
+        "competition": comp.get("name", "Unknown"),
+        "competitionCode": comp_code,
+        "competitionEmblem": comp.get("emblem"),
         "sport": "Football",
         "dateTime": _format_datetime(utc_date),
         "utcDate": utc_date,
-        "status": STATUS_MAP.get(api_status, "NOT_STARTED"),
-        "statusDetail": _get_match_status_detail(api_status),
-        "matchMinute": _estimate_match_minute(utc_date, api_status),
+        "status": app_status,
+        "statusDetail": status_detail,
+        "matchMinute": match_minute,
         "score": {
             "home": home_score,
             "away": away_score,
-            "halfTime": {
-                "home": half_time.get("home"),
-                "away": half_time.get("away"),
-            },
+            "halfTime": {"home": half_time.get("home"), "away": half_time.get("away")},
         },
-        "predictionLocked": _is_prediction_locked(utc_date, api_status),
-        "lockReason": (
-            "Match is live" if api_status in ("IN_PLAY", "PAUSED", "SUSPENDED") else
-            "Match has ended" if api_status in ("FINISHED", "AWARDED") else
-            "Prediction closed" if _is_prediction_locked(utc_date, api_status) else
-            None
-        ),
-        "votes": {
-            "home": {"count": home_votes, "percentage": home_pct},
-            "draw": {"count": draw_votes, "percentage": draw_pct},
-            "away": {"count": away_votes, "percentage": away_pct},
-        },
-        "totalVotes": total,
-        "mostPicked": most_picked,
-        "featured": False,  # Will be set by the caller
+        "predictionLocked": locked,
+        "lockReason": lock_reason,
+        "votes": {"home": {"count": 0, "percentage": 0}, "draw": {"count": 0, "percentage": 0}, "away": {"count": 0, "percentage": 0}},
+        "totalVotes": 0,
+        "mostPicked": "Home",
+        "featured": False,
     }
 
+
+# ==================== API-Football (api-sports.io) Provider ====================
+
+async def _afs_fetch_matches(config: dict, date_from: str, date_to: str, competition: str = None) -> list[dict]:
+    """Fetch matches from API-Football v3 using per-day date queries."""
+    base_url = config.get("base_url", "https://v3.football.api-sports.io").rstrip("/")
+    api_key = config.get("api_key", "")
+    headers = {"x-apisports-key": api_key}
+
+    cache_key = f"afs:{date_from}:{date_to}:{competition}"
+    cached = await cache.get(cache_key, 180)
+    if cached is not None:
+        return cached
+
+    try:
+        start = datetime.strptime(date_from, "%Y-%m-%d")
+        end = datetime.strptime(date_to, "%Y-%m-%d")
+    except ValueError:
+        return []
+
+    # Clamp to free plan window (yesterday to tomorrow)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    start = max(start, today - timedelta(days=1))
+    end = min(end, today + timedelta(days=1))
+    if start > end:
+        return []
+
+    all_fixtures = []
+    current = start
+    while current <= end:
+        date_str = current.strftime("%Y-%m-%d")
+        raw_key = f"afs_raw:{date_str}"
+        raw = await cache.get(raw_key, 300)
+        if raw is None:
+            data = await _http_get(f"{base_url}/fixtures", headers, {"date": date_str})
+            raw = data.get("response", [])
+            await cache.set(raw_key, raw)
+        # Filter to tracked leagues
+        tracked = [f for f in raw if f.get("league", {}).get("id") in AFS_ID_TO_CODE]
+        all_fixtures.extend(tracked)
+        current += timedelta(days=1)
+
+    # Filter by competition
+    if competition and competition in AFS_LEAGUE_IDS:
+        target_id = AFS_LEAGUE_IDS[competition]
+        all_fixtures = [f for f in all_fixtures if f.get("league", {}).get("id") == target_id]
+
+    matches = [_afs_transform(f) for f in all_fixtures]
+    await cache.set(cache_key, matches)
+    return matches
+
+
+async def _afs_fetch_live(config: dict) -> list[dict]:
+    """Fetch live matches from API-Football."""
+    base_url = config.get("base_url", "https://v3.football.api-sports.io").rstrip("/")
+    api_key = config.get("api_key", "")
+    headers = {"x-apisports-key": api_key}
+
+    cache_key = "afs_live"
+    cached = await cache.get(cache_key, 25)
+    if cached is not None:
+        return cached
+
+    data = await _http_get(f"{base_url}/fixtures", headers, {"live": "all"})
+    raw = data.get("response", [])
+    tracked = [f for f in raw if f.get("league", {}).get("id") in AFS_ID_TO_CODE]
+
+    matches = [_afs_transform(f) for f in tracked]
+    await cache.set(cache_key, matches)
+    return matches
+
+
+def _afs_transform(f: dict) -> dict:
+    """Transform API-Football fixture to app format."""
+    fixture = f.get("fixture", {})
+    league = f.get("league", {})
+    teams = f.get("teams", {})
+    goals = f.get("goals", {})
+    score_data = f.get("score", {})
+
+    fixture_id = fixture.get("id", 0)
+    fx_status = fixture.get("status", {})
+    short = fx_status.get("short", "NS")
+    utc_date = fixture.get("date", "")
+    elapsed = fx_status.get("elapsed")
+
+    ht = teams.get("home", {})
+    at = teams.get("away", {})
+
+    league_id = league.get("id")
+    comp_code = AFS_ID_TO_CODE.get(league_id, "")
+
+    app_status = AFS_STATUS_MAP.get(short, "NOT_STARTED")
+
+    detail_map = {
+        "NS": "NS", "TBD": "NS", "1H": "LIVE", "HT": "HT", "2H": "LIVE",
+        "ET": "ET", "BT": "BT", "P": "PEN", "FT": "FT", "AET": "FT", "PEN": "FT",
+        "SUSP": "SUSP", "INT": "INT", "PST": "PST", "CANC": "CANC",
+        "ABD": "ABD", "AWD": "AWD", "WO": "WO", "LIVE": "LIVE",
+    }
+
+    match_minute = None
+    if short == "HT":
+        match_minute = "HT"
+    elif short in ("1H", "2H", "ET", "LIVE") and elapsed is not None:
+        match_minute = f"{elapsed}'"
+    elif short == "P":
+        match_minute = "PEN"
+
+    halftime = score_data.get("halftime", {}) or {}
+
+    locked = _is_prediction_locked(utc_date, app_status)
+    lock_reason = None
+    if app_status == "LIVE":
+        lock_reason = "Match is live"
+    elif app_status == "FINISHED":
+        lock_reason = "Match has ended"
+    elif locked:
+        lock_reason = "Prediction closed"
+
+    def short_name(name):
+        return (name or "UNK")[:3].upper()
+
+    return {
+        "id": fixture_id,
+        "homeTeam": {
+            "id": ht.get("id"),
+            "name": ht.get("name", "Unknown"),
+            "shortName": short_name(ht.get("name")),
+            "flag": None,
+            "logo": ht.get("logo"),
+            "crest": ht.get("logo"),
+        },
+        "awayTeam": {
+            "id": at.get("id"),
+            "name": at.get("name", "Unknown"),
+            "shortName": short_name(at.get("name")),
+            "flag": None,
+            "logo": at.get("logo"),
+            "crest": at.get("logo"),
+        },
+        "competition": league.get("name", COMPETITION_NAMES.get(comp_code, "Unknown")),
+        "competitionCode": comp_code,
+        "competitionEmblem": league.get("logo"),
+        "sport": "Football",
+        "dateTime": _format_datetime(utc_date),
+        "utcDate": utc_date,
+        "status": app_status,
+        "statusDetail": detail_map.get(short, short),
+        "matchMinute": match_minute,
+        "score": {
+            "home": goals.get("home"),
+            "away": goals.get("away"),
+            "halfTime": {"home": halftime.get("home"), "away": halftime.get("away")},
+        },
+        "predictionLocked": locked,
+        "lockReason": lock_reason,
+        "votes": {"home": {"count": 0, "percentage": 0}, "draw": {"count": 0, "percentage": 0}, "away": {"count": 0, "percentage": 0}},
+        "totalVotes": 0,
+        "mostPicked": "Home",
+        "featured": False,
+    }
+
+
+# ==================== Unified Public API ====================
 
 async def get_matches(
     db,
@@ -337,134 +557,207 @@ async def get_matches(
     competition: str = None,
     status: str = None,
 ) -> list[dict]:
-    """
-    Fetch matches from Football-Data.org with caching.
-    Returns transformed match data enriched with vote counts.
-    """
-    # Build cache key
-    cache_key = f"matches:{date_from}:{date_to}:{competition}:{status}"
+    """Fetch matches from the active provider, enriched with vote counts."""
+    config = await _get_active_config(db)
+    provider = _detect_provider(config.get("base_url", ""))
 
-    # Determine cache TTL based on request type
-    if status in ("LIVE", "IN_PLAY"):
-        cache_ttl = 30  # 30 seconds for live
-    else:
-        cache_ttl = 120  # 2 minutes for others
-
-    # Check cache
-    cached = await cache.get(cache_key, cache_ttl)
+    # Unified cache key
+    ck = f"unified:{provider}:{date_from}:{date_to}:{competition}:{status}"
+    cache_ttl = 30 if status in ("LIVE", "IN_PLAY") else 180
+    cached = await cache.get(ck, cache_ttl)
     if cached is not None:
         return cached
 
-    # Build API params
-    params = {}
-    if date_from:
-        params["dateFrom"] = date_from
-    if date_to:
-        params["dateTo"] = date_to
-    if status:
-        params["status"] = status
+    matches = []
 
-    # Fetch matches
-    if competition and competition in FREE_COMPETITIONS:
-        comp_code = competition
-        data = await _api_get(f"/competitions/{comp_code}/matches", params, db)
+    if status == "LIVE":
+        if provider == PROVIDER_FDO:
+            matches = await _fdo_fetch_live(config)
+        else:
+            matches = await _afs_fetch_live(config)
     else:
-        # Fetch from all competitions for today/date range
-        data = await _api_get("/matches", params, db)
+        if not date_from and not date_to:
+            today = datetime.now(timezone.utc)
+            date_from = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+            date_to = (today + timedelta(days=3)).strftime("%Y-%m-%d")
 
-    raw_matches = data.get("matches", [])
+        if provider == PROVIDER_FDO:
+            matches = await _fdo_fetch_matches(config, date_from, date_to, competition)
+        else:
+            matches = await _afs_fetch_matches(config, date_from, date_to, competition)
 
-    if not raw_matches:
-        # Return cached data even if expired rather than empty
-        expired = await cache.get(cache_key, 3600)
+    if not matches:
+        expired = await cache.get(ck, 3600)
         if expired:
             return expired
         return []
 
-    # Get vote counts from our predictions DB
-    match_ids = [m["id"] for m in raw_matches]
+    # Enrich with vote counts
+    match_ids = [m["id"] for m in matches]
     vote_counts = await _get_vote_counts(db, match_ids)
+    matches = [_enrich_with_votes(m, vote_counts) for m in matches]
 
-    # Transform matches
-    matches = [_transform_match(m, vote_counts) for m in raw_matches]
+    # Sort by date
+    matches.sort(key=lambda m: m.get("utcDate", ""))
 
-    # Mark top 2 by total votes as featured
-    sorted_by_votes = sorted(matches, key=lambda m: m["totalVotes"], reverse=True)
-    for i, m in enumerate(sorted_by_votes[:2]):
+    # Mark featured
+    by_votes = sorted(matches, key=lambda m: m["totalVotes"], reverse=True)
+    for m in by_votes[:2]:
         m["featured"] = True
-
-    # If no votes at all, mark first 2 as featured
     if all(m["totalVotes"] == 0 for m in matches) and len(matches) >= 2:
         matches[0]["featured"] = True
         if len(matches) > 1:
             matches[1]["featured"] = True
 
-    # Cache result
-    await cache.set(cache_key, matches)
-
+    await cache.set(ck, matches)
     return matches
 
 
 async def get_live_matches(db) -> list[dict]:
-    """Fetch currently live matches"""
     return await get_matches(db, status="LIVE")
 
 
 async def get_today_matches(db) -> list[dict]:
-    """Fetch today's matches across all free competitions"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return await get_matches(db, date_from=today, date_to=today)
 
 
 async def get_upcoming_matches(db, days: int = 7) -> list[dict]:
-    """Fetch upcoming matches for the next N days"""
     today = datetime.now(timezone.utc)
-    date_from = today.strftime("%Y-%m-%d")
-    date_to = (today + timedelta(days=days)).strftime("%Y-%m-%d")
-    return await get_matches(db, date_from=date_from, date_to=date_to)
-
-
-async def get_competition_matches(db, competition_code: str) -> list[dict]:
-    """Fetch matches for a specific competition"""
-    today = datetime.now(timezone.utc)
-    date_from = (today - timedelta(days=1)).strftime("%Y-%m-%d")
-    date_to = (today + timedelta(days=14)).strftime("%Y-%m-%d")
     return await get_matches(
-        db, date_from=date_from, date_to=date_to, competition=competition_code
+        db,
+        date_from=today.strftime("%Y-%m-%d"),
+        date_to=(today + timedelta(days=min(days, 3))).strftime("%Y-%m-%d"),
     )
 
 
-async def _get_vote_counts(db, match_ids: list[int]) -> dict:
-    """Get aggregated vote counts for matches from our predictions DB"""
+async def get_competition_matches(db, competition_code: str) -> list[dict]:
+    today = datetime.now(timezone.utc)
+    return await get_matches(
+        db,
+        date_from=(today - timedelta(days=3)).strftime("%Y-%m-%d"),
+        date_to=(today + timedelta(days=3)).strftime("%Y-%m-%d"),
+        competition=competition_code,
+    )
+
+
+async def _get_vote_counts(db, match_ids: list) -> dict:
     if not match_ids:
         return {}
-
     pipeline = [
         {"$match": {"match_id": {"$in": match_ids}}},
-        {
-            "$group": {
-                "_id": {"match_id": "$match_id", "prediction": "$prediction"},
-                "count": {"$sum": 1},
-            }
-        },
+        {"$group": {
+            "_id": {"match_id": "$match_id", "prediction": "$prediction"},
+            "count": {"$sum": 1},
+        }},
     ]
-
     results = await db.predictions.aggregate(pipeline).to_list(1000)
-
-    vote_counts = {}
+    counts = {}
     for r in results:
         mid = r["_id"]["match_id"]
         pred = r["_id"]["prediction"]
-        if mid not in vote_counts:
-            vote_counts[mid] = {"home": 0, "draw": 0, "away": 0}
-        vote_counts[mid][pred] = r["count"]
-
-    return vote_counts
+        if mid not in counts:
+            counts[mid] = {"home": 0, "draw": 0, "away": 0}
+        counts[mid][pred] = r["count"]
+    return counts
 
 
 def get_available_competitions() -> list[dict]:
-    """Return list of competitions available on free tier"""
     return [
-        {"code": v["code"], "name": v["name"], "id": v["id"]}
-        for v in FREE_COMPETITIONS.values()
+        {"code": c, "name": COMPETITION_NAMES.get(c, c), "id": AFS_LEAGUE_IDS.get(c, 0)}
+        for c in COMPETITION_CODES
     ]
+
+
+# ==================== Validation & Management ====================
+
+async def validate_api_key(api_key: str, base_url: str = "") -> dict:
+    """Validate an API key against the correct provider."""
+    provider = _detect_provider(base_url)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if provider == PROVIDER_FDO:
+                # football-data.org: test with /competitions
+                resp = await client.get(
+                    f"{base_url.rstrip('/')}/competitions" if base_url else "https://api.football-data.org/v4/competitions",
+                    headers={"X-Auth-Token": api_key},
+                )
+                if resp.status_code == 403:
+                    return {"valid": False, "error": "Invalid API key (403 Forbidden)"}
+                if resp.status_code == 429:
+                    return {"valid": False, "error": "Rate limited. Try again later."}
+                if resp.status_code != 200:
+                    return {"valid": False, "error": f"HTTP {resp.status_code}"}
+                data = resp.json()
+                comps = data.get("competitions", [])
+                return {
+                    "valid": True,
+                    "provider": "football-data.org",
+                    "competitions": len(comps),
+                    "subscription": {"plan": "free" if len(comps) <= 13 else "paid"},
+                    "requests": {},
+                }
+            else:
+                # API-Football: test with /status
+                resp = await client.get(
+                    "https://v3.football.api-sports.io/status",
+                    headers={"x-apisports-key": api_key},
+                )
+                if resp.status_code != 200:
+                    return {"valid": False, "error": f"HTTP {resp.status_code}"}
+                data = resp.json()
+                errors = data.get("errors", {})
+                if errors:
+                    return {"valid": False, "error": str(errors)}
+                response = data.get("response", {})
+                if isinstance(response, list) and response:
+                    response = response[0]
+                elif isinstance(response, list):
+                    response = {}
+                return {
+                    "valid": True,
+                    "provider": "api-sports.io",
+                    "subscription": response.get("subscription", {}) if isinstance(response, dict) else {},
+                    "requests": response.get("requests", {}) if isinstance(response, dict) else {},
+                }
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+
+async def clear_cache_and_reset():
+    """Clear all cached data and reset suspension flag."""
+    global _suspended_until
+    _suspended_until = None
+    await cache.clear()
+    logger.info("Football API cache cleared and suspension reset")
+
+
+async def get_match_by_id(db, match_id: int) -> Optional[dict]:
+    """Fetch a single match by ID from the active provider."""
+    cache_key = f"match_id:{match_id}"
+    cached = await cache.get(cache_key, 600)
+    if cached is not None:
+        return cached
+
+    config = await _get_active_config(db)
+    provider = _detect_provider(config.get("base_url", ""))
+
+    match = None
+    if provider == PROVIDER_FDO:
+        base_url = config.get("base_url", "https://api.football-data.org/v4").rstrip("/")
+        api_key = config.get("api_key", "")
+        data = await _http_get(f"{base_url}/matches/{match_id}", {"X-Auth-Token": api_key})
+        if data and "homeTeam" in data:
+            match = _fdo_transform(data)
+    else:
+        base_url = config.get("base_url", "https://v3.football.api-sports.io").rstrip("/")
+        api_key = config.get("api_key", "")
+        data = await _http_get(f"{base_url}/fixtures", {"x-apisports-key": api_key}, {"id": match_id})
+        fixtures = data.get("response", [])
+        if fixtures:
+            match = _afs_transform(fixtures[0])
+
+    if match:
+        await cache.set(cache_key, match)
+    return match

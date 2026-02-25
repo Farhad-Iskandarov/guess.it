@@ -1,751 +1,395 @@
 import requests
 import sys
-import json
 from datetime import datetime
 
-class GuessItAPITester:
-    def __init__(self, base_url="https://guess-it-copy-3.preview.emergentagent.com"):
-        self.base_url = base_url.rstrip('/')
+class FootballAPITester:
+    def __init__(self, base_url="https://guessit-duplicate.preview.emergentagent.com"):
+        self.base_url = base_url
         self.session = requests.Session()
+        self.session.headers.update({'Content-Type': 'application/json'})
         self.tests_run = 0
         self.tests_passed = 0
-        self.admin_session_token = None
+        self.session_cookies = None
+        self.failed_tests = []
 
-    def run_test(self, name, method, endpoint, expected_status=200, data=None, headers=None):
-        """Run a single API test"""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        test_headers = {'Content-Type': 'application/json'}
-        if headers:
-            test_headers.update(headers)
-
+    def run_test(self, name, method, endpoint, expected_status, data=None, cookies=None, validate_fn=None):
+        """Run a single API test with optional validation function"""
+        url = f"{self.base_url}{endpoint}"
+        
         self.tests_run += 1
         print(f"\n🔍 Testing {name}...")
-        print(f"   URL: {url}")
+        print(f"   URL: {method} {endpoint}")
         
         try:
+            session_params = {'timeout': 15}
+            if cookies:
+                session_params['cookies'] = cookies
+            if data:
+                session_params['json'] = data
+
             if method == 'GET':
-                response = self.session.get(url, headers=test_headers)
+                response = self.session.get(url, **session_params)
             elif method == 'POST':
-                response = self.session.post(url, json=data, headers=test_headers)
+                response = self.session.post(url, **session_params)
             elif method == 'PUT':
-                response = self.session.put(url, json=data, headers=test_headers)
+                response = self.session.put(url, **session_params)
             elif method == 'DELETE':
-                response = self.session.delete(url, headers=test_headers)
+                response = self.session.delete(url, **session_params)
 
             success = response.status_code == expected_status
+            
+            # Additional validation if provided
+            validation_passed = True
+            validation_msg = ""
+            if success and validate_fn:
+                try:
+                    validation_passed, validation_msg = validate_fn(response)
+                    success = success and validation_passed
+                except Exception as e:
+                    validation_passed = False
+                    validation_msg = f"Validation error: {str(e)}"
+                    success = False
+            
             if success:
                 self.tests_passed += 1
                 print(f"✅ Passed - Status: {response.status_code}")
+                if validation_msg:
+                    print(f"   Validation: {validation_msg}")
                 try:
                     response_data = response.json()
                     if isinstance(response_data, dict) and len(response_data) <= 5:
-                        print(f"   Response: {json.dumps(response_data, indent=2)}")
-                    elif isinstance(response_data, dict):
-                        # Show just keys for large responses
-                        print(f"   Response keys: {list(response_data.keys())}")
+                        print(f"   Response: {response_data}")
+                    elif isinstance(response_data, dict) and 'message' in response_data:
+                        print(f"   Message: {response_data['message']}")
+                    elif isinstance(response_data, dict) and 'total' in response_data:
+                        print(f"   Total items: {response_data['total']}")
                 except:
-                    print(f"   Response: {response.text[:100]}")
+                    pass
             else:
+                self.failed_tests.append(name)
                 print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
-                print(f"   Response: {response.text[:200]}")
+                if not validation_passed and validation_msg:
+                    print(f"   Validation failed: {validation_msg}")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Response text: {response.text[:200]}")
 
             return success, response
 
         except Exception as e:
+            self.failed_tests.append(name)
             print(f"❌ Failed - Error: {str(e)}")
             return False, None
 
-    def test_health_endpoint(self):
-        """Test /api/health endpoint"""
-        success, response = self.run_test(
-            "Health Check",
-            "GET", 
-            "/api/health",
-            200
-        )
-        if success and response:
-            try:
-                data = response.json()
-                if data.get("status") == "healthy":
-                    print("   ✅ Health status is 'healthy'")
-                    return True
-                else:
-                    print(f"   ❌ Expected status 'healthy', got '{data.get('status')}'")
-            except:
-                print("   ❌ Failed to parse health response")
-        return False
-
-    def test_root_api_endpoint(self):
-        """Test /api/ root endpoint"""
-        success, response = self.run_test(
-            "Root API Endpoint",
-            "GET",
-            "/api/",
-            200
-        )
-        if success and response:
-            try:
-                data = response.json()
-                if data.get("message") == "GuessIt API is running":
-                    print("   ✅ API root message correct")
-                    return True
-                else:
-                    print(f"   ❌ Expected 'GuessIt API is running', got '{data.get('message')}'")
-            except:
-                print("   ❌ Failed to parse API root response")
-        return False
-
-    def test_admin_login(self):
-        """Test admin login with provided credentials"""
-        admin_email = "farhad.isgandar@gmail.com"
-        admin_password = "Salam123?"
+    def test_admin_login(self, email, password):
+        """Test admin login and store session cookies"""
+        print("\n" + "="*50)
+        print("ADMIN LOGIN TEST")
+        print("="*50)
         
         success, response = self.run_test(
             "Admin Login",
             "POST",
-            "/api/auth/login", 
+            "/api/auth/login",
             200,
-            data={"email": admin_email, "password": admin_password}
+            data={"email": email, "password": password}
         )
         
         if success and response:
+            # Store session cookies for subsequent requests
+            self.session_cookies = response.cookies
             try:
-                data = response.json()
-                if data.get("user", {}).get("role") == "admin":
-                    print("   ✅ Admin role confirmed")
-                    # Store session token from cookies if available
-                    if 'Set-Cookie' in response.headers:
-                        cookies = response.headers['Set-Cookie']
-                        if 'session_token=' in cookies:
-                            token_start = cookies.find('session_token=') + len('session_token=')
-                            token_end = cookies.find(';', token_start)
-                            if token_end == -1:
-                                token_end = len(cookies)
-                            self.admin_session_token = cookies[token_start:token_end]
-                            print(f"   ✅ Session token captured")
-                    return True
-                else:
-                    print(f"   ❌ Expected admin role, got '{data.get('user', {}).get('role')}'")
-            except Exception as e:
-                print(f"   ❌ Failed to parse admin login response: {e}")
+                response_data = response.json()
+                user = response_data.get('user', {})
+                print(f"   Logged in as: {user.get('email')} (Role: {user.get('role', 'user')})")
+                if user.get('role') != 'admin':
+                    print(f"⚠️  WARNING: User role is '{user.get('role')}', expected 'admin'")
+                return True
+            except:
+                pass
         return False
 
-    def test_football_matches_endpoint(self):
-        """Test football matches are being fetched"""
-        success, response = self.run_test(
-            "Football Matches",
-            "GET",
-            "/api/football/matches",
-            200
-        )
+    def test_football_endpoints(self):
+        """Test football data endpoints"""
+        print("\n" + "="*50)
+        print("FOOTBALL DATA TESTS")
+        print("="*50)
         
-        if success and response:
-            try:
-                data = response.json()
-                matches = data.get("matches", [])
-                total = data.get("total", 0)
-                print(f"   ✅ Found {len(matches)} matches (total: {total})")
-                
-                if matches:
-                    # Check first match has required fields
-                    first_match = matches[0]
-                    required_fields = ["id", "homeTeam", "awayTeam", "status", "dateTime"]
-                    missing_fields = [field for field in required_fields if field not in first_match]
-                    if not missing_fields:
-                        print("   ✅ Match data structure looks correct")
-                        return True
-                    else:
-                        print(f"   ❌ Missing required fields: {missing_fields}")
-                else:
-                    print("   ⚠️  No matches found, but API is working")
-                    return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse matches response: {e}")
-        return False
-
-    def test_competitions_endpoint(self):
-        """Test available competitions endpoint"""
-        success, response = self.run_test(
-            "Football Competitions",
-            "GET",
+        # Validation functions
+        def validate_matches_response(response):
+            data = response.json()
+            if 'matches' not in data or 'total' not in data:
+                return False, "Missing 'matches' or 'total' in response"
+            if data['total'] <= 0:
+                return False, f"Expected total > 0, got {data['total']}"
+            return True, f"Found {data['total']} matches"
+        
+        def validate_competitions_response(response):
+            data = response.json()
+            if 'competitions' not in data:
+                return False, "Missing 'competitions' in response"
+            competitions = data['competitions']
+            if len(competitions) < 8:
+                return False, f"Expected at least 8 leagues, got {len(competitions)}"
+            return True, f"Found {len(competitions)} leagues"
+        
+        def validate_cl_matches(response):
+            data = response.json()
+            if data.get('total', 0) < 4:
+                return False, f"Expected total >= 4 CL matches, got {data.get('total', 0)}"
+            return True, f"Found {data['total']} CL matches"
+        
+        def validate_ended_matches(response):
+            data = response.json()
+            matches = data.get('matches', [])
+            for match in matches:
+                score = match.get('score', {})
+                if score.get('home') is None or score.get('away') is None:
+                    return False, "Ended matches should have scores"
+            return True, f"All {len(matches)} ended matches have scores"
+        
+        def validate_leaderboard(response):
+            data = response.json()
+            if 'users' not in data:
+                return False, "Missing 'users' in leaderboard response"
+            return True, f"Leaderboard has users key"
+        
+        # Test competitions (expect 8 leagues)
+        self.run_test(
+            "Football competitions /api/football/competitions returns 8 leagues",
+            "GET", 
             "/api/football/competitions",
-            200
+            200,
+            validate_fn=validate_competitions_response
         )
         
-        if success and response:
-            try:
-                data = response.json()
-                competitions = data.get("competitions", [])
-                print(f"   ✅ Found {len(competitions)} competitions")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse competitions response: {e}")
-        return False
-
-    def test_leaderboard_endpoint(self):
-        """Test leaderboard endpoint"""
-        success, response = self.run_test(
-            "Leaderboard",
-            "GET",
-            "/api/football/leaderboard",
-            200
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                users = data.get("users", [])
-                print(f"   ✅ Leaderboard returned {len(users)} users")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse leaderboard response: {e}")
-        return False
-
-    def test_matches_with_total_votes(self):
-        """Test matches endpoint returns totalVotes field"""
-        success, response = self.run_test(
-            "Football Matches with totalVotes",
+        # Test matches (expect total > 0)
+        self.run_test(
+            "Football matches /api/football/matches returns matches with total > 0",
             "GET",
             "/api/football/matches",
-            200
+            200,
+            validate_fn=validate_matches_response
         )
         
-        if success and response:
-            try:
-                data = response.json()
-                matches = data.get("matches", [])
-                if matches and "totalVotes" in matches[0]:
-                    print(f"   ✅ totalVotes field present in matches")
-                    return True
-                else:
-                    print(f"   ❌ totalVotes field missing from matches")
-            except Exception as e:
-                print(f"   ❌ Failed to parse matches response: {e}")
-        return False
-
-    def test_live_matches_endpoint(self):
-        """Test live matches endpoint"""
-        success, response = self.run_test(
-            "Live Matches",
+        # Test today's matches (expect CL matches with total >= 4)
+        self.run_test(
+            "Football matches today /api/football/matches/today returns CL matches with total >= 4",
+            "GET",
+            "/api/football/matches/today",
+            200,
+            validate_fn=validate_cl_matches
+        )
+        
+        # Test ended matches (should have scores)
+        self.run_test(
+            "Football ended matches /api/football/matches/ended returns matches with scores",
+            "GET",
+            "/api/football/matches/ended",
+            200,
+            validate_fn=validate_ended_matches
+        )
+        
+        # Test live matches (should return valid JSON)
+        self.run_test(
+            "Football live matches /api/football/matches/live returns valid JSON",
             "GET",
             "/api/football/matches/live",
             200
         )
         
-        if success and response:
-            try:
-                data = response.json()
-                matches = data.get("matches", [])
-                print(f"   ✅ Live matches returned {len(matches)} matches")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse live matches response: {e}")
-        return False
-
-    def test_ended_matches_endpoint(self):
-        """Test ended matches endpoint"""
-        success, response = self.run_test(
-            "Ended Matches", 
+        # Test leaderboard (returns users key)
+        self.run_test(
+            "Football leaderboard /api/football/leaderboard returns users key",
             "GET",
-            "/api/football/matches/ended",
-            200
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                matches = data.get("matches", [])
-                print(f"   ✅ Ended matches returned {len(matches)} matches")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse ended matches response: {e}")
-        return False
-
-    def test_upcoming_matches_endpoint(self):
-        """Test upcoming matches endpoint with days parameter"""
-        success, response = self.run_test(
-            "Upcoming Matches (3 days)",
-            "GET", 
-            "/api/football/matches/upcoming?days=3",
-            200
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                matches = data.get("matches", [])
-                print(f"   ✅ Upcoming matches returned {len(matches)} matches")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse upcoming matches response: {e}")
-        return False
-
-    def test_banners_endpoint(self):
-        """Test banners endpoint"""
-        success, response = self.run_test(
-            "Football Banners",
-            "GET",
-            "/api/football/banners", 
-            200
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                banners = data.get("banners", [])
-                print(f"   ✅ Banners returned {len(banners)} banners")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse banners response: {e}")
-        return False
-
-    def test_news_endpoint(self):
-        """Test news endpoint"""
-        success, response = self.run_test(
-            "News Articles",
-            "GET",
-            "/api/news",
-            200
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                articles = data.get("articles", [])
-                print(f"   ✅ News returned {len(articles)} articles")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse news response: {e}")
-        return False
-
-    def test_subscription_plans_endpoint(self):
-        """Test subscription plans endpoint"""
-        success, response = self.run_test(
-            "Subscription Plans",
-            "GET", 
-            "/api/subscriptions/plans",
-            200
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                plans = data.get("plans", [])
-                print(f"   ✅ Subscription plans returned {len(plans)} plans")
-                if len(plans) == 3:
-                    print("   ✅ Expected 3 subscription plans found")
-                    return True
-                else:
-                    print(f"   ⚠️  Expected 3 plans, got {len(plans)}")
-                    return True  # Still pass as API works
-            except Exception as e:
-                print(f"   ❌ Failed to parse subscription plans response: {e}")
-        return False
-
-    def test_auth_me_endpoint(self):
-        """Test /api/auth/me endpoint after admin login"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")
-            return False
-            
-        success, response = self.run_test(
-            "Auth Me (Admin User)",
-            "GET",
-            "/api/auth/me",
+            "/api/football/leaderboard",
             200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
+            validate_fn=validate_leaderboard
         )
         
-        if success and response:
-            try:
-                data = response.json()
-                if data.get("user", {}).get("role") == "admin":
-                    print("   ✅ Admin user confirmed via /auth/me")
-                    return True
-                else:
-                    print(f"   ❌ Expected admin role, got '{data.get('user', {}).get('role')}'")
-            except Exception as e:
-                print(f"   ❌ Failed to parse auth/me response: {e}")
-        return False
-
-    def test_predictions_detailed_endpoint(self):
-        """Test predictions detailed endpoint"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")
-            return False
-            
-        success, response = self.run_test(
-            "My Predictions Detailed",
+        # Test competition filters
+        self.run_test(
+            "Competition filter /api/football/matches/competition/PL returns Premier League matches",
             "GET",
-            "/api/predictions/me/detailed",
+            "/api/football/matches/competition/PL",
             200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
+            validate_fn=validate_matches_response
         )
         
-        if success and response:
-            try:
-                data = response.json()
-                predictions = data.get("predictions", [])
-                # Check for exact_score and prediction_type fields
-                has_exact_score = any("exact_score" in p for p in predictions)
-                has_prediction_type = any("prediction_type" in p for p in predictions)
-                print(f"   ✅ Predictions returned {len(predictions)} predictions")
-                if has_exact_score or has_prediction_type:
-                    print("   ✅ Found exact_score or prediction_type fields")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse predictions detailed response: {e}")
-        return False
+        self.run_test(
+            "Competition filter /api/football/matches/competition/CL returns CL matches",
+            "GET",
+            "/api/football/matches/competition/CL",
+            200,
+            validate_fn=validate_matches_response
+        )
+        
+        self.run_test(
+            "Competition filter /api/football/matches/competition/PD returns La Liga matches",
+            "GET",
+            "/api/football/matches/competition/PD",
+            200,
+            validate_fn=validate_matches_response
+        )
 
-    def test_admin_dashboard_endpoint(self):
+    def test_admin_api_management(self):
+        """Test admin API management endpoints"""
+        print("\n" + "="*50)
+        print("ADMIN API MANAGEMENT TESTS")
+        print("="*50)
+        
+        if not self.session_cookies:
+            print("❌ No admin session - skipping API management tests")
+            return
+        
+        # Validation functions
+        def validate_apis_list(response):
+            data = response.json()
+            if 'apis' not in data:
+                return False, "Missing 'apis' in response"
+            apis = data['apis']
+            football_data_found = any('football-data' in api.get('name', '').lower() or 
+                                    'football-data.org' in api.get('base_url', '').lower() 
+                                    for api in apis)
+            if not football_data_found:
+                return False, "Football-Data.org config not found in APIs list"
+            return True, "Football-Data.org config found"
+        
+        def validate_api_key_validation(response, should_be_valid=True):
+            data = response.json()
+            if 'valid' not in data:
+                return False, "Missing 'valid' field in validation response"
+            is_valid = data['valid']
+            if should_be_valid and not is_valid:
+                return False, f"Expected valid:true, got valid:{is_valid}"
+            elif not should_be_valid and is_valid:
+                return False, f"Expected valid:false, got valid:{is_valid}"
+            return True, f"Validation result as expected: valid={is_valid}"
+        
+        # List APIs (should return Football-Data.org config)
+        self.run_test(
+            "Admin list APIs GET /api/admin/system/apis returns Football-Data.org config",
+            "GET",
+            "/api/admin/system/apis",
+            200,
+            cookies=self.session_cookies,
+            validate_fn=validate_apis_list
+        )
+        
+        # Validate valid football-data.org key
+        self.run_test(
+            "Admin validate key POST /api/admin/system/apis/validate with valid football-data.org key returns valid:true",
+            "POST",
+            "/api/admin/system/apis/validate",
+            200,
+            data={
+                "api_key": "8767f2a0d2ca4adabdfb9e93d1361de6", 
+                "base_url": "https://api.football-data.org/v4"
+            },
+            cookies=self.session_cookies,
+            validate_fn=lambda r: validate_api_key_validation(r, should_be_valid=True)
+        )
+
+    def test_admin_match_refresh(self):
+        """Test admin match refresh functionality"""
+        print("\n" + "="*50)
+        print("ADMIN MATCH REFRESH TEST")
+        print("="*50)
+        
+        if not self.session_cookies:
+            print("❌ No admin session - skipping match refresh test")
+            return
+        
+        self.run_test(
+            "Admin Force Refresh Matches",
+            "POST",
+            "/api/admin/matches/refresh",
+            200,
+            cookies=self.session_cookies
+        )
+
+    def test_admin_dashboard(self):
         """Test admin dashboard endpoint"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")
-            return False
-            
-        success, response = self.run_test(
+        print("\n" + "="*50)
+        print("ADMIN DASHBOARD TEST")
+        print("="*50)
+        
+        if not self.session_cookies:
+            print("❌ No admin session - skipping dashboard test")
+            return
+        
+        self.run_test(
             "Admin Dashboard",
-            "GET", 
+            "GET",
             "/api/admin/dashboard",
             200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
+            cookies=self.session_cookies
         )
-        
-        if success and response:
-            try:
-                data = response.json()
-                required_stats = ["total_users", "active_users", "total_matches", "total_predictions"]
-                if all(stat in data for stat in required_stats):
-                    print("   ✅ Dashboard stats structure correct")
-                    return True
-                else:
-                    print(f"   ❌ Missing required dashboard stats")
-            except Exception as e:
-                print(f"   ❌ Failed to parse admin dashboard response: {e}")
-        return False
-
-    def test_admin_points_config_endpoint(self):
-        """Test admin points configuration endpoint"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")  
-            return False
-            
-        success, response = self.run_test(
-            "Admin Points Configuration",
-            "GET",
-            "/api/admin/points-config",
-            200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                required_fields = ["correct_prediction", "wrong_penalty", "exact_score_bonus"]
-                if all(field in data for field in required_fields):
-                    print("   ✅ Points config structure correct")
-                    return True
-                else:
-                    print(f"   ❌ Missing required points config fields")
-            except Exception as e:
-                print(f"   ❌ Failed to parse points config response: {e}")
-        return False
-
-    def test_admin_gift_points_log_endpoint(self):
-        """Test admin gift points audit log endpoint"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")
-            return False
-            
-        success, response = self.run_test(
-            "Admin Gift Points Log",
-            "GET",
-            "/api/admin/gift-points/log", 
-            200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
-        )
-        
-        if success and response:
-            try:
-                data = response.json()
-                log_entries = data.get("log", [])
-                print(f"   ✅ Gift points log returned {len(log_entries)} entries")
-                return True
-            except Exception as e:
-                print(f"   ❌ Failed to parse gift points log response: {e}")
-        return False
-
-    def test_level_system_fix(self):
-        """Test Level System Bug Fix: Admin gift points with level auto-update"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")
-            return False
-        
-        print("\n🔧 Testing Level System Bug Fix...")
-        
-        # Step 1: Get current admin user info to know current points/level
-        success, response = self.run_test(
-            "Get Current Admin User Info",
-            "GET",
-            "/api/auth/me",
-            200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
-        )
-        
-        if not success or not response:
-            return False
-            
-        try:
-            admin_data = response.json()
-            admin_user_id = admin_data.get("user_id")
-            admin_email = admin_data.get("email", "farhad.isgandar@gmail.com")
-            initial_points = admin_data.get("points", 0)
-            initial_level = admin_data.get("level", 0)
-            print(f"   ℹ️  Admin initial state: {initial_points} points, level {initial_level}")
-            
-            # Step 2: Gift points to admin user (test level auto-update)
-            points_to_gift = 200
-            success, response = self.run_test(
-                "Admin Gift Points (Level Auto-Update Test)",
-                "POST",
-                "/api/admin/gift-points",
-                200,
-                data={
-                    "user_ids": [admin_user_id],
-                    "points": points_to_gift,
-                    "message": "Testing level system fix"
-                },
-                headers={"Cookie": f"session_token={self.admin_session_token}"}
-            )
-            
-            if not success or not response:
-                print("   ❌ Failed to gift points")
-                return False
-                
-            gift_data = response.json()
-            updated_users = gift_data.get("updated_users", [])
-            
-            if not updated_users:
-                print("   ❌ No updated users returned")
-                return False
-                
-            updated_user = updated_users[0]
-            new_points = updated_user.get("points", initial_points)
-            new_level = updated_user.get("level", initial_level)
-            
-            # Verify points were added
-            expected_points = initial_points + points_to_gift
-            if new_points != expected_points:
-                print(f"   ❌ Points mismatch: expected {expected_points}, got {new_points}")
-                return False
-            
-            print(f"   ✅ Points updated correctly: {initial_points} + {points_to_gift} = {new_points}")
-            
-            # Step 3: Verify level was recalculated via /api/auth/me
-            success, response = self.run_test(
-                "Verify Level Auto-Update via /auth/me",
-                "GET", 
-                "/api/auth/me",
-                200,
-                headers={"Cookie": f"session_token={self.admin_session_token}"}
-            )
-            
-            if not success or not response:
-                print("   ❌ Failed to get updated user info")
-                return False
-                
-            final_data = response.json()
-            final_points = final_data.get("points", 0)
-            final_level = final_data.get("level", 0)
-            
-            # Verify /auth/me returns correct level matching points
-            if final_points != new_points:
-                print(f"   ❌ /auth/me points mismatch: expected {new_points}, got {final_points}")
-                return False
-                
-            if final_level != new_level:
-                print(f"   ❌ /auth/me level mismatch: expected {new_level}, got {final_level}")
-                return False
-                
-            print(f"   ✅ /auth/me returns correct level {final_level} for {final_points} points")
-            
-            # Verify level actually changed (unless user was already at max level)
-            if new_points > initial_points and new_level >= initial_level:
-                print(f"   ✅ Level correctly auto-calculated: {initial_level} → {new_level}")
-                return True
-            elif initial_points == new_points:
-                print(f"   ⚠️  No points change detected")
-                return False
-            else:
-                print(f"   ❌ Level calculation issue: points {initial_points}→{new_points}, level {initial_level}→{new_level}")
-                return False
-                
-        except Exception as e:
-            print(f"   ❌ Level system test error: {e}")
-            return False
-
-    def test_matches_performance(self):
-        """Test Matches Endpoint Performance"""
-        import time
-        
-        print("\n⚡ Testing Matches Endpoint Performance...")
-        
-        start_time = time.time()
-        success, response = self.run_test(
-            "Matches Performance Test",
-            "GET",
-            "/api/football/matches",
-            200
-        )
-        end_time = time.time()
-        
-        if success:
-            response_time = end_time - start_time
-            print(f"   ⏱️  Response time: {response_time:.2f} seconds")
-            
-            if response_time < 3.0:  # Should respond within 3 seconds
-                print(f"   ✅ Performance OK (< 3s)")
-                return True
-            else:
-                print(f"   ⚠️  Slow response (> 3s), but functional")
-                return True  # Still pass as it works, just note the performance
-        return False
-
-    def test_level_sync_scenario(self):
-        """Test Level Sync: Create user with 0pts, gift 200pts, verify level changes"""
-        if not self.admin_session_token:
-            print("   ❌ No admin session token available")
-            return False
-        
-        print("\n🔄 Testing Level Sync Scenario...")
-        
-        # This test assumes we're gifting to the admin user which should have points
-        # In a real test, we'd create a test user with 0 points, but using admin for simplicity
-        
-        success, response = self.run_test(
-            "Get Admin User Before Level Sync Test",
-            "GET",
-            "/api/auth/me", 
-            200,
-            headers={"Cookie": f"session_token={self.admin_session_token}"}
-        )
-        
-        if success and response:
-            try:
-                user_data = response.json()
-                initial_points = user_data.get("points", 0)
-                initial_level = user_data.get("level", 0)
-                
-                print(f"   ℹ️  User initial state: {initial_points} points, level {initial_level}")
-                
-                # Calculate what the level should be after adding 200 points
-                expected_points_after = initial_points + 200
-                
-                # Gift 200 points
-                success, response = self.run_test(
-                    "Gift 200 Points for Level Sync Test",
-                    "POST",
-                    "/api/admin/gift-points",
-                    200,
-                    data={
-                        "user_ids": [user_data.get("user_id")],
-                        "points": 200,
-                        "message": "Level sync test"
-                    },
-                    headers={"Cookie": f"session_token={self.admin_session_token}"}
-                )
-                
-                if success and response:
-                    gift_data = response.json()
-                    updated_users = gift_data.get("updated_users", [])
-                    
-                    if updated_users:
-                        final_points = updated_users[0].get("points", 0)
-                        final_level = updated_users[0].get("level", 0)
-                        
-                        if final_points == expected_points_after:
-                            print(f"   ✅ Points synced correctly: {initial_points} + 200 = {final_points}")
-                            
-                            if final_level >= initial_level:
-                                print(f"   ✅ Level updated correctly: {initial_level} → {final_level}")
-                                return True
-                            else:
-                                print(f"   ❌ Level decreased unexpectedly: {initial_level} → {final_level}")
-                                return False
-                        else:
-                            print(f"   ❌ Points sync failed: expected {expected_points_after}, got {final_points}")
-                            return False
-            except Exception as e:
-                print(f"   ❌ Level sync test error: {e}")
-        return False
 
 def main():
-    """Run all API tests"""
-    print("🚀 Starting GuessIt API Tests")
-    print("=" * 50)
+    print("🚀 Starting Multi-Provider Football API System Tests")
+    print(f"🕐 Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("🏈 Testing football-data.org integration with admin panel API management")
     
-    tester = GuessItAPITester()
+    # Setup
+    tester = FootballAPITester()
     
-    # Track test results
-    results = {}
+    # Test basic health check
+    print("\n" + "="*50)
+    print("BASIC HEALTH CHECK")
+    print("="*50)
     
-    # Core API tests
-    results["health"] = tester.test_health_endpoint()
-    results["root_api"] = tester.test_root_api_endpoint() 
-    results["admin_login"] = tester.test_admin_login()
+    tester.run_test(
+        "Backend health check /api/health returns 200",
+        "GET",
+        "/api/health",
+        200
+    )
     
-    # Football API tests
-    results["football_matches"] = tester.test_football_matches_endpoint()
-    results["matches_total_votes"] = tester.test_matches_with_total_votes()
-    results["live_matches"] = tester.test_live_matches_endpoint()
-    results["ended_matches"] = tester.test_ended_matches_endpoint()
-    results["upcoming_matches"] = tester.test_upcoming_matches_endpoint()
-    results["competitions"] = tester.test_competitions_endpoint()
-    results["banners"] = tester.test_banners_endpoint()
-    results["leaderboard"] = tester.test_leaderboard_endpoint()
+    # Test football endpoints first (public endpoints)
+    tester.test_football_endpoints()
     
-    # Content API tests
-    results["news"] = tester.test_news_endpoint()
-    results["subscription_plans"] = tester.test_subscription_plans_endpoint()
+    # Test admin login
+    print("\n" + "="*50)
+    print("ADMIN AUTHENTICATION TEST")
+    print("="*50)
     
-    # Auth tests (require admin login)
-    results["auth_me"] = tester.test_auth_me_endpoint()
-    results["predictions_detailed"] = tester.test_predictions_detailed_endpoint()
+    admin_login_success = tester.test_admin_login(
+        "farhad.isgandar@gmail.com",
+        "Salam123?"
+    )
     
-    # Admin API tests (require admin login)
-    results["admin_dashboard"] = tester.test_admin_dashboard_endpoint()
-    results["admin_points_config"] = tester.test_admin_points_config_endpoint()
-    results["admin_gift_points_log"] = tester.test_admin_gift_points_log_endpoint()
-    
-    # Level System & Performance Tests
-    results["level_system_fix"] = tester.test_level_system_fix()
-    results["level_sync_scenario"] = tester.test_level_sync_scenario() 
-    results["matches_performance"] = tester.test_matches_performance()
-    
-    # Print summary
-    print("\n" + "=" * 50)
-    print("📊 TEST SUMMARY")
-    print("=" * 50)
-    
-    passed_tests = []
-    failed_tests = []
-    
-    for test_name, passed in results.items():
-        if passed:
-            passed_tests.append(test_name)
-            print(f"✅ {test_name}: PASSED")
-        else:
-            failed_tests.append(test_name)
-            print(f"❌ {test_name}: FAILED")
-    
-    print(f"\n🎯 Overall: {tester.tests_passed}/{tester.tests_run} tests passed")
-    
-    if failed_tests:
-        print(f"❌ Failed tests: {', '.join(failed_tests)}")
-        return 1
+    if not admin_login_success:
+        print("\n❌ CRITICAL: Admin login failed - cannot continue with admin tests")
     else:
-        print("🎉 All API tests passed!")
+        # Test admin functionality
+        tester.test_admin_dashboard()
+        tester.test_admin_api_management()
+        tester.test_admin_match_refresh()
+    
+    # Print final results
+    print("\n" + "="*60)
+    print("FINAL TEST RESULTS")
+    print("="*60)
+    print(f"✅ Tests passed: {tester.tests_passed}")
+    print(f"❌ Tests failed: {tester.tests_run - tester.tests_passed}")
+    print(f"📊 Success rate: {tester.tests_passed}/{tester.tests_run} ({(tester.tests_passed / tester.tests_run * 100):.1f}%)")
+    
+    if tester.failed_tests:
+        print(f"\n📋 Failed tests:")
+        for test_name in tester.failed_tests:
+            print(f"   • {test_name}")
+    
+    print(f"🕐 Test completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if tester.tests_passed == tester.tests_run:
+        print("🎉 ALL TESTS PASSED!")
         return 0
+    else:
+        print("⚠️  SOME TESTS FAILED - Review above for details")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -158,11 +158,13 @@ def get_cached_matches():
     return list(_last_fetched_matches)
 
 async def force_fetch_matches(db):
-    """Force fetch all matches from API"""
+    """Force fetch all matches from API (clears cache first)"""
     global _last_fetched_matches
+    from services.football_api import clear_cache_and_reset
+    await clear_cache_and_reset()
     today = datetime.now(timezone.utc)
-    date_from = (today - timedelta(days=1)).strftime("%Y-%m-%d")
-    date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    date_from = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+    date_to = (today + timedelta(days=3)).strftime("%Y-%m-%d")
     matches = await get_matches(db, date_from, date_to)
     _last_fetched_matches = matches
     return len(matches)

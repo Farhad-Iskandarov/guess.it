@@ -252,7 +252,7 @@ async def get_my_predictions_detailed(
 ):
     """Get all predictions for the current user, enriched with match data from Football API.
     Also processes points for finished matches (server-side, once per match)."""
-    from services.football_api import get_matches, _api_get, _transform_match
+    from services.football_api import get_matches, get_match_by_id
 
     user = await get_current_user(request, db)
     user_id = user["user_id"]
@@ -286,9 +286,9 @@ async def get_my_predictions_detailed(
             "user_points": user_points, "user_level": user_level
         }
 
-    # Fetch matches with standard date range (today + 7 days, same as homepage)
+    # Fetch matches with wide date range to cover recent + upcoming
     now = datetime.now(timezone.utc)
-    date_from = now.strftime("%Y-%m-%d")
+    date_from = (now - timedelta(days=7)).strftime("%Y-%m-%d")
     date_to = (now + timedelta(days=7)).strftime("%Y-%m-%d")
 
     try:
@@ -298,14 +298,14 @@ async def get_my_predictions_detailed(
 
     match_map = {m["id"]: m for m in all_matches}
 
-    # For any predicted matches not found in the bulk fetch, fetch individually by ID
-    all_predicted_match_ids = set(p["match_id"] for p in predictions) | set(exact_score_map.keys())
-    missing_ids = [mid for mid in all_predicted_match_ids if mid not in match_map]
+    # For any predicted matches not in the bulk fetch, fetch individually by ID
+    all_predicted_ids = set(p["match_id"] for p in predictions) | set(exact_score_map.keys())
+    missing_ids = [mid for mid in all_predicted_ids if mid not in match_map]
     for mid in missing_ids:
         try:
-            data = await _api_get(f"/matches/{mid}")
-            if data and "id" in data:
-                match_map[mid] = _transform_match(data)
+            match = await get_match_by_id(db, mid)
+            if match:
+                match_map[mid] = match
         except Exception:
             pass
 
@@ -341,6 +341,7 @@ async def get_my_predictions_detailed(
                 "homeTeam": match_data["homeTeam"],
                 "awayTeam": match_data["awayTeam"],
                 "competition": match_data["competition"],
+                "competitionCode": match_data.get("competitionCode", ""),
                 "competitionEmblem": match_data.get("competitionEmblem"),
                 "dateTime": match_data["dateTime"],
                 "utcDate": match_data.get("utcDate"),
@@ -348,8 +349,10 @@ async def get_my_predictions_detailed(
                 "statusDetail": match_data.get("statusDetail"),
                 "matchMinute": match_data.get("matchMinute"),
                 "score": match_data["score"],
-                "votes": match_data["votes"],
-                "totalVotes": match_data["totalVotes"],
+                "predictionLocked": match_data.get("predictionLocked", True),
+                "lockReason": match_data.get("lockReason"),
+                "votes": match_data.get("votes", {}),
+                "totalVotes": match_data.get("totalVotes", 0),
             }
 
             # Determine if prediction was correct for finished matches

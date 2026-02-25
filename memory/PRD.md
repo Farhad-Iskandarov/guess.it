@@ -1,53 +1,62 @@
-# GuessIt - Football Prediction Platform (Clone)
+# GuessIt - Football Prediction App PRD
 
 ## Original Problem Statement
-Clone the existing project from https://github.com/Farhad-Iskandarov/guess.it as a 100% identical duplicate.
+1. Clone https://github.com/Farhad-Iskandarov/guess.it exactly as-is
+2. Switch from Football-Data.org to API-Football (api-sports.io) v3
+3. Admin panel: API key activation should validate, clear cache, fetch data instantly
+4. Support both football-data.org AND api-sports.io providers
 
 ## Architecture
-- **Frontend:** React 19, CRACO, Tailwind CSS 3, shadcn/ui (Radix), Recharts
-- **Backend:** FastAPI (Python 3.11), Motor (async MongoDB driver), Pydantic v2
-- **Database:** MongoDB
-- **Real-time:** WebSockets (live matches, chat, notifications)
+- **Frontend**: React 19 + Tailwind CSS + Radix UI + CRACO
+- **Backend**: FastAPI (Python) with Motor (async MongoDB driver)
+- **Database**: MongoDB
+- **External API**: Multi-provider (football-data.org v4 / api-sports.io v3)
+- **Payments**: Stripe integration
+- **Auth**: Email/Password + Google OAuth
+- **WebSockets**: Live match updates, chat, friend notifications
+
+## Multi-Provider API System
+Both providers supported with automatic detection via base_url:
+
+### football-data.org (v4) - Currently Active
+- Base: `https://api.football-data.org/v4`
+- Auth: `X-Auth-Token` header
+- Endpoints: `/matches?dateFrom=X&dateTo=Y&competitions=PL,CL,...`
+- dateTo is EXCLUSIVE (add 1 day to include end date)
+- Free plan: 10 req/min, wider date ranges allowed
+
+### api-sports.io (v3)
+- Base: `https://v3.football.api-sports.io`
+- Auth: `x-apisports-key` header
+- Endpoints: `/fixtures?date=YYYY-MM-DD` or `/fixtures?live=all`
+- Free plan: 100 req/day, 10 req/min, yesterday-to-tomorrow window
 
 ## What's Been Implemented
 
-### Phase 1: Clone (Feb 24, 2026)
-- Full clone from GitHub
+### Phase 1: Clone (2026-02-25)
+- [x] Exact clone from GitHub, all 12 routes + 20 pages preserved
 
-### Phase 2: Exact Score Prediction Enhancements (Feb 24, 2026)
-- Exact score in My Predictions, edit/remove, "Guess Exact Score" button
+### Phase 2: API-Football Migration (2026-02-25)
+- [x] Initial switch to api-sports.io (worked, then key got suspended)
 
-### Phase 3: Admin Points Gifting (Feb 24, 2026)
-- Gift points to users, audit trail, real-time notifications
+### Phase 3: Multi-Provider Support (2026-02-25)
+- [x] `football_api.py` supports both football-data.org and api-sports.io
+- [x] Auto-detects provider from active config's `base_url`
+- [x] Separate transform functions for each provider's response format
+- [x] `validate_api_key(key, base_url)` validates against correct provider
+- [x] Admin activation: validates → clears cache → resets suspension → fetches data → returns count
+- [x] Seed function no longer overwrites admin-configured APIs
+- [x] Fixed football-data.org exclusive dateTo (add 1 day)
+- [x] 67 matches loading across PL, CL, SA, PD, BL1, FL1
 
-### Phase 4: Homepage Tab Filters (Feb 24, 2026)
-- Popular (top 10 by votes), Top Live, Soon (3 days), Ended, Favorite
+## Testing Results (Iteration 4)
+- Backend: 100% (all 18 API tests passing)
+- Frontend: 95% (core functionality working)
+- All competition filters: Working
+- Today/Ended/Live: Working
+- Admin API management: Working
+- WebSocket live updates: Active
 
-### Phase 5: Stabilization & Documentation (Feb 24, 2026)
-- .env.example files, comprehensive README, .gitignore updates
-
-### Phase 6: Level System Fix & Performance (Feb 25, 2026)
-**Level System Bug Fix:**
-1. admin.py gift-points: After $inc points, recalculates level using calculate_level()
-2. auth.py /me: Always recalculates level from current points; fixes desync on page refresh
-3. Both prediction processing AND gifting now properly update levels
-
-**Performance Optimizations:**
-1. MongoDB: Added compound indexes on predictions (match_id+prediction), exact_score_predictions (user_id+match_id, match_id), points_gifts (created_at)
-2. HomePage.jsx: Removed filterKey increment from tab switching (prevented full MatchList re-mount)
-3. HomePage.jsx: Ended matches cached (fetched once, not on every tab switch)
-4. MatchList.jsx: Added useMemo for displayMatches, liveMatches, nonLiveMatches
-5. README updated with performance and level system docs
-
-**Results:**
-- Backend matches endpoint: 0.08s response time
-- Frontend homepage load: 2.01s
-- Tab switching: 0.54s average (was slow before)
-- Level system: 100% sync accuracy
-
-## Admin Credentials
-- Email: farhad.isgandar@gmail.com, Password: Salam123?
-
-## Backlog
-- P1: Gift points history tab
-- P2: Exact score editing from Advanced Options modal
+## Next Tasks
+- User-requested modifications
+- Monitor API quota usage

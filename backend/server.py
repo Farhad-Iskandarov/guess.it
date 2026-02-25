@@ -349,34 +349,31 @@ async def websocket_notifications(websocket: WebSocket, user_id: str):
 async def seed_default_api_key(db):
     """Seed default Football API key into database if none exists"""
     try:
+        # Get API key from environment
+        api_key = os.environ.get("FOOTBALL_API_KEY", "")
+        
         # Check if any API configs exist
         count = await db.admin_api_configs.count_documents({})
         
-        if count == 0:
-            # Get API key from environment
-            api_key = os.environ.get("FOOTBALL_API_KEY", "")
-            
-            if api_key:
-                # Create default API config
-                doc = {
-                    "api_id": f"api_{uuid.uuid4().hex[:12]}",
-                    "name": "Football-Data.org (Default)",
-                    "base_url": "https://api.football-data.org/v4",
-                    "api_key": api_key,
-                    "enabled": True,
-                    "is_active": True,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "created_by": "system"
-                }
-                
-                await db.admin_api_configs.insert_one(doc)
-                logger.info("✅ Seeded default Football API key into database")
-            else:
-                logger.warning("⚠️  No FOOTBALL_API_KEY found in environment - skipping seed")
+        if count == 0 and api_key:
+            doc = {
+                "api_id": f"api_{uuid.uuid4().hex[:12]}",
+                "name": "Default Football API",
+                "base_url": "https://v3.football.api-sports.io",
+                "api_key": api_key,
+                "enabled": True,
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": "system"
+            }
+            await db.admin_api_configs.insert_one(doc)
+            logger.info("Seeded default Football API key into database")
         else:
-            logger.info(f"ℹ️  Found {count} API config(s) in database - skipping seed")
+            logger.info(f"Found {count} API config(s) in database - skipping seed")
     except Exception as e:
-        logger.error(f"❌ Failed to seed default API key: {e}")
+        logger.error(f"Failed to seed default API key: {e}")
+    except Exception as e:
+        logger.error(f"Failed to seed default API key: {e}")
 
 
 async def seed_admin_account(db):

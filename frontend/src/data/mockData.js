@@ -266,7 +266,7 @@ export const mockBannerSlides = [
     highlightedText: "Rights!",
     subtitle: "Compete with friends and show off your prediction skills.",
     ctaText: "Join Now",
-    image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800&q=80",
+    image: "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?w=800&q=80",
     badge: "Free to Play"
   },
   {

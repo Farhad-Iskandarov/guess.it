@@ -11,8 +11,58 @@ A social football prediction platform where fans analyze, predict, and compete w
 - **Database:** MongoDB
 - **Real-time:** WebSockets (live matches, chat, notifications)
 - **Auth:** Session-based (httpOnly cookies) + Google OAuth
-- **Football Data:** football-data.org API (v4)
+- **Football Data:** Multi-provider (football-data.org v4 + API-Football api-sports.io v3)
 - **Payments:** Stripe (subscription system)
+
+---
+
+## Football API - Multi-Provider System
+
+GuessIt supports **two football data providers**. You can switch between them instantly from the Admin Panel without any code changes.
+
+### Supported Providers
+
+| Provider | Base URL | Auth Header | Free Plan |
+|----------|----------|-------------|-----------|
+| **football-data.org** (v4) | `https://api.football-data.org/v4` | `X-Auth-Token` | 10 req/min, wide date range |
+| **API-Football** (api-sports.io v3) | `https://v3.football.api-sports.io` | `x-apisports-key` | 100 req/day, 10 req/min |
+
+### How to Switch APIs
+
+1. Go to **Admin Panel → System → API**
+2. Click **Add New API**
+3. Enter:
+   - **Name:** e.g., "Football-Data.org" or "API-Football"
+   - **Base URL:** (see table above)
+   - **API Key:** Your key
+4. Click **Activate** on the new API
+
+The system will automatically:
+- Detect the provider from the base URL
+- Validate the key against the correct provider
+- Clear all cached data
+- Fetch fresh match data immediately
+- Display how many matches were loaded
+
+### Where to Get API Keys
+
+| Provider | Registration URL |
+|----------|-----------------|
+| football-data.org | [football-data.org/client/register](https://www.football-data.org/client/register) |
+| API-Football | [dashboard.api-football.com](https://dashboard.api-football.com) |
+
+### Supported Leagues
+
+| Code | League | football-data.org | API-Football ID |
+|------|--------|-------------------|-----------------|
+| PL | Premier League | Yes | 39 |
+| CL | Champions League | Yes | 2 |
+| PD | La Liga | Yes | 140 |
+| SA | Serie A | Yes | 135 |
+| BL1 | Bundesliga | Yes | 78 |
+| FL1 | Ligue 1 | Yes | 61 |
+| EC | European Championship | Yes | 4 |
+| WC | FIFA World Cup | Yes | 1 |
 
 ---
 
@@ -77,12 +127,15 @@ Edit `backend/.env` and fill in your values:
 MONGO_URL="mongodb://localhost:27017"
 DB_NAME="guessit"
 CORS_ORIGINS="*"
-SECRET_KEY=your-strong-random-secret-key
-FOOTBALL_API_KEY=your-football-data-api-key
+JWT_SECRET=your-strong-random-secret-key
+FOOTBALL_API_KEY=your-football-api-key
 STRIPE_API_KEY=sk_test_your-stripe-test-key
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=YourStrongPassword
+ADMIN_NICKNAME=admin
 ```
 
-> **Football API Key:** Register free at [football-data.org](https://www.football-data.org/client/register)
+> **Football API Key:** Register free at [football-data.org](https://www.football-data.org/client/register) or [API-Football](https://dashboard.api-football.com)
 > **Stripe Key:** Get test key at [stripe.com/dashboard](https://dashboard.stripe.com/test/apikeys)
 
 **Frontend:**
@@ -148,8 +201,8 @@ yarn start
 
 | Field | Value |
 |-------|-------|
-| Email | `farhad.isgandar@gmail.com` |
-| Password | `Salam123?` |
+| Email | Set via `ADMIN_EMAIL` env var |
+| Password | Set via `ADMIN_PASSWORD` env var |
 
 > You can override these via environment variables: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NICKNAME`
 
@@ -197,6 +250,7 @@ yarn start
 
 ### Admin Panel
 - **Manual Points Gifting** - Gift points to individual or multiple users with custom messages, real-time notifications, and full audit trail
+- **API Management** - Add, validate, activate, and switch between football data providers without downtime
 
 ### Chat & Social
 - Real-time messaging with friends
@@ -227,7 +281,7 @@ yarn start
 | Subscribed Emails | View newsletter subscriptions |
 | Contact Messages | View, flag, delete contact form submissions |
 | Contact Settings | Edit support email, location info |
-| System | API configuration and system settings |
+| System | **API configuration** - Add, validate, activate football data providers |
 | Prediction Monitor | Monitor prediction streaks |
 | Favorites | View user favorites |
 | Notifications | Send notifications |
@@ -249,7 +303,7 @@ yarn start
 │   │   └── points_config.py   # Points configuration model
 │   ├── routes/
 │   │   ├── auth.py            # Register, Login, Google OAuth, Nickname
-│   │   ├── admin.py           # Admin panel + points config + gift points
+│   │   ├── admin.py           # Admin panel + points config + gift points + API management
 │   │   ├── public.py          # Subscribe, Contact, News (public)
 │   │   ├── predictions.py     # Predictions + exact score + detailed view
 │   │   ├── football.py        # Football API, live polling, banners, leaderboard
@@ -260,7 +314,7 @@ yarn start
 │   │   ├── notifications.py   # In-app notifications
 │   │   └── settings.py        # User settings
 │   ├── services/
-│   │   ├── football_api.py    # Football-data.org API service
+│   │   ├── football_api.py    # Multi-provider football API service
 │   │   └── prediction_processor.py  # Points & exact score processing
 │   ├── tests/                 # Backend tests
 │   └── uploads/               # User avatars, banners, news images
@@ -369,6 +423,11 @@ yarn start
 | POST | `/api/admin/points-config/reset` | Reset points to defaults |
 | POST | `/api/admin/gift-points` | Gift points to users |
 | GET | `/api/admin/gift-points/log` | Gift points audit trail |
+| GET | `/api/admin/system/apis` | List configured APIs |
+| POST | `/api/admin/system/apis` | Add new API |
+| POST | `/api/admin/system/apis/validate` | Validate API key |
+| POST | `/api/admin/system/apis/{id}/activate` | Activate API (validates, clears cache, fetches data) |
+| DELETE | `/api/admin/system/apis/{id}` | Delete API config |
 
 ---
 
@@ -381,8 +440,8 @@ yarn start
 | `MONGO_URL` | Yes | MongoDB connection string | `mongodb://localhost:27017` |
 | `DB_NAME` | Yes | Database name | `guessit` |
 | `CORS_ORIGINS` | Yes | Allowed origins | `*` or `http://localhost:3000` |
-| `SECRET_KEY` | Yes | Session/JWT secret | Random string |
-| `FOOTBALL_API_KEY` | Yes | football-data.org API key | Get from football-data.org |
+| `JWT_SECRET` | Yes | Session/JWT secret | Random string |
+| `FOOTBALL_API_KEY` | Yes | Default football API key (seeded on first run) | Get from provider |
 | `STRIPE_API_KEY` | Yes | Stripe secret key (test) | `sk_test_...` |
 | `ADMIN_EMAIL` | No | Admin seed email | `admin@example.com` |
 | `ADMIN_PASSWORD` | No | Admin seed password | `StrongPass123!` |
@@ -403,8 +462,15 @@ yarn start
 - Check `MONGO_URL` in `backend/.env`
 
 ### Football API returns empty matches
-- Verify your API key at [football-data.org](https://www.football-data.org/client/login)
-- Free tier has rate limits (10 requests/minute). Wait and retry.
+- **football-data.org:** Verify key at [football-data.org](https://www.football-data.org/client/login). Free tier: 10 req/min.
+- **API-Football:** Verify key at [dashboard.api-football.com](https://dashboard.api-football.com). Free tier: 100 req/day.
+- Check Admin Panel → System → API to see which provider is active
+- Try activating a different API key if the current one is suspended or rate-limited
+
+### API activation fails with Error 400
+- The system validates the key before activation. Error 400 means the key is invalid or the account is suspended.
+- Check the error message for details (e.g., "account suspended", "invalid key")
+- Ensure the **Base URL** matches the provider (see table above)
 
 ### Frontend can't reach backend
 - Ensure backend is running on port 8001
@@ -413,7 +479,7 @@ yarn start
 
 ### Admin login fails
 - The admin account is seeded on first startup. If you changed the database, restart the backend.
-- Default: `farhad.isgandar@gmail.com` / `Salam123?`
+- Check `ADMIN_EMAIL` and `ADMIN_PASSWORD` env vars
 
 ---
 
@@ -424,8 +490,10 @@ yarn start
 - **API Docs:** FastAPI auto-generates docs at `http://localhost:8001/docs`
 - **Path Aliases:** Frontend uses `@/` alias for `src/` (configured in `craco.config.js` and `jsconfig.json`)
 - **Uploads:** User avatars and news images are stored in `backend/uploads/`
-- **Performance:** Backend uses in-memory caching (2-min TTL for matches, 30s for live). Frontend uses stale-while-revalidate pattern with 5-min cache. MongoDB compound indexes on predictions and exact scores for fast vote aggregation.
+- **Multi-Provider:** The `football_api.py` service auto-detects the provider from the active config's `base_url`. It has separate fetch and transform functions for each provider, but exposes a unified API to the rest of the backend.
+- **Caching:** Backend uses in-memory caching (3-min TTL for matches, 25s for live). Frontend uses stale-while-revalidate pattern with 5-min cache.
 - **Level System:** Levels auto-recalculate whenever points change (gift, prediction, page refresh). No manual sync needed.
+- **API Key Security:** API keys are never committed to git. Use `.env` files and the admin panel. The `.env.example` files contain templates without real keys.
 
 ---
 

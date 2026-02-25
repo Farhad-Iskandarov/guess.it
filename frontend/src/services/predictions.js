@@ -62,8 +62,12 @@ export const getMyPredictions = async () => {
     if (response.status === 401) {
       return { predictions: [], total: 0 };
     }
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to fetch predictions');
+    let detail = 'Failed to fetch predictions';
+    try {
+      const error = await response.json();
+      detail = error.detail || detail;
+    } catch { /* response may not be JSON */ }
+    throw new Error(detail);
   }
 
   const data = await response.json();
@@ -87,8 +91,12 @@ export const getMyDetailedPredictions = async () => {
     if (response.status === 401) {
       return { predictions: [], total: 0, summary: {} };
     }
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to fetch predictions');
+    let detail = 'Failed to fetch predictions';
+    try {
+      const error = await response.json();
+      detail = error.detail || detail;
+    } catch { /* response may not be JSON */ }
+    throw new Error(detail);
   }
 
   const data = await response.json();

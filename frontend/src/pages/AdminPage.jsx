@@ -1627,8 +1627,15 @@ const SystemTab = () => {
   };
 
   const activateApi = async (apiId) => {
-    try { await api(`/system/apis/${apiId}/activate`, { method: 'POST' }); fetchApis(); }
-    catch (e) { alert(e.message); }
+    try {
+      const result = await api(`/system/apis/${apiId}/activate`, { method: 'POST' });
+      fetchApis();
+      if (result.matches_loaded !== undefined) {
+        alert(`API activated successfully! ${result.matches_loaded} matches loaded.\n${result.validation?.subscription ? 'Plan: ' + result.validation.subscription : ''}\nRequests remaining: ${result.validation?.requests_remaining ?? 'N/A'}`);
+      }
+      // Broadcast to other tabs/windows to refresh match data
+      window.dispatchEvent(new CustomEvent('api-key-activated'));
+    } catch (e) { alert('Activation failed: ' + e.message); }
   };
 
   const deleteApi = async (apiId) => {

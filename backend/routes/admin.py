@@ -635,8 +635,8 @@ async def list_apis(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)
         current_key = os.environ.get("FOOTBALL_API_KEY", "")
         apis = [{
             "api_id": "default_api",
-            "name": "Football-Data.org (Default)",
-            "base_url": "https://api.football-data.org/v4",
+            "name": "API-Football (api-sports.io)",
+            "base_url": "https://v3.football.api-sports.io",
             "api_key": current_key[:8] + "..." if len(current_key) > 8 else current_key,
             "api_key_masked": True,
             "enabled": True,
@@ -709,7 +709,7 @@ async def toggle_api(api_id: str, request: Request, db: AsyncIOMotorDatabase = D
 
 @router.post("/system/apis/{api_id}/activate")
 async def activate_api(api_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
-    """Set an API as the active one (used for fetching matches)"""
+    """Set an API as the active one. Validates key, clears cache, and fetches fresh data."""
     admin = await get_admin_user(request, db)
 
     api_config = await db.admin_api_configs.find_one({"api_id": api_id}, {"_id": 0})
@@ -719,18 +719,70 @@ async def activate_api(api_id: str, request: Request, db: AsyncIOMotorDatabase =
     if not api_config.get("enabled"):
         raise HTTPException(status_code=400, detail="Cannot activate a disabled API. Enable it first.")
 
-    # Deactivate all others
+    api_key = api_config.get("api_key", "")
+    base_url = api_config.get("base_url", "")
+
+    # Step 1: Validate the API key before activating
+    from services.football_api import validate_api_key, clear_cache_and_reset
+    validation = await validate_api_key(api_key, base_url)
+    
+    if not validation.get("valid"):
+        error_msg = validation.get("error", "Unknown error")
+        raise HTTPException(
+            status_code=400,
+            detail=f"API key validation failed: {error_msg}. Fix the key before activating."
+        )
+
+    # Step 2: Deactivate all others, activate this one
     await db.admin_api_configs.update_many({}, {"$set": {"is_active": False}})
-    # Activate this one
     await db.admin_api_configs.update_one({"api_id": api_id}, {"$set": {"is_active": True}})
 
-    # Update environment variable for the football API service
+    # Step 3: Update environment variable
     import os
-    if api_config.get("api_key"):
-        os.environ["FOOTBALL_API_KEY"] = api_config["api_key"]
+    if api_key:
+        os.environ["FOOTBALL_API_KEY"] = api_key
 
-    await log_admin_action(db, admin["user_id"], "activate_api", api_id, f"Activated API: {api_config['name']}")
-    return {"success": True, "message": f"API '{api_config['name']}' is now active"}
+    # Step 4: Clear all caches and reset suspension flag
+    await clear_cache_and_reset()
+
+    # Step 5: Force fetch fresh match data
+    match_count = 0
+    try:
+        from routes.football import force_fetch_matches
+        match_count = await force_fetch_matches(db)
+    except Exception as e:
+        logger.warning(f"Initial fetch after activation failed: {e}")
+
+    await log_admin_action(
+        db, admin["user_id"], "activate_api", api_id,
+        f"Activated API: {api_config['name']}. Fetched {match_count} matches."
+    )
+
+    return {
+        "success": True,
+        "message": f"API '{api_config['name']}' activated. {match_count} matches loaded.",
+        "matches_loaded": match_count,
+        "validation": {
+            "requests_remaining": validation.get("requests", {}).get("limit_day", 0) - validation.get("requests", {}).get("current", 0),
+            "subscription": validation.get("subscription", {}).get("plan", "unknown"),
+        }
+    }
+
+@router.post("/system/apis/validate")
+async def validate_api_key_endpoint(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Validate an API key without activating it"""
+    admin = await get_admin_user(request, db)
+    body = await request.json()
+    api_key = body.get("api_key", "").strip()
+    base_url = body.get("base_url", "").strip()
+    
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+    
+    from services.football_api import validate_api_key
+    result = await validate_api_key(api_key, base_url)
+    return result
+
 
 @router.delete("/system/apis/{api_id}")
 async def delete_api(api_id: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
