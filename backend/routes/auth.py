@@ -493,6 +493,19 @@ async def get_current_user(
     if isinstance(created_at, str):
         created_at = datetime.fromisoformat(created_at)
     
+    # Always recalculate level from current points to prevent desync
+    from routes.predictions import calculate_level, get_points_config
+    points_config = await get_points_config(db)
+    current_points = user.get("points", 0)
+    correct_level = calculate_level(current_points, points_config["level_thresholds"])
+    stored_level = user.get("level", 0)
+    
+    if correct_level != stored_level:
+        await db.users.update_one(
+            {"user_id": user["user_id"]},
+            {"$set": {"level": correct_level}}
+        )
+    
     return UserResponse(
         user_id=user["user_id"],
         email=user["email"],
@@ -503,8 +516,8 @@ async def get_current_user(
         nickname_set=user.get("nickname_set", False),
         nickname_changed=user.get("nickname_changed", False),
         created_at=created_at,
-        points=user.get("points", 0),
-        level=user.get("level", 0),
+        points=current_points,
+        level=correct_level,
         role=user.get("role")
     )
 

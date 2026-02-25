@@ -1118,6 +1118,24 @@ async def gift_points(request: Request, db: AsyncIOMotorDatabase = Depends(get_d
         {"$inc": {"points": points}}
     )
 
+    # Recalculate levels for all affected users
+    from routes.predictions import calculate_level, get_points_config
+    points_config = await get_points_config(db)
+    level_thresholds = points_config["level_thresholds"]
+    
+    # Fetch updated users and recalculate levels
+    updated_for_level = await db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "points": 1}
+    ).to_list(500)
+    
+    for u in updated_for_level:
+        new_level = calculate_level(u["points"], level_thresholds)
+        await db.users.update_one(
+            {"user_id": u["user_id"]},
+            {"$set": {"level": new_level}}
+        )
+
     # Store audit trail in points_gifts collection
     gift_doc = {
         "gift_id": gift_id,

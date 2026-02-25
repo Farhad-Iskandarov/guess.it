@@ -460,6 +460,11 @@ async def startup_event():
     await db.admin_api_configs.create_index([("is_active", 1)])
     await db.admin_favorite_users.create_index([("admin_id", 1), ("user_id", 1)], unique=True)
     await db.predictions.create_index([("user_id", 1), ("points_awarded", 1)])
+    # Performance indexes for vote counting and match queries
+    await db.predictions.create_index([("match_id", 1), ("prediction", 1)])
+    await db.exact_score_predictions.create_index([("user_id", 1), ("match_id", 1)])
+    await db.exact_score_predictions.create_index([("match_id", 1)])
+    await db.points_gifts.create_index([("created_at", -1)])
     # Subscription indexes
     await db.subscription_plans.create_index([("plan_id", 1)], unique=True)
     await db.user_subscriptions.create_index([("user_id", 1), ("status", 1)])

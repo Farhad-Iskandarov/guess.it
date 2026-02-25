@@ -174,6 +174,7 @@ yarn start
 - **Exact Score Predictions** - Predict exact final scores for +50 bonus points
 - **Configurable Points System** - Admin can configure all point values dynamically
 - **My Predictions Page** - View, edit, remove all predictions before match starts
+- **Automatic Level System** - User levels auto-calculate based on point thresholds (0, 100, 120, 200, 250, 350, 500, 750, 1000, 1500, 2000). Levels sync instantly after gifted or earned points.
 
 ### Homepage Tabs
 - **Top Matches** - All active (non-finished) matches
@@ -423,6 +424,8 @@ yarn start
 - **API Docs:** FastAPI auto-generates docs at `http://localhost:8001/docs`
 - **Path Aliases:** Frontend uses `@/` alias for `src/` (configured in `craco.config.js` and `jsconfig.json`)
 - **Uploads:** User avatars and news images are stored in `backend/uploads/`
+- **Performance:** Backend uses in-memory caching (2-min TTL for matches, 30s for live). Frontend uses stale-while-revalidate pattern with 5-min cache. MongoDB compound indexes on predictions and exact scores for fast vote aggregation.
+- **Level System:** Levels auto-recalculate whenever points change (gift, prediction, page refresh). No manual sync needed.
 
 ---
 

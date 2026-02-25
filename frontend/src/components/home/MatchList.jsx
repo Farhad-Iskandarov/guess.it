@@ -1,4 +1,4 @@
-import { useState, useCallback, memo, useEffect, useRef } from 'react';
+import { useState, useCallback, memo, useEffect, useRef, useMemo } from 'react';
 import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
@@ -1240,12 +1240,21 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     setPendingPrediction(null);
   }, []);
 
-  // Filter only for live filter
-  const displayMatches = activeLeague === 'live' ? matches.filter((m) => m.status === 'LIVE') : matches;
+  // Filter only for live filter - memoized for performance
+  const displayMatches = useMemo(
+    () => activeLeague === 'live' ? matches.filter((m) => m.status === 'LIVE') : matches,
+    [matches, activeLeague]
+  );
 
-  // Separate live matches for the dedicated section (only when showing "all" or specific league, not "live" filter)
-  const liveMatches = activeLeague !== 'live' ? displayMatches.filter((m) => m.status === 'LIVE') : [];
-  const nonLiveMatches = activeLeague !== 'live' ? displayMatches.filter((m) => m.status !== 'LIVE') : displayMatches;
+  // Separate live matches for the dedicated section (only when showing "all" or specific league, not "live" filter) - memoized
+  const liveMatches = useMemo(
+    () => activeLeague !== 'live' ? displayMatches.filter((m) => m.status === 'LIVE') : [],
+    [displayMatches, activeLeague]
+  );
+  const nonLiveMatches = useMemo(
+    () => activeLeague !== 'live' ? displayMatches.filter((m) => m.status !== 'LIVE') : displayMatches,
+    [displayMatches, activeLeague]
+  );
 
   return (
     <>

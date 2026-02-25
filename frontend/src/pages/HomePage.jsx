@@ -461,20 +461,20 @@ export const HomePage = () => {
 
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
-    setFilterKey(prev => prev + 1);
-    // When switching to favorite tab, reset league to 'all' to show all matches
+    // Only increment filterKey for league changes, not tab switches (tabs use client-side filtering)
+    // When switching to favorite tab, reset league to 'all'
     if (tabId === 'favorite') {
       setActiveLeague('all');
     }
-    // When switching to ended tab, fetch ended matches
-    if (tabId === 'ended') {
+    // When switching to ended tab, fetch ended matches (with cache)
+    if (tabId === 'ended' && endedMatches.length === 0) {
       setEndedLoading(true);
       fetchEndedMatches()
         .then(data => setEndedMatches(data.matches || []))
         .catch(e => console.error('Failed to fetch ended matches:', e))
         .finally(() => setEndedLoading(false));
     }
-  }, []);
+  }, [endedMatches.length]);
 
   const handleLeagueChange = useCallback((leagueId) => {
     setActiveLeague(leagueId);
@@ -787,7 +787,7 @@ export const HomePage = () => {
 
         {/* Match Content (non-favorite, non-ended tabs) */}
         {tabFilteredMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div key={`filter-${activeLeague}-${activeTab}-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
+          <div key={`filter-${activeLeague}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {/* Tab-specific headers */}
             {activeTab === 'popular' && (
               <div className="flex items-center gap-2 mt-4 mb-3" data-testid="popular-header">
