@@ -163,6 +163,7 @@ EditVoteButton.displayName = 'EditVoteButton';
 // ============ Prediction Card ============
 const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove, onEditExactScore, onRemoveExactScore }) => {
   const { prediction, match, result, created_at } = data;
+  const navigate = useNavigate();
   const exactScore = data.exact_score;
   const predictionType = data.prediction_type || (prediction ? 'winner' : 'exact_score');
   const isExactScoreOnly = predictionType === 'exact_score' && !prediction;
@@ -174,8 +175,8 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
   
   // Exact score edit state
   const [isEditingExactScore, setIsEditingExactScore] = useState(false);
-  const [editHomeScore, setEditHomeScore] = useState(exactScore?.home_score || 0);
-  const [editAwayScore, setEditAwayScore] = useState(exactScore?.away_score || 0);
+  const [editHomeScore, setEditHomeScore] = useState(exactScore?.home_score !== undefined ? String(exactScore.home_score) : '');
+  const [editAwayScore, setEditAwayScore] = useState(exactScore?.away_score !== undefined ? String(exactScore.away_score) : '');
   const [isSavingExactScore, setIsSavingExactScore] = useState(false);
   const [isRemovingExactScore, setIsRemovingExactScore] = useState(false);
 
@@ -246,8 +247,8 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
 
   const handleStartEdit = () => {
     if (isExactScoreOnly) {
-      setEditHomeScore(exactScore?.home_score || 0);
-      setEditAwayScore(exactScore?.away_score || 0);
+      setEditHomeScore(exactScore?.home_score !== undefined ? String(exactScore.home_score) : '');
+      setEditAwayScore(exactScore?.away_score !== undefined ? String(exactScore.away_score) : '');
       setIsEditingExactScore(true);
     } else {
       setEditSelection(prediction);
@@ -276,13 +277,15 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
   };
   
   const handleSubmitExactScoreEdit = async () => {
-    if (editHomeScore === exactScore?.home_score && editAwayScore === exactScore?.away_score) {
+    const h = editHomeScore === '' ? 0 : parseInt(editHomeScore, 10);
+    const a = editAwayScore === '' ? 0 : parseInt(editAwayScore, 10);
+    if (h === exactScore?.home_score && a === exactScore?.away_score) {
       setIsEditingExactScore(false);
       return;
     }
     setIsSavingExactScore(true);
     try {
-      await onEditExactScore(data.match_id, editHomeScore, editAwayScore);
+      await onEditExactScore(data.match_id, h, a);
       setIsEditingExactScore(false);
     } finally {
       setIsSavingExactScore(false);
@@ -336,8 +339,12 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
               <span className="text-xs text-muted-foreground">{match.dateTime}</span>
             </div>
 
-            {/* Teams row */}
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            {/* Teams row — clickable to open match detail */}
+            <div
+              className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => navigate(`/match/${data.match_id}`)}
+              data-testid={`prediction-match-link-${data.match_id}`}
+            >
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <TeamCrest team={match.homeTeam} />
                 <span className="text-sm font-medium text-foreground truncate">{match.homeTeam.name}</span>
@@ -461,8 +468,12 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
           {/* Match content */}
           <div className="px-5 py-3">
             <div className="flex items-center gap-4">
-              {/* Teams with vs */}
-              <div className="flex flex-col gap-1 flex-1 min-w-0">
+              {/* Teams with vs — clickable to open match detail */}
+              <div
+                className="flex flex-col gap-1 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => navigate(`/match/${data.match_id}`)}
+                data-testid={`prediction-grid-link-${data.match_id}`}
+              >
                 <div className="flex items-center gap-2.5">
                   <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">1</span>
                   <TeamCrest team={match.homeTeam} />
@@ -561,26 +572,24 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
                 <div className="flex items-center gap-3 mb-4">
                   <div className="flex-1 text-center">
                     <label className="text-xs text-muted-foreground block mb-1 truncate">{match.homeTeam.name}</label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="20"
+                    <input
+                      type="text" inputMode="numeric" pattern="[0-9]*"
                       value={editHomeScore}
-                      onChange={e => setEditHomeScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-                      className="h-10 text-lg font-bold text-center"
+                      onChange={e => { const v = e.target.value; if (v === '') { setEditHomeScore(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setEditHomeScore(String(Math.min(Math.max(n, 0), 99))); }}
+                      placeholder="0"
+                      className="flex h-10 w-full rounded-md border border-border/30 bg-background px-3 py-2 text-lg font-bold text-center text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       data-testid={`edit-exact-home-${data.match_id}`}
                     />
                   </div>
                   <span className="text-xl font-bold text-muted-foreground pt-5">-</span>
                   <div className="flex-1 text-center">
                     <label className="text-xs text-muted-foreground block mb-1 truncate">{match.awayTeam.name}</label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="20"
+                    <input
+                      type="text" inputMode="numeric" pattern="[0-9]*"
                       value={editAwayScore}
-                      onChange={e => setEditAwayScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-                      className="h-10 text-lg font-bold text-center"
+                      onChange={e => { const v = e.target.value; if (v === '') { setEditAwayScore(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setEditAwayScore(String(Math.min(Math.max(n, 0), 99))); }}
+                      placeholder="0"
+                      className="flex h-10 w-full rounded-md border border-border/30 bg-background px-3 py-2 text-lg font-bold text-center text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       data-testid={`edit-exact-away-${data.match_id}`}
                     />
                   </div>
@@ -593,7 +602,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
                     className="bg-amber-500 hover:bg-amber-500/90 text-white gap-1.5 h-9 text-sm"
                   >
                     {isSavingExactScore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                    {(editHomeScore !== exactScore?.home_score || editAwayScore !== exactScore?.away_score) ? 'Update Score' : 'No Change'}
+                    {((editHomeScore === '' ? 0 : parseInt(editHomeScore, 10)) !== exactScore?.home_score || (editAwayScore === '' ? 0 : parseInt(editAwayScore, 10)) !== exactScore?.away_score) ? 'Update Score' : 'No Change'}
                   </Button>
                   <Button
                     onClick={handleCancelEdit}

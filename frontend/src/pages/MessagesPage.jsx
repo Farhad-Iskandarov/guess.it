@@ -93,6 +93,7 @@ const ChatMatchCardWrapper = memo(({ matchData }) => {
   const [userVote, setUserVote] = useState(null);
   const [matchState, setMatchState] = useState(null);
   const [exactScorePrediction, setExactScorePrediction] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const matchId = matchData?.match_id || matchData?.id;
 
@@ -171,6 +172,42 @@ const ChatMatchCardWrapper = memo(({ matchData }) => {
     if (res.ok) setExactScorePrediction({ home_score: homeScore, away_score: awayScore });
   };
 
+  // Guess It: confirms the current vote
+  const handleGuessIt = async () => {
+    if (!userVote || !matchId || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/predictions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ match_id: matchId, prediction: userVote }),
+      });
+      if (res.ok) setUserVote(userVote);
+    } catch (err) { console.error('Guess It failed:', err); }
+    finally { setIsSubmitting(false); }
+  };
+
+  // Remove: deletes both winner prediction and exact score
+  const handleRemove = async () => {
+    if (!matchId || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const promises = [];
+      if (userVote) {
+        promises.push(fetch(`${API_URL}/api/predictions/match/${matchId}`, { method: 'DELETE', credentials: 'include' }));
+      }
+      if (exactScorePrediction) {
+        promises.push(fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, { method: 'DELETE', credentials: 'include' }));
+      }
+      await Promise.all(promises);
+      setUserVote(null);
+      setExactScorePrediction(null);
+    } catch (err) { console.error('Remove prediction failed:', err); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const isMatchLocked = matchState?.status === 'FINISHED' || matchState?.status === 'LIVE' || matchState?.status === 'IN_PLAY';
+  const hasPrediction = !!userVote || !!exactScorePrediction;
+
   if (!matchState) {
     const homeName = matchData?.homeTeam?.name || matchData?.home_team || '';
     const awayName = matchData?.awayTeam?.name || matchData?.away_team || '';
@@ -205,14 +242,76 @@ const ChatMatchCardWrapper = memo(({ matchData }) => {
         friendsOnMatch={[]}
         isAuthenticated={!!user}
       />
+
+      {/* Guess It + Remove buttons — main visible area, not inside Advance */}
+      {user && !isMatchLocked && (
+        <div className="flex gap-2.5 mt-2" data-testid="chat-card-action-buttons">
+          <button
+            onClick={handleGuessIt}
+            disabled={isSubmitting || !userVote}
+            data-testid="chat-guess-it-btn"
+            className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 border ${
+              userVote
+                ? 'bg-primary hover:bg-primary/90 border-primary text-primary-foreground hover:scale-[1.01] active:scale-[0.99]'
+                : 'bg-secondary/30 border-border/30 text-muted-foreground opacity-50 cursor-not-allowed'
+            }`}
+          >
+            {isSubmitting ? '...' : userVote ? 'GUESS IT' : 'Select to Guess'}
+          </button>
+          <button
+            onClick={handleRemove}
+            disabled={isSubmitting || !hasPrediction}
+            data-testid="chat-remove-btn"
+            className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 border ${
+              hasPrediction
+                ? 'bg-transparent border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50'
+                : 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
+            }`}
+          >
+            Remove
+          </button>
+        </div>
+      )}
+
+      {/* Status indicator when prediction exists */}
+      {hasPrediction && !isMatchLocked && (
+        <div className="flex items-center gap-2 text-[10px] mt-1.5 px-1">
+          {userVote && (
+            <span className="text-emerald-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Pick: {userVote === 'home' ? '1' : userVote === 'draw' ? 'X' : '2'}
+            </span>
+          )}
+          {exactScorePrediction && (
+            <span className="text-amber-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Exact: {exactScorePrediction.home_score}-{exactScorePrediction.away_score}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 });
 ChatMatchCardWrapper.displayName = 'ChatMatchCardWrapper';
 
-/* ─────── Conversation Item ─────── */
-const ConversationItem = memo(({ convo, isActive, onClick }) => {
-  const initials = (convo.nickname || 'U').charAt(0).toUpperCase();
+/* ─────── Shared Match Card ─────── */
+const SharedMatchCard = memo(({ matchData, isMine }) => {
+  const [loaded, setLoaded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [savedPrediction, setSavedPrediction] = useState(null);
+  const [selectedVote, setSelectedVote] = useState(null);
+  const [exactScoreLocked, setExactScoreLocked] = useState(false);
+  const [homeScoreInput, setHomeScoreInput] = useState('');
+  const [awayScoreInput, setAwayScoreInput] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAdvance, setShowAdvance] = useState(false);
+
+  const matchId = matchData?.match_id || matchData?.id;
+  const homeName = matchData?.homeTeam?.name || matchData?.home_team || '';
+  const awayName = matchData?.awayTeam?.name || matchData?.away_team || '';
+  const isLocked = matchData?.status === 'IN_PLAY' || matchData?.status === 'LIVE' || matchData?.status === 'FINISHED';
+
   const loadExisting = async () => {
     if (loaded || !matchId) return;
     try {
@@ -226,8 +325,8 @@ const ConversationItem = memo(({ convo, isActive, onClick }) => {
       }
       if (exactRes?.home_score !== undefined && exactRes?.home_score !== null) {
         setExactScoreLocked(true);
-        setHomeScoreInput(exactRes.home_score);
-        setAwayScoreInput(exactRes.away_score);
+        setHomeScoreInput(String(exactRes.home_score));
+        setAwayScoreInput(String(exactRes.away_score));
       }
     } catch (err) { console.error('Load predictions failed:', err); }
     setLoaded(true);
@@ -259,13 +358,15 @@ const ConversationItem = memo(({ convo, isActive, onClick }) => {
   // Lock exact score prediction
   const handleLockExactScore = async () => {
     if (!matchId || isLocked || savedPrediction) return;
+    const h = homeScoreInput === '' ? 0 : parseInt(homeScoreInput, 10);
+    const a = awayScoreInput === '' ? 0 : parseInt(awayScoreInput, 10);
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API_URL}/api/predictions/exact-score`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ match_id: matchId, home_score: homeScoreInput, away_score: awayScoreInput }),
+        body: JSON.stringify({ match_id: matchId, home_score: h, away_score: a }),
       });
       if (res.ok) setExactScoreLocked(true);
     } catch (err) { console.error('Exact score failed:', err); }
@@ -470,9 +571,11 @@ const ConversationItem = memo(({ convo, isActive, onClick }) => {
                         <div className="flex-1 text-center">
                           <p className="text-[9px] text-muted-foreground mb-1 truncate">{homeName}</p>
                           <input
-                            type="number" min="0" max="20" value={homeScoreInput}
-                            onChange={(e) => setHomeScoreInput(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground focus:outline-none focus:border-amber-500/50"
+                            type="text" inputMode="numeric" pattern="[0-9]*"
+                            value={homeScoreInput}
+                            onChange={(e) => { const v = e.target.value; if (v === '') { setHomeScoreInput(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setHomeScoreInput(String(Math.min(Math.max(n, 0), 99))); }}
+                            placeholder="0"
+                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             data-testid="chat-exact-home"
                           />
                         </div>
@@ -480,9 +583,11 @@ const ConversationItem = memo(({ convo, isActive, onClick }) => {
                         <div className="flex-1 text-center">
                           <p className="text-[9px] text-muted-foreground mb-1 truncate">{awayName}</p>
                           <input
-                            type="number" min="0" max="20" value={awayScoreInput}
-                            onChange={(e) => setAwayScoreInput(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground focus:outline-none focus:border-amber-500/50"
+                            type="text" inputMode="numeric" pattern="[0-9]*"
+                            value={awayScoreInput}
+                            onChange={(e) => { const v = e.target.value; if (v === '') { setAwayScoreInput(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setAwayScoreInput(String(Math.min(Math.max(n, 0), 99))); }}
+                            placeholder="0"
+                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             data-testid="chat-exact-away"
                           />
                         </div>
@@ -595,6 +700,35 @@ ConversationItem.displayName = 'ConversationItem';
 const MessageBubble = memo(({ msg, isMine, privacy, showAvatar, friendPic, friendInitial }) => {
   const isMatchShare = msg.message_type === 'match_share';
 
+  // Match share messages use ChatMatchCardWrapper (same MatchCard as Main Page)
+  if (isMatchShare && msg.match_data) {
+    return (
+      <div className={`flex items-end gap-2 ${isMine ? 'justify-end pl-6' : 'justify-start pr-6'} py-[1px]`}>
+        {!isMine && showAvatar && (
+          <Avatar className="w-7 h-7 flex-shrink-0 mb-1">
+            <AvatarImage src={friendPic} />
+            <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+              {friendInitial}
+            </AvatarFallback>
+          </Avatar>
+        )}
+        {!isMine && !showAvatar && <div className="w-7 flex-shrink-0" />}
+
+        <div className="max-w-[85%] sm:max-w-[90%] relative" data-testid={`message-bubble-${msg.message_id}`}>
+          <ChatMatchCardWrapper matchData={msg.match_data} />
+          <div className="flex items-center justify-end gap-1 mt-1 px-1">
+            <span className="text-[10px] tabular-nums text-muted-foreground/70">
+              {formatTime(msg.created_at)}
+            </span>
+            {isMine && privacy && (
+              <MessageStatus delivered={msg.delivered} read={msg.read} isMine={true} />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex items-end gap-2 ${isMine ? 'justify-end pl-12' : 'justify-start pr-12'} py-[1px]`}>
       {!isMine && showAvatar && (
@@ -615,13 +749,9 @@ const MessageBubble = memo(({ msg, isMine, privacy, showAvatar, friendPic, frien
         }`}
         data-testid={`message-bubble-${msg.message_id}`}
       >
-        {isMatchShare && msg.match_data ? (
-          <SharedMatchCard matchData={msg.match_data} isMine={isMine} />
-        ) : (
-          <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap break-words">
-            {sanitizeDisplay(msg.message)}
-          </p>
-        )}
+        <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap break-words">
+          {sanitizeDisplay(msg.message)}
+        </p>
         <div className="flex items-center justify-end gap-1 mt-1">
           <span className={`text-[10px] tabular-nums ${isMine ? 'text-white/50' : 'text-muted-foreground/70'}`}>
             {formatTime(msg.created_at)}

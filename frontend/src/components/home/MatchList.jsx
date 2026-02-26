@@ -388,8 +388,8 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, onNavigateLogin, onExactScoreSaved, savedPrediction }) => {
   const [activeSection, setActiveSection] = useState('exact-score');
-  const [homeScore, setHomeScore] = useState(0);
-  const [awayScore, setAwayScore] = useState(0);
+  const [homeScore, setHomeScore] = useState('');
+  const [awayScore, setAwayScore] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingPrediction, setExistingPrediction] = useState(null);
   const [smartAdvice, setSmartAdvice] = useState(null);
@@ -409,8 +409,8 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
         .then(pred => {
           if (pred) {
             setExistingPrediction(pred);
-            setHomeScore(pred.home_score);
-            setAwayScore(pred.away_score);
+            setHomeScore(String(pred.home_score));
+            setAwayScore(String(pred.away_score));
           }
         })
         .catch(() => {});
@@ -439,13 +439,15 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
       onNavigateLogin();
       return;
     }
+    const h = homeScore === '' ? 0 : parseInt(homeScore, 10);
+    const a = awayScore === '' ? 0 : parseInt(awayScore, 10);
     setIsSubmitting(true);
     try {
-      await saveExactScorePrediction(match.id, homeScore, awayScore);
-      setExistingPrediction({ home_score: homeScore, away_score: awayScore });
+      await saveExactScorePrediction(match.id, h, a);
+      setExistingPrediction({ home_score: h, away_score: a });
       if (onExactScoreSaved) onExactScoreSaved(match.id);
       toast.success('Exact score prediction saved!', {
-        description: `${match.homeTeam.name} ${homeScore} - ${awayScore} ${match.awayTeam.name}`,
+        description: `${match.homeTeam.name} ${h} - ${a} ${match.awayTeam.name}`,
         duration: 3000
       });
     } catch (error) {
@@ -476,11 +478,6 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
   };
   
   const handleInviteFriend = async (friend) => {
-    if (invitedFriends.has(friend.user_id)) {
-      toast.info('Already invited', { description: `You've already invited ${friend.nickname}` });
-      return;
-    }
-    
     setInvitingFriend(friend.user_id);
     try {
       const response = await fetch(`${API_URL}/api/friends/invite/match`, {
@@ -506,11 +503,20 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
       });
       
       if (response.ok) {
+        // Briefly show "Sent!" then reset so user can send again
         setInvitedFriends(prev => new Set([...prev, friend.user_id]));
         toast.success('Invitation sent!', {
           description: `${friend.nickname} will receive a notification`,
           duration: 3000
         });
+        // Reset after brief delay so button becomes clickable again
+        setTimeout(() => {
+          setInvitedFriends(prev => {
+            const next = new Set(prev);
+            next.delete(friend.user_id);
+            return next;
+          });
+        }, 1500);
       } else {
         const error = await response.json();
         toast.error('Failed to invite', { description: error.detail || 'Please try again' });
@@ -609,26 +615,24 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                     <div className="flex items-center gap-4">
                       <div className="flex-1 text-center">
                         <label className="text-xs text-muted-foreground block mb-1 truncate">{match.homeTeam.name}</label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="20"
+                        <input
+                          type="text" inputMode="numeric" pattern="[0-9]*"
                           value={homeScore}
-                          onChange={e => setHomeScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-                          className="h-12 text-xl font-bold text-center"
+                          onChange={e => { const v = e.target.value; if (v === '') { setHomeScore(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setHomeScore(String(Math.min(Math.max(n, 0), 99))); }}
+                          placeholder="0"
+                          className="flex h-12 w-full rounded-md border border-border/30 bg-background px-3 py-2 text-xl font-bold text-center text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           data-testid="modal-exact-home"
                         />
                       </div>
                       <span className="text-2xl font-bold text-muted-foreground pt-5">-</span>
                       <div className="flex-1 text-center">
                         <label className="text-xs text-muted-foreground block mb-1 truncate">{match.awayTeam.name}</label>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="20"
+                        <input
+                          type="text" inputMode="numeric" pattern="[0-9]*"
                           value={awayScore}
-                          onChange={e => setAwayScore(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-                          className="h-12 text-xl font-bold text-center"
+                          onChange={e => { const v = e.target.value; if (v === '') { setAwayScore(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setAwayScore(String(Math.min(Math.max(n, 0), 99))); }}
+                          placeholder="0"
+                          className="flex h-12 w-full rounded-md border border-border/30 bg-background px-3 py-2 text-xl font-bold text-center text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           data-testid="modal-exact-away"
                         />
                       </div>
@@ -840,18 +844,20 @@ const MatchRow = memo(({
   onToggleFavoriteMatch,
   hasExactScore,
 }) => {
+  const navigate = useNavigate();
   const displayedSelection = currentSelection !== undefined ? currentSelection : savedPrediction;
   const isLocked = match.predictionLocked;
 
   const getMostPicked = () => {
     const v = match.votes;
+    if (match.totalVotes === 0) return null;
     if (v.home.percentage >= v.draw.percentage && v.home.percentage >= v.away.percentage) return 'home';
     if (v.draw.percentage >= v.home.percentage && v.draw.percentage >= v.away.percentage) return 'draw';
     return 'away';
   };
 
   const mostPicked = getMostPicked();
-  const mostPickedLabel =
+  const mostPickedLabel = !mostPicked ? '-' :
     mostPicked === 'home' ? match.homeTeam.shortName || 'Home' : mostPicked === 'away' ? match.awayTeam.shortName || 'Away' : 'Draw';
 
   const isCurrentSaved = savedPrediction && savedPrediction === displayedSelection;
@@ -910,8 +916,12 @@ const MatchRow = memo(({
       {/* ======= LIST VIEW LAYOUT ======= */}
       <div className="match-row-list-layout">
         <div className="flex items-center gap-3 md:gap-4">
-          {/* Left: Team names */}
-          <div className="flex flex-col gap-0 min-w-0 flex-1">
+          {/* Left: Team names — clickable to open match detail */}
+          <div
+            className="flex flex-col gap-0 min-w-0 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => navigate(`/match/${match.id}`)}
+            data-testid={`match-card-link-${match.id}`}
+          >
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-home">1</span>
               <TeamCrest team={match.homeTeam} />
@@ -971,7 +981,11 @@ const MatchRow = memo(({
         <div className="space-y-2.5">
           {/* Teams + Score row */}
           <div className="flex items-center">
-            <div className="flex flex-col gap-0 min-w-0 flex-1">
+            <div
+              className="flex flex-col gap-0 min-w-0 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => navigate(`/match/${match.id}`)}
+              data-testid={`match-grid-link-${match.id}`}
+            >
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-home">1</span>
                 <TeamCrest team={match.homeTeam} />

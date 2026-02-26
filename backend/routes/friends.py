@@ -706,7 +706,7 @@ async def invite_friend_to_match(
     """
     Invite a friend to predict on a specific match.
     Creates both a notification and a chat message.
-    Prevents duplicate invitations for the same match.
+    Allows sending the same match card multiple times.
     """
     user = await get_current_user(request, db)
     
@@ -719,15 +719,6 @@ async def invite_friend_to_match(
     })
     if not friendship:
         raise HTTPException(status_code=403, detail="You can only invite friends")
-    
-    # Check for existing invitation for this match from this user
-    existing = await db.match_invitations.find_one({
-        "sender_id": user["user_id"],
-        "receiver_id": data.friend_user_id,
-        "match_id": data.match_id
-    })
-    if existing:
-        raise HTTPException(status_code=400, detail="You have already invited this friend to this match")
     
     # Create invitation record
     import uuid

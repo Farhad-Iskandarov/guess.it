@@ -225,6 +225,9 @@ yarn start
 ### Prediction System
 - **Winner Predictions (1/X/2)** - Predict match winners for points
 - **Exact Score Predictions** - Predict exact final scores for +50 bonus points
+  - Clean numeric input (no browser arrows, no forced `0` default)
+  - Leading zeros auto-stripped (`02` → `2`, `00` → `0`)
+  - Consistent design across all pages: Main Page, Chat, Match Detail, My Predictions
 - **Configurable Points System** - Admin can configure all point values dynamically
 - **My Predictions Page** - View, edit, remove all predictions before match starts
 - **Automatic Level System** - User levels auto-calculate based on point thresholds (0, 100, 120, 200, 250, 350, 500, 750, 1000, 1500, 2000). Levels sync instantly after gifted or earned points.
@@ -254,8 +257,19 @@ yarn start
 
 ### Chat & Social
 - Real-time messaging with friends
-- Expandable match cards in chat with full prediction UI
-- Invite friends to guess via match card sharing
+- Expandable match cards in chat with full prediction UI (Guess It, Remove, Exact Score)
+- Invite friends to guess via match card sharing (unlimited re-sends allowed)
+- Match cards in chat use the same MatchCard design as the main page
+
+### Match Detail Page
+- Full match center page (`/match/:matchId`) — mini ESPN-style experience
+- Large team logos, big score or VS indicator, status badges (Upcoming/LIVE/FT)
+- Vote buttons (1/X/2) with vote counts, percentages, and progress bars
+- Guess It, Remove, and Lock Exact Score — all directly visible
+- Advanced section: Invite Friend + Share Match Link
+- League Standings table: Top 10 teams with home/away teams highlighted
+- Scroll-to-top on every navigation for fresh page feel
+- Clickable match cards on Homepage and My Predictions page navigate to detail
 
 ---
 
@@ -330,6 +344,7 @@ yarn start
 │   │   │   ├── AdminLoginPage.jsx     # Admin login
 │   │   │   ├── AdminPage.jsx          # Admin dashboard (all tabs)
 │   │   │   ├── MyPredictionsPage.jsx  # User predictions with exact score
+│   │   │   ├── MatchDetailPage.jsx    # Match center (vote, predict, standings)
 │   │   │   ├── SubscribePage.jsx      # Premium subscription plans
 │   │   │   ├── NewsPage.jsx           # News list
 │   │   │   ├── NewsArticlePage.jsx    # Article detail

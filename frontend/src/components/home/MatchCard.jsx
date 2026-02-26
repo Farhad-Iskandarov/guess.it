@@ -81,6 +81,13 @@ const ExactScoreInput = ({
   homeTeamName,
   awayTeamName
 }) => {
+  const parseScore = (val) => {
+    if (val === '' || val === undefined || val === null) return '';
+    const num = parseInt(val, 10);
+    if (isNaN(num)) return '';
+    return String(Math.min(Math.max(num, 0), 99));
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -95,13 +102,12 @@ const ExactScoreInput = ({
         {/* Home Score */}
         <div className="flex-1">
           <label className="text-[10px] text-muted-foreground mb-1 block truncate">{homeTeamName}</label>
-          <Input
-            type="number"
-            min="0"
-            max="20"
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*"
             value={homeScore}
-            onChange={(e) => onHomeScoreChange(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-            className="h-10 text-center text-lg font-bold bg-secondary/50"
+            onChange={(e) => onHomeScoreChange(parseScore(e.target.value))}
+            placeholder="0"
+            className="flex h-10 w-full rounded-md border border-border/30 bg-secondary/50 px-3 py-2 text-center text-lg font-bold text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             data-testid="exact-score-home"
             disabled={hasExactScore}
           />
@@ -112,13 +118,12 @@ const ExactScoreInput = ({
         {/* Away Score */}
         <div className="flex-1">
           <label className="text-[10px] text-muted-foreground mb-1 block truncate">{awayTeamName}</label>
-          <Input
-            type="number"
-            min="0"
-            max="20"
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*"
             value={awayScore}
-            onChange={(e) => onAwayScoreChange(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
-            className="h-10 text-center text-lg font-bold bg-secondary/50"
+            onChange={(e) => onAwayScoreChange(parseScore(e.target.value))}
+            placeholder="0"
+            className="flex h-10 w-full rounded-md border border-border/30 bg-secondary/50 px-3 py-2 text-center text-lg font-bold text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             data-testid="exact-score-away"
             disabled={hasExactScore}
           />
@@ -137,7 +142,7 @@ const ExactScoreInput = ({
         </Button>
       ) : (
         <div className="text-center py-2 text-sm text-emerald-500 font-medium">
-          ✓ Exact score prediction locked
+          Exact score prediction locked
         </div>
       )}
       
@@ -228,7 +233,11 @@ const InviteFriend = ({ matchId, match }) => {
         })
       });
       if (res.ok) {
+        // Briefly show "Sent!" then reset so user can send again
         setSentTo(prev => [...prev, friend.user_id]);
+        setTimeout(() => {
+          setSentTo(prev => prev.filter(id => id !== friend.user_id));
+        }, 1500);
       }
     } catch (err) { console.error(err); }
     finally { setSending(null); }
@@ -358,8 +367,8 @@ export const MatchCard = ({
   isAuthenticated = false
 }) => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [homeScoreInput, setHomeScoreInput] = useState(0);
-  const [awayScoreInput, setAwayScoreInput] = useState(0);
+  const [homeScoreInput, setHomeScoreInput] = useState('');
+  const [awayScoreInput, setAwayScoreInput] = useState('');
   const [isSubmittingExact, setIsSubmittingExact] = useState(false);
   const [smartAdvice, setSmartAdvice] = useState(null);
   const [isLoadingAdvice, setIsLoadingAdvice] = useState(false);
@@ -379,6 +388,8 @@ export const MatchCard = ({
 
   const getMostPicked = () => {
     const votes = match.votes;
+    // Don't highlight any button when there are no votes
+    if (match.totalVotes === 0) return null;
     if (votes.home.percentage >= votes.draw.percentage && votes.home.percentage >= votes.away.percentage) {
       return 'home';
     }
@@ -396,10 +407,11 @@ export const MatchCard = ({
   // Handle exact score submission
   const handleExactScoreSubmit = async () => {
     if (!onExactScoreSubmit) return;
-    
+    const h = homeScoreInput === '' ? 0 : parseInt(homeScoreInput, 10);
+    const a = awayScoreInput === '' ? 0 : parseInt(awayScoreInput, 10);
     setIsSubmittingExact(true);
     try {
-      await onExactScoreSubmit(match.id, homeScoreInput, awayScoreInput);
+      await onExactScoreSubmit(match.id, h, a);
     } finally {
       setIsSubmittingExact(false);
     }

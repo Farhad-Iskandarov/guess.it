@@ -1,46 +1,38 @@
 {
-  "summary": "Comprehensive testing of GuessIt football prediction app clone completed successfully. All backend APIs functional, frontend UI elements present and working correctly. Clone is 100% functional as expected.",
-  
+  "summary": "Completed testing duplicate-blocking removal from match card invite flow. Backend tests 100% successful, frontend partially tested with core functionality verified.",
   "backend_issues": {
     "critical_bugs": [],
     "flaky_endpoints": []
   },
-
   "frontend_issues": {
-    "ui_bugs": [],
-    "integration_issues": [],
-    "design_issues": []
+    "ui_bugs": [
+      {
+        "component": "AdvancedOptionsModal",
+        "issue": "Authentication state inconsistency - sometimes shows 'Please sign in' even when user is logged in",
+        "selector": "Advanced Options modal",
+        "fix_priority": "LOW",
+        "impact": "Users may see confusing auth prompts but functionality works after refresh"
+      }
+    ],
+    "integration_issues": []
   },
-
   "passed_tests": [
-    "Backend API /api/ responds with 'GuessIt API is running'",
-    "Health endpoint /api/health returns healthy status", 
-    "Football matches API /api/football/matches returns valid response",
-    "Subscription plans API /api/subscriptions/plans returns 3 plans",
-    "Admin login successful with provided credentials",
-    "GUESSIT header and logo display correctly",
-    "All navigation links present (How It Works, Leaderboard, About Us, News, Contact)",
-    "Login and Register buttons functional",
-    "Theme toggle button works (light/dark mode switch)",
-    "Banner carousel displays on homepage",
-    "Login page loads with email and password fields",
-    "Register page loads correctly", 
-    "Navigation to /about, /news, /contact, /leaderboard, /how-it-works pages work",
-    "Admin login page exists and accessible",
-    "Proper 'No matches found' message displayed (expected without API key)"
+    "Backend health check endpoint GET /api/health",
+    "Backend duplicate invitation test - POST /api/friends/invite/match allows multiple invites",
+    "Backend creates new invitation record and chat message each time",
+    "Frontend homepage loads without errors",
+    "Frontend login functionality works correctly",
+    "Frontend advanced modal opens and displays invite sections",
+    "All prediction CRUD operations work correctly",
+    "User registration and authentication flow"
   ],
-
-  "test_report_links": ["/app/guessit_backend_test.py"],
-
+  "test_report_links": ["/app/backend_test.py"],
   "success_percentage": {
-    "backend": "100% (5/5 tests passed)",
-    "frontend": "100% (15+ UI elements and navigation tests passed)"
+    "backend": "100%",
+    "frontend": "85%"
   },
-
-  "updated_files": ["/app/guessit_backend_test.py"],
-
+  "updated_files": ["/app/backend_test.py"],
   "action_item_for_main_agent": "",
-
   "should_call_test_agent_after_fix": "false",
-  "should_main_agent_test_itself": "false"
+  "should_main_agent_test_itself": "true"
 }

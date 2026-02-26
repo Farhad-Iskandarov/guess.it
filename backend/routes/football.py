@@ -15,6 +15,17 @@ from services.football_api import (
     get_upcoming_matches,
     get_competition_matches,
     get_available_competitions,
+    get_match_by_id,
+    _get_active_config,
+    _detect_provider,
+    _normalize_base_url,
+    _http_get,
+    _enrich_with_votes,
+    _get_vote_counts,
+    PROVIDER_FDO,
+    AFS_LEAGUE_IDS,
+    COMPETITION_CODES,
+    cache,
 )
 
 logger = logging.getLogger(__name__)
@@ -329,3 +340,120 @@ async def ended_matches(
     finished.sort(key=lambda m: m.get("utcDate", ""), reverse=True)
 
     return {"matches": finished, "total": len(finished)}
+
+
+
+@router.get("/match/{match_id}")
+async def get_single_match(
+    match_id: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Get a single match by ID, enriched with vote counts."""
+    match = await get_match_by_id(db, match_id)
+    if not match:
+        # Try finding it in the cached matches list
+        today = datetime.now(timezone.utc)
+        date_from = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+        date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+        all_matches = await get_matches(db, date_from, date_to)
+        match = next((m for m in all_matches if m.get("id") == match_id), None)
+
+    if not match:
+        return {"match": None}
+
+    # Enrich with votes
+    vote_counts = await _get_vote_counts(db, [match_id])
+    match = _enrich_with_votes(match, vote_counts)
+
+    return {"match": match}
+
+
+@router.get("/standings/{competition_code}")
+async def get_standings(
+    competition_code: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Get league standings for a competition."""
+    cache_key = f"standings:{competition_code}"
+    cached = await cache.get(cache_key, 3600)
+    if cached is not None:
+        return {"standings": cached, "competition": competition_code}
+
+    config = await _get_active_config(db)
+    provider = _detect_provider(config.get("base_url", ""))
+
+    standings = []
+
+    if provider == PROVIDER_FDO:
+        base_url = _normalize_base_url(config.get("base_url", "https://api.football-data.org/v4"))
+        api_key = config.get("api_key", "")
+        data = await _http_get(
+            f"{base_url}/competitions/{competition_code}/standings",
+            {"X-Auth-Token": api_key}
+        )
+        if data and "standings" in data:
+            for table in data["standings"]:
+                if table.get("type") == "TOTAL":
+                    for entry in table.get("table", []):
+                        standings.append({
+                            "position": entry.get("position"),
+                            "team": entry.get("team", {}).get("name", ""),
+                            "teamCrest": entry.get("team", {}).get("crest", ""),
+                            "teamId": entry.get("team", {}).get("id"),
+                            "played": entry.get("playedGames", 0),
+                            "won": entry.get("won", 0),
+                            "draw": entry.get("draw", 0),
+                            "lost": entry.get("lost", 0),
+                            "goalsFor": entry.get("goalsFor", 0),
+                            "goalsAgainst": entry.get("goalsAgainst", 0),
+                            "goalDifference": entry.get("goalDifference", 0),
+                            "points": entry.get("points", 0),
+                        })
+                    break
+    else:
+        league_id = AFS_LEAGUE_IDS.get(competition_code)
+        if league_id:
+            base_url = config.get("base_url", "https://v3.football.api-sports.io").rstrip("/")
+            api_key = config.get("api_key", "")
+            current_year = datetime.now(timezone.utc).year
+            data = await _http_get(
+                f"{base_url}/standings",
+                {"x-apisports-key": api_key},
+                {"league": league_id, "season": current_year}
+            )
+            # Try previous year if current returns empty
+            responses = data.get("response", [])
+            if not responses:
+                data = await _http_get(
+                    f"{base_url}/standings",
+                    {"x-apisports-key": api_key},
+                    {"league": league_id, "season": current_year - 1}
+                )
+                responses = data.get("response", [])
+
+            if responses:
+                league_data = responses[0].get("league", {})
+                for standing_group in league_data.get("standings", []):
+                    for entry in standing_group:
+                        team = entry.get("team", {})
+                        all_stats = entry.get("all", {})
+                        standings.append({
+                            "position": entry.get("rank"),
+                            "team": team.get("name", ""),
+                            "teamCrest": team.get("logo", ""),
+                            "teamId": team.get("id"),
+                            "played": all_stats.get("played", 0),
+                            "won": all_stats.get("win", 0),
+                            "draw": all_stats.get("draw", 0),
+                            "lost": all_stats.get("lose", 0),
+                            "goalsFor": all_stats.get("goals", {}).get("for", 0),
+                            "goalsAgainst": all_stats.get("goals", {}).get("against", 0),
+                            "goalDifference": entry.get("goalsDiff", 0),
+                            "points": entry.get("points", 0),
+                        })
+                    break
+
+    if standings:
+        await cache.set(cache_key, standings)
+
+    return {"standings": standings, "competition": competition_code}

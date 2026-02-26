@@ -23,6 +23,7 @@ import { NewsPage } from "@/pages/NewsPage";
 import { NewsArticlePage } from "@/pages/NewsArticlePage";
 import { ContactPage } from "@/pages/ContactPage";
 import { SubscriptionPage, SubscriptionSuccess } from "@/pages/SubscriptionPage";
+import { MatchDetailPage } from "@/pages/MatchDetailPage";
 import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -226,6 +227,7 @@ function AppRouter() {
       <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
       <Route path="/subscribe" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
       <Route path="/subscribe/success" element={<ProtectedRoute><SubscriptionSuccess /></ProtectedRoute>} />
+      <Route path="/match/:matchId" element={<PublicLayout><MatchDetailPage /></PublicLayout>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
