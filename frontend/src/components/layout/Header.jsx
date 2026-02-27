@@ -79,11 +79,11 @@ const LevelPopover = memo(({ userLevel, userPoints }) => {
     <div className="relative" ref={popoverRef}>
       <button
         onClick={() => setOpen(prev => !prev)}
-        className="flex items-center gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-secondary border border-border hover:border-primary/40 hover:bg-secondary/80 transition-all duration-200 cursor-pointer"
+        className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-secondary border border-border hover:border-primary/40 hover:bg-secondary/80 transition-all duration-200 cursor-pointer"
         data-testid="header-level-badge"
       >
         <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
-        <span className="text-sm sm:text-base font-semibold text-foreground whitespace-nowrap leading-[0.5rem]">Level {userLevel}</span>
+        <span className="text-xs sm:text-base font-semibold text-foreground whitespace-nowrap leading-[0.5rem]">Level {userLevel}</span>
       </button>
       {open && (
         <div
@@ -559,7 +559,7 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, onMat
           </nav>
 
           {/* Right side */}
-          <div className="flex items-center gap-1 md:gap-2">
+          <div className="flex items-center gap-0.5 sm:gap-1 md:gap-2 min-w-0 flex-shrink-0">
             {/* Global Search */}
             <GlobalSearch onMatchSelect={handleMatchSelect} />
 
@@ -585,7 +585,7 @@ export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, onMat
                     size="icon"
                     onClick={toggleTheme}
                     data-testid="theme-toggle"
-                    className="w-10 h-10 rounded-full bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
                     aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                   >
                     {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5 text-yellow-400" />}

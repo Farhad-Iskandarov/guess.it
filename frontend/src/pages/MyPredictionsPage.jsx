@@ -691,30 +691,73 @@ EmptyState.displayName = 'EmptyState';
 
 // ============ Loading Skeleton ============
 const LoadingSkeleton = () => (
-  <div className="space-y-4" data-testid="loading-skeleton">
-    {[...Array(3)].map((_, i) => (
-      <div key={i} className="bg-card rounded-xl border border-border/50 p-5 animate-pulse">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="h-5 w-16 bg-muted rounded-full" />
-          <div className="h-4 w-24 bg-muted rounded" />
-          <div className="h-4 w-32 bg-muted rounded" />
+  <div className="space-y-6" data-testid="loading-skeleton">
+    {/* Summary cards skeleton */}
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="flex items-center gap-3 bg-card rounded-xl p-4 border border-border/50">
+          <div className="w-10 h-10 rounded-lg skeleton-bone flex-shrink-0" />
+          <div className="space-y-2 flex-1">
+            <div className="h-6 w-10 skeleton-bone rounded" />
+            <div className="h-3 w-14 skeleton-bone rounded" />
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex-1 space-y-3">
+      ))}
+    </div>
+    {/* Search + filter skeleton */}
+    <div className="space-y-4">
+      <div className="h-10 w-full skeleton-bone rounded-lg" />
+      <div className="flex items-center gap-2">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="h-9 w-20 skeleton-bone rounded-lg" />
+        ))}
+      </div>
+    </div>
+    {/* Prediction cards skeleton */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="bg-card rounded-xl border border-border/50 overflow-hidden">
+          {/* League name */}
+          <div className="px-5 pt-3 pb-0">
+            <div className="h-3 w-32 skeleton-bone" />
+          </div>
+          {/* Meta bar */}
+          <div className="flex items-center justify-between px-5 pt-2 pb-2">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-muted rounded-full" />
-              <div className="h-4 w-40 bg-muted rounded" />
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-muted rounded-full" />
-              <div className="h-4 w-36 bg-muted rounded" />
+              <div className="h-5 w-16 skeleton-bone rounded-full" />
+              <div className="h-3 w-20 skeleton-bone" />
             </div>
           </div>
-          <div className="h-10 w-16 bg-muted rounded" />
-          <div className="h-10 w-24 bg-muted rounded-lg" />
+          {/* Match content */}
+          <div className="px-5 py-3">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-2 flex-1">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-3 h-3 skeleton-bone" />
+                  <div className="w-7 h-7 skeleton-bone-circle" />
+                  <div className="h-4 w-28 skeleton-bone" />
+                </div>
+                <div className="pl-6">
+                  <div className="h-3 w-5 skeleton-bone" />
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-3 h-3 skeleton-bone" />
+                  <div className="w-7 h-7 skeleton-bone-circle" />
+                  <div className="h-4 w-24 skeleton-bone" />
+                </div>
+              </div>
+              <div className="h-10 w-16 skeleton-bone rounded" />
+              <div className="h-10 w-28 skeleton-bone rounded-lg" />
+            </div>
+          </div>
+          {/* Footer */}
+          <div className="flex items-center justify-between px-5 py-2.5 border-t border-border/20">
+            <div className="h-3 w-32 skeleton-bone" />
+            <div className="h-3 w-20 skeleton-bone" />
+          </div>
         </div>
-      </div>
-    ))}
+      ))}
+    </div>
   </div>
 );
 
@@ -1092,7 +1135,7 @@ export const MyPredictionsPage = () => {
         ) : (
           <div
             key={`${summaryFilter}-${activeFilter}`}
-            className={`predictions-list-container view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'} ${
+            className={`predictions-list-container content-fade-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'} ${
               viewMode === 'grid'
                 ? 'grid grid-cols-1 md:grid-cols-2 gap-3'
                 : 'space-y-3'

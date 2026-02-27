@@ -219,15 +219,30 @@ SectionHeader.displayName = 'SectionHeader';
 
 // ============ Loading Skeleton ============
 const ProfileSkeleton = () => (
-  <div className="space-y-6 animate-pulse" data-testid="profile-skeleton">
+  <div className="space-y-6" data-testid="profile-skeleton">
     {/* Header skeleton */}
-    <div className="bg-card rounded-xl border border-border/50 p-6">
+    <div className="bg-card rounded-2xl border border-border/50 p-6 sm:p-8 overflow-hidden">
       <div className="flex flex-col sm:flex-row items-center gap-6">
-        <div className="w-24 h-24 rounded-full bg-muted" />
-        <div className="flex-1 text-center sm:text-left space-y-3">
-          <div className="h-6 w-32 bg-muted rounded mx-auto sm:mx-0" />
-          <div className="h-4 w-48 bg-muted rounded mx-auto sm:mx-0" />
-          <div className="h-3 w-24 bg-muted rounded mx-auto sm:mx-0" />
+        <div className="relative">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full skeleton-bone" />
+          <div className="absolute -bottom-1 -right-1 w-10 h-5 rounded-full skeleton-bone" />
+        </div>
+        <div className="flex-1 text-center sm:text-left space-y-3 w-full">
+          <div className="h-7 w-40 skeleton-bone mx-auto sm:mx-0" />
+          <div className="h-4 w-52 skeleton-bone mx-auto sm:mx-0" />
+          <div className="space-y-2 max-w-xs mx-auto sm:mx-0">
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-16 skeleton-bone" />
+              <div className="h-3 w-14 skeleton-bone" />
+            </div>
+            <div className="h-2 w-full skeleton-bone rounded-full" />
+            <div className="h-3 w-28 skeleton-bone" />
+          </div>
+          <div className="h-3 w-24 skeleton-bone mx-auto sm:mx-0 mt-3" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="h-9 w-24 skeleton-bone rounded-md" />
+          <div className="h-9 w-24 skeleton-bone rounded-md" />
         </div>
       </div>
     </div>
@@ -235,11 +250,73 @@ const ProfileSkeleton = () => (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {[...Array(4)].map((_, i) => (
         <div key={i} className="bg-card rounded-xl border border-border/50 p-5 flex flex-col items-center">
-          <div className="w-12 h-12 rounded-xl bg-muted mb-3" />
-          <div className="h-7 w-12 bg-muted rounded" />
-          <div className="h-4 w-16 bg-muted rounded mt-2" />
+          <div className="w-12 h-12 rounded-xl skeleton-bone mb-3" />
+          <div className="h-8 w-14 skeleton-bone rounded" />
+          <div className="h-4 w-20 skeleton-bone rounded mt-2" />
         </div>
       ))}
+    </div>
+    {/* Two column skeleton */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-6">
+        {/* Recent Activity */}
+        <div className="bg-card rounded-xl border border-border/50 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg skeleton-bone" />
+            <div className="h-5 w-28 skeleton-bone" />
+          </div>
+          <div className="space-y-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-border/30">
+                <div className="w-8 h-8 rounded-lg skeleton-bone flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-3/4 skeleton-bone" />
+                  <div className="h-3 w-1/2 skeleton-bone" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="space-y-6">
+        {/* Achievements */}
+        <div className="bg-card rounded-xl border border-border/50 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg skeleton-bone" />
+            <div className="h-5 w-28 skeleton-bone" />
+          </div>
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-border/30">
+                <div className="w-10 h-10 rounded-lg skeleton-bone flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-24 skeleton-bone" />
+                  <div className="h-3 w-36 skeleton-bone" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Performance */}
+        <div className="bg-card rounded-xl border border-border/50 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg skeleton-bone" />
+            <div className="h-5 w-28 skeleton-bone" />
+          </div>
+          <div className="flex items-center justify-center py-4">
+            <div className="w-32 h-32 rounded-full skeleton-bone" />
+          </div>
+          <div className="h-px w-full skeleton-bone my-4" />
+          <div className="grid grid-cols-3 gap-3 text-center">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex flex-col items-center gap-1">
+                <div className="h-6 w-8 skeleton-bone" />
+                <div className="h-3 w-12 skeleton-bone" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 );
@@ -356,7 +433,7 @@ export const ProfilePage = () => {
       <main className="container mx-auto px-4 md:px-6 py-8 max-w-4xl">
         {/* ===== Profile Header Card ===== */}
         <div 
-          className="relative overflow-hidden bg-card rounded-2xl border border-border/50 p-6 sm:p-8 mb-6 animate-fade-in"
+          className="relative overflow-hidden bg-card rounded-2xl border border-border/50 p-6 sm:p-8 mb-6 content-fade-in"
           style={{ animationDelay: '0s' }}
           data-testid="profile-header"
         >

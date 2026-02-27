@@ -82,16 +82,7 @@ export const AboutPage = () => {
         </div>
       </div>
 
-      {/* Technology */}
-      <div className="bg-gradient-to-br from-background to-secondary/20 border-t border-border py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold text-foreground mb-6">Powered by Modern Technology</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto mb-8">
-            Built with React, FastAPI, and MongoDB. Real-time updates via WebSocket. 
-            Match data powered by Football-Data.org API.
-          </p>
-        </div>
-      </div>
+      {/* Technology - REMOVED */}
     </div>
   );
 };

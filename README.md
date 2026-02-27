@@ -257,9 +257,9 @@ yarn start
 
 ### Chat & Social
 - Real-time messaging with friends
-- Expandable match cards in chat with full prediction UI (Guess It, Remove, Exact Score)
+- Compact match card previews in chat — click card body to navigate to Match Detail, use "Predict" button for inline predictions
 - Invite friends to guess via match card sharing (unlimited re-sends allowed)
-- Match cards in chat use the same MatchCard design as the main page
+- Mobile keyboard stays open for continuous messaging (no re-tap needed after each send)
 
 ### Match Detail Page
 - Full match center page (`/match/:matchId`) — mini ESPN-style experience

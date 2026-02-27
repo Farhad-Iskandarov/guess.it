@@ -38,34 +38,56 @@ const baseTabs = [
 ];
 
 // ============ Loading Skeleton ============
-const MatchSkeleton = () => (
-  <div className="match-skeleton">
+const MatchSkeleton = ({ delay = 0 }) => (
+  <div className="match-skeleton" style={{ animationDelay: `${delay}ms` }}>
+    {/* Meta bar: status badge + datetime + competition */}
     <div className="flex items-center gap-2 mb-3">
-      <div className="skeleton-line w-12 h-4" />
-      <div className="skeleton-line w-20 h-4" />
-      <div className="skeleton-line w-16 h-4" />
+      <div className="skeleton-line w-14 h-5 rounded-full" />
+      <div className="skeleton-line w-20 h-3" />
+      <div className="skeleton-line w-1 h-3 hidden sm:block" />
+      <div className="skeleton-line w-28 h-3 hidden sm:block" />
+      <div className="ml-auto skeleton-line w-5 h-5 rounded" />
     </div>
-    <div className="space-y-2.5">
-      <div className="flex items-center gap-2">
-        <div className="skeleton-circle w-6 h-6" />
-        <div className="skeleton-line w-24 h-4 flex-1" />
+    {/* Teams: number + crest + name */}
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <div className="skeleton-line w-3 h-3" />
+        <div className="skeleton-circle w-6 h-6 sm:w-7 sm:h-7" />
+        <div className="skeleton-line h-4 flex-1 max-w-[140px]" />
       </div>
-      <div className="flex items-center gap-2">
-        <div className="skeleton-circle w-6 h-6" />
-        <div className="skeleton-line w-28 h-4 flex-1" />
+      <div className="flex items-center justify-center py-0.5">
+        <div className="skeleton-line w-5 h-3" />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="skeleton-line w-3 h-3" />
+        <div className="skeleton-circle w-6 h-6 sm:w-7 sm:h-7" />
+        <div className="skeleton-line h-4 flex-1 max-w-[120px]" />
       </div>
     </div>
-    <div className="flex gap-2 mt-3">
-      <div className="skeleton-line h-12 flex-1 rounded-lg" />
-      <div className="skeleton-line h-12 flex-1 rounded-lg" />
-      <div className="skeleton-line h-12 flex-1 rounded-lg" />
+    {/* Vote buttons + action buttons */}
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 mt-3">
+      <div className="flex items-center gap-1 flex-1">
+        <div className="skeleton-line h-14 sm:h-16 flex-1 rounded-lg" />
+        <div className="skeleton-line h-14 sm:h-16 flex-1 rounded-lg" />
+        <div className="skeleton-line h-14 sm:h-16 flex-1 rounded-lg" />
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="skeleton-line h-14 sm:h-16 w-16 sm:w-20 rounded-xl" />
+        <div className="skeleton-line h-14 sm:h-16 w-14 sm:w-16 rounded-xl" />
+        <div className="skeleton-line h-14 sm:h-16 w-14 sm:w-16 rounded-xl" />
+      </div>
+    </div>
+    {/* Footer stats */}
+    <div className="flex items-center gap-3 pt-2.5 mt-2.5 border-t border-border/20">
+      <div className="skeleton-line w-20 h-3" />
+      <div className="skeleton-line w-24 h-3" />
     </div>
   </div>
 );
 
 const MatchSkeletonGrid = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-    {[...Array(4)].map((_, i) => <MatchSkeleton key={i} />)}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4" data-testid="match-skeleton-grid">
+    {[...Array(6)].map((_, i) => <MatchSkeleton key={i} delay={i * 80} />)}
   </div>
 );
 
@@ -649,7 +671,7 @@ export const HomePage = () => {
 
         {/* Favorite Tab Content */}
         {activeTab === 'favorite' && isAuthenticated && (
-          <div key={`filter-fav-${filterKey}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
+          <div key={`filter-fav-${filterKey}`} className={`match-list-animate-in content-fade-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {(() => {
               const favoriteMatches = matches.filter(m =>
                 favoriteTeamIds.has(m.homeTeam.id) || favoriteTeamIds.has(m.awayTeam.id)
@@ -787,7 +809,7 @@ export const HomePage = () => {
 
         {/* Match Content (non-favorite, non-ended tabs) */}
         {tabFilteredMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div key={`filter-${activeLeague}`} className={`match-list-animate-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
+          <div key={`filter-${activeLeague}`} className={`match-list-animate-in content-fade-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {/* Tab-specific headers */}
             {activeTab === 'popular' && (
               <div className="flex items-center gap-2 mt-4 mb-3" data-testid="popular-header">

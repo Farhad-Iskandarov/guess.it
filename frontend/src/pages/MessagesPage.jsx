@@ -14,7 +14,6 @@ import {
   Search, Send, ChevronLeft, MessageSquare, Loader2, ArrowDown, Circle,
   Check, CheckCheck, Plus, X, Trophy, Users
 } from 'lucide-react';
-import { MatchCard } from '@/components/home/MatchCard';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -295,8 +294,9 @@ const ChatMatchCardWrapper = memo(({ matchData }) => {
 });
 ChatMatchCardWrapper.displayName = 'ChatMatchCardWrapper';
 
-/* ─────── Shared Match Card ─────── */
+/* ─────── Shared Match Card (Compact chat version) ─────── */
 const SharedMatchCard = memo(({ matchData, isMine }) => {
+  const navigate = useNavigate();
   const [loaded, setLoaded] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [savedPrediction, setSavedPrediction] = useState(null);
@@ -332,14 +332,6 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
     setLoaded(true);
   };
 
-  const handleToggleExpand = (e) => {
-    e.stopPropagation();
-    const next = !isExpanded;
-    setIsExpanded(next);
-    if (next) loadExisting();
-  };
-
-  // Save winner prediction (Guess It)
   const handleGuessIt = async () => {
     if (!selectedVote || !matchId || isLocked || exactScoreLocked) return;
     setIsSubmitting(true);
@@ -355,7 +347,6 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
     finally { setIsSubmitting(false); }
   };
 
-  // Lock exact score prediction
   const handleLockExactScore = async () => {
     if (!matchId || isLocked || savedPrediction) return;
     const h = homeScoreInput === '' ? 0 : parseInt(homeScoreInput, 10);
@@ -373,7 +364,6 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
     finally { setIsSubmitting(false); }
   };
 
-  // Remove all predictions for this match
   const handleRemove = async () => {
     if (!matchId) return;
     setIsSubmitting(true);
@@ -399,35 +389,34 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
   const hasPrediction = !!savedPrediction || exactScoreLocked;
   const canRemove = hasPrediction || !!selectedVote;
 
-  // Card background color
-  const cardBg = isExpanded
-    ? exactScoreLocked
-      ? 'border-amber-500/30 bg-amber-500/[0.06] backdrop-blur-xl shadow-[0_0_30px_rgba(245,158,11,0.1)]'
-      : savedPrediction
-        ? 'border-emerald-500/30 bg-emerald-500/[0.06] backdrop-blur-xl shadow-[0_0_30px_rgba(34,197,94,0.1)]'
-        : 'border-primary/20 bg-secondary/60 backdrop-blur-xl shadow-[0_0_20px_rgba(34,197,94,0.06)]'
-    : exactScoreLocked
-      ? 'border-amber-500/25 bg-amber-500/[0.04] backdrop-blur-sm hover:border-amber-500/40'
-      : savedPrediction
-        ? 'border-emerald-500/25 bg-emerald-500/[0.04] backdrop-blur-sm hover:border-emerald-500/40'
-        : 'border-border/30 bg-card/40 backdrop-blur-sm hover:border-primary/20 hover:shadow-md hover:shadow-primary/[0.06]';
+  const cardBg = exactScoreLocked
+    ? 'border-amber-500/25 bg-amber-500/[0.04]'
+    : savedPrediction
+      ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
+      : 'border-border/30 bg-card/60';
 
   const voteLabels = { home: '1', draw: 'X', away: '2' };
 
   return (
     <div
-      className={`rounded-xl border transition-all duration-300 ease-out my-1 overflow-hidden ${cardBg}`}
+      className={`rounded-lg border overflow-hidden ${cardBg}`}
+      style={{ transition: 'border-color 0.2s ease' }}
       data-testid="shared-match-card"
     >
-      {/* Header - always visible */}
-      <div className="p-2.5 cursor-pointer" onClick={handleToggleExpand} data-testid="shared-match-card-toggle">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Trophy className="w-3 h-3 text-amber-400" />
-          <span className={`text-[10px] font-semibold tracking-wide uppercase truncate ${isMine ? 'text-white/60' : 'text-muted-foreground'}`}>
+      {/* Clickable card body — navigates to match detail page */}
+      <div
+        className="px-2.5 py-2 cursor-pointer hover:bg-secondary/20 transition-colors duration-150"
+        onClick={() => matchId && navigate(`/match/${matchId}`)}
+        data-testid="shared-match-card-navigate"
+      >
+        {/* Top row: competition + status badges */}
+        <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+          <Trophy className="w-2.5 h-2.5 text-amber-400 flex-shrink-0" />
+          <span className={`text-[9px] font-semibold tracking-wide uppercase truncate max-w-[120px] text-muted-foreground`}>
             {sanitizeDisplay(matchData.competition)}
           </span>
           {matchData.status && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
+            <span className={`text-[8px] px-1 py-px rounded-full font-bold uppercase leading-none ${
               matchData.status === 'LIVE' || matchData.status === 'IN_PLAY' ? 'bg-red-500/20 text-red-400' :
               matchData.status === 'FINISHED' ? 'bg-white/10 text-white/50' :
               'bg-sky-500/15 text-sky-400'
@@ -435,98 +424,124 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
               {matchData.status === 'LIVE' || matchData.status === 'IN_PLAY' ? 'LIVE' : matchData.status === 'FINISHED' ? 'FT' : 'Upcoming'}
             </span>
           )}
-          {savedPrediction && <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold">PREDICTED</span>}
-          {exactScoreLocked && <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">EXACT</span>}
-          <span className={`ml-auto text-[9px] ${isExpanded ? 'text-primary' : isMine ? 'text-white/30' : 'text-muted-foreground/50'} transition-colors`}>
-            {isExpanded ? 'Collapse' : 'Tap to expand'}
-          </span>
+          {savedPrediction && <span className="text-[7px] px-1 py-px rounded-full bg-emerald-500/15 text-emerald-400 font-bold leading-none">PREDICTED</span>}
+          {exactScoreLocked && <span className="text-[7px] px-1 py-px rounded-full bg-amber-500/15 text-amber-400 font-bold leading-none">EXACT</span>}
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              {matchData.homeTeam?.crest && <img src={matchData.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain" />}
-              <span className={`text-xs font-medium truncate ${isMine ? 'text-white/90' : 'text-foreground'}`}>{sanitizeDisplay(homeName)}</span>
+
+        {/* Teams row */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <div className="flex items-center gap-1.5">
+              {matchData.homeTeam?.crest && <img src={matchData.homeTeam.crest} alt="" className="w-3.5 h-3.5 rounded-full object-contain flex-shrink-0" />}
+              <span className={`text-[11px] font-medium truncate text-foreground`}>{sanitizeDisplay(homeName)}</span>
             </div>
-            <div className="flex items-center gap-2">
-              {matchData.awayTeam?.crest && <img src={matchData.awayTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain" />}
-              <span className={`text-xs font-medium truncate ${isMine ? 'text-white/90' : 'text-foreground'}`}>{sanitizeDisplay(awayName)}</span>
+            <div className="flex items-center gap-1.5">
+              {matchData.awayTeam?.crest && <img src={matchData.awayTeam.crest} alt="" className="w-3.5 h-3.5 rounded-full object-contain flex-shrink-0" />}
+              <span className={`text-[11px] font-medium truncate text-foreground`}>{sanitizeDisplay(awayName)}</span>
             </div>
           </div>
           {matchData.score && matchData.score.home !== null && matchData.score.home !== undefined && (
-            <div className="flex items-center gap-1.5 text-sm font-bold tabular-nums flex-shrink-0">
-              <span className={isMine ? 'text-white' : 'text-foreground'}>{matchData.score.home}</span>
-              <span className={`text-xs ${isMine ? 'text-white/40' : 'text-muted-foreground'}`}>-</span>
-              <span className={isMine ? 'text-white' : 'text-foreground'}>{matchData.score.away}</span>
+            <div className="flex items-center gap-1 text-xs font-bold tabular-nums flex-shrink-0">
+              <span className="text-foreground">{matchData.score.home}</span>
+              <span className="text-[9px] text-muted-foreground">-</span>
+              <span className="text-foreground">{matchData.score.away}</span>
             </div>
           )}
         </div>
-        {matchData.dateTime && <p className={`text-[10px] mt-1.5 ${isMine ? 'text-white/40' : 'text-muted-foreground'}`}>{sanitizeDisplay(matchData.dateTime)}</p>}
+
+        {/* Footer: date + Predict button */}
+        <div className="flex items-center justify-between mt-1.5">
+          {matchData.dateTime && <span className="text-[9px] text-muted-foreground/60">{sanitizeDisplay(matchData.dateTime)}</span>}
+          {!isLocked && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const next = !isExpanded;
+                setIsExpanded(next);
+                if (next) loadExisting();
+              }}
+              data-testid="shared-match-predict-btn"
+              className={`text-[11px] font-bold px-4 py-1.5 rounded-full border transition-all duration-200 shadow-sm ${
+                isExpanded
+                  ? 'bg-primary/20 border-primary/50 text-primary shadow-primary/10'
+                  : hasPrediction
+                    ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-400 hover:bg-emerald-500/25 shadow-emerald-500/10'
+                    : 'bg-primary/12 border-primary/35 text-primary hover:bg-primary/20 hover:border-primary/50 hover:shadow-md hover:shadow-primary/15'
+              }`}
+            >
+              {isExpanded ? 'Close' : hasPrediction ? 'Edit' : 'Predict'}
+            </button>
+          )}
+          {isLocked && (
+            <span className="text-[8px] text-muted-foreground/40">
+              {matchData.status === 'FINISHED' ? 'Ended' : 'Live'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Expanded Section */}
       <div
-        className={`transition-all duration-400 ease-out overflow-hidden ${isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`transition-all duration-300 ease-out overflow-hidden ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
         style={{ transitionProperty: 'max-height, opacity' }}
       >
-        <div className="px-3 pb-3.5 space-y-3.5 border-t border-border/20 pt-3.5" onClick={(e) => e.stopPropagation()}>
+        <div className="px-2.5 pb-2.5 space-y-2 border-t border-border/15 pt-2" onClick={(e) => e.stopPropagation()}>
 
           {isLocked ? (
-            <p className="text-[11px] text-muted-foreground text-center py-2">
-              {matchData.status === 'FINISHED' ? 'This match has ended' : 'Match is live - predictions locked'}
+            <p className="text-[10px] text-muted-foreground text-center py-1.5">
+              {matchData.status === 'FINISHED' ? 'Match ended' : 'Live — predictions locked'}
             </p>
           ) : (
             <>
-              {/* ── Vote Buttons (1/X/2) ── */}
+              {/* Vote Buttons (1/X/2) — compact */}
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-muted-foreground">
-                  Winner Prediction
-                </p>
-                <div className="flex gap-2.5">
+                <p className="text-[8px] font-semibold uppercase tracking-wider mb-1 text-muted-foreground">Winner</p>
+                <div className="flex gap-1.5">
                   {['home', 'draw', 'away'].map((type) => (
                     <button
                       key={type}
                       onClick={() => !exactScoreLocked && setSelectedVote(type)}
                       disabled={exactScoreLocked}
                       data-testid={`chat-vote-btn-${type}`}
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all duration-200 border ${
+                      className={`flex-1 py-1.5 rounded-md text-[11px] font-bold border ${
                         exactScoreLocked
                           ? 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
                           : selectedVote === type
-                            ? 'bg-primary/20 border-primary/50 text-primary shadow-[0_0_10px_rgba(34,197,94,0.15)]'
-                            : 'bg-secondary/40 border-border/30 text-foreground hover:bg-secondary/60 hover:border-border/50'
+                            ? 'bg-primary/20 border-primary/50 text-primary'
+                            : 'bg-secondary/40 border-border/30 text-foreground hover:bg-secondary/60'
                       }`}
                     >
-                      <span className="text-sm">{voteLabels[type]}</span>
+                      {voteLabels[type]}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* ── Guess It Button ── */}
+              {/* Guess It Button — compact */}
               <button
                 onClick={handleGuessIt}
                 disabled={isSubmitting || exactScoreLocked || (!selectedVote && !savedPrediction)}
                 data-testid="chat-guess-it-btn"
-                className={`w-full py-2.5 rounded-lg text-xs font-bold transition-all duration-200 border ${
+                className={`w-full py-1.5 rounded-md text-[10px] font-bold border ${
                   exactScoreLocked
                     ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 cursor-not-allowed'
                     : savedPrediction
                       ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
                       : selectedVote
-                        ? 'bg-primary hover:bg-primary/90 border-primary text-primary-foreground hover:scale-[1.01] active:scale-[0.99]'
+                        ? 'bg-primary hover:bg-primary/90 border-primary text-primary-foreground'
                         : 'bg-secondary/30 border-border/30 text-muted-foreground opacity-50 cursor-not-allowed'
                 }`}
               >
-                {isSubmitting ? '...' : exactScoreLocked ? 'Saved (Exact Score)' : savedPrediction ? 'Saved' : 'GUESS IT'}
+                {isSubmitting ? '...' : exactScoreLocked ? 'Saved (Exact)' : savedPrediction ? 'Saved' : 'GUESS IT'}
               </button>
 
-              {/* ── Action Buttons Row: Advance + Remove ── */}
-              <div className="flex gap-2.5">
+              {/* Advance + Remove row — compact */}
+              <div className="flex gap-1.5">
                 <button
                   onClick={() => setShowAdvance(!showAdvance)}
                   disabled={savedPrediction}
                   data-testid="chat-advance-btn"
-                  className={`flex-1 py-2.5 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
+                  className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold border ${
                     savedPrediction
                       ? 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
                       : showAdvance
@@ -534,15 +549,15 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                         : 'bg-secondary/40 border-border/30 text-foreground hover:bg-secondary/60'
                   }`}
                 >
-                  {showAdvance ? 'Close Advance' : 'Advance'}
+                  {showAdvance ? 'Close' : 'Advance'}
                 </button>
                 <button
                   onClick={handleRemove}
                   disabled={isSubmitting || !canRemove}
                   data-testid="chat-remove-btn"
-                  className={`flex-1 py-2.5 rounded-lg text-[10px] font-semibold transition-all duration-200 border ${
+                  className={`flex-1 py-1.5 rounded-md text-[9px] font-semibold border ${
                     canRemove
-                      ? 'bg-transparent border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50'
+                      ? 'bg-transparent border-red-500/30 text-red-400 hover:bg-red-500/10'
                       : 'opacity-40 cursor-not-allowed bg-secondary/20 border-border/20 text-muted-foreground'
                   }`}
                 >
@@ -550,44 +565,44 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                 </button>
               </div>
 
-              {/* ── Advance Section (Exact Score) ── */}
-              <div className={`transition-all duration-300 overflow-hidden ${showAdvance && !savedPrediction ? 'max-h-[200px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="pt-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Exact Score</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-bold">+50 PTS</span>
+              {/* Advance Section (Exact Score) — compact */}
+              <div className={`transition-all duration-300 overflow-hidden ${showAdvance && !savedPrediction ? 'max-h-[180px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="pt-1 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">Exact Score</span>
+                    <span className="text-[7px] px-1 py-px rounded-full bg-amber-500/15 text-amber-400 font-bold">+50</span>
                   </div>
 
                   {exactScoreLocked ? (
-                    <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                      <div className="flex items-center gap-1.5 text-amber-400 text-[11px] font-medium">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 flex items-center justify-center text-[8px]">&#10003;</span>
-                        Exact Score Locked: {homeName} {homeScoreInput} - {awayScoreInput} {awayName}
+                    <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                      <div className="flex items-center gap-1 text-amber-400 text-[10px] font-medium">
+                        <span>&#10003;</span>
+                        <span className="truncate">Locked: {homeScoreInput} - {awayScoreInput}</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
                         <div className="flex-1 text-center">
-                          <p className="text-[9px] text-muted-foreground mb-1 truncate">{homeName}</p>
+                          <p className="text-[8px] text-muted-foreground mb-0.5 truncate">{homeName}</p>
                           <input
                             type="text" inputMode="numeric" pattern="[0-9]*"
                             value={homeScoreInput}
                             onChange={(e) => { const v = e.target.value; if (v === '') { setHomeScoreInput(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setHomeScoreInput(String(Math.min(Math.max(n, 0), 99))); }}
                             placeholder="0"
-                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            className="w-full h-7 text-center text-xs font-bold rounded-md bg-secondary/50 border border-border/30 text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             data-testid="chat-exact-home"
                           />
                         </div>
-                        <span className="text-xs text-muted-foreground font-bold mt-4">-</span>
+                        <span className="text-[10px] text-muted-foreground font-bold mt-3">-</span>
                         <div className="flex-1 text-center">
-                          <p className="text-[9px] text-muted-foreground mb-1 truncate">{awayName}</p>
+                          <p className="text-[8px] text-muted-foreground mb-0.5 truncate">{awayName}</p>
                           <input
                             type="text" inputMode="numeric" pattern="[0-9]*"
                             value={awayScoreInput}
                             onChange={(e) => { const v = e.target.value; if (v === '') { setAwayScoreInput(''); return; } const n = parseInt(v, 10); if (!isNaN(n)) setAwayScoreInput(String(Math.min(Math.max(n, 0), 99))); }}
                             placeholder="0"
-                            className="w-full h-9 text-center text-sm font-bold rounded-lg bg-secondary/50 border border-border/30 text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            className="w-full h-7 text-center text-xs font-bold rounded-md bg-secondary/50 border border-border/30 text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             data-testid="chat-exact-away"
                           />
                         </div>
@@ -596,9 +611,9 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                         onClick={handleLockExactScore}
                         disabled={isSubmitting}
                         data-testid="chat-lock-exact-btn"
-                        className="w-full py-2.5 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold hover:bg-amber-500/30 transition-all duration-200 disabled:opacity-50"
+                        className="w-full py-1.5 rounded-md bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[9px] font-bold hover:bg-amber-500/30 disabled:opacity-50"
                       >
-                        {isSubmitting ? '...' : 'Lock Exact Score Prediction'}
+                        {isSubmitting ? '...' : 'Lock Exact Score'}
                       </button>
                     </div>
                   )}
@@ -609,17 +624,17 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
 
           {/* Status footer */}
           {hasPrediction && !isLocked && (
-            <div className="flex items-center gap-2 text-[10px] pt-1 border-t border-border/15">
+            <div className="flex items-center gap-1.5 text-[9px] pt-1 border-t border-border/10">
               {savedPrediction && (
-                <span className="text-emerald-400 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-emerald-400 font-medium flex items-center gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400" />
                   Pick: {selectedVote === 'home' ? '1' : selectedVote === 'draw' ? 'X' : '2'}
                 </span>
               )}
               {exactScoreLocked && (
-                <span className="text-amber-400 font-medium flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  Exact: {homeScoreInput}-{awayScoreInput}
+                <span className="text-amber-400 font-medium flex items-center gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-amber-400" />
+                  {homeScoreInput}-{awayScoreInput}
                 </span>
               )}
             </div>
@@ -700,23 +715,23 @@ ConversationItem.displayName = 'ConversationItem';
 const MessageBubble = memo(({ msg, isMine, privacy, showAvatar, friendPic, friendInitial }) => {
   const isMatchShare = msg.message_type === 'match_share';
 
-  // Match share messages use ChatMatchCardWrapper (same MatchCard as Main Page)
+  // Match share messages use compact SharedMatchCard for chat
   if (isMatchShare && msg.match_data) {
     return (
-      <div className={`flex items-end gap-2 ${isMine ? 'justify-end pl-6' : 'justify-start pr-6'} py-[1px]`}>
+      <div className={`flex items-end gap-1.5 ${isMine ? 'justify-end pl-4 sm:pl-6' : 'justify-start pr-4 sm:pr-6'} py-[1px]`}>
         {!isMine && showAvatar && (
-          <Avatar className="w-7 h-7 flex-shrink-0 mb-1">
+          <Avatar className="w-6 h-6 flex-shrink-0 mb-1">
             <AvatarImage src={friendPic} />
-            <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+            <AvatarFallback className="bg-primary/10 text-primary text-[9px] font-bold">
               {friendInitial}
             </AvatarFallback>
           </Avatar>
         )}
-        {!isMine && !showAvatar && <div className="w-7 flex-shrink-0" />}
+        {!isMine && !showAvatar && <div className="w-6 flex-shrink-0" />}
 
-        <div className="max-w-[85%] sm:max-w-[90%] relative" data-testid={`message-bubble-${msg.message_id}`}>
-          <ChatMatchCardWrapper matchData={msg.match_data} />
-          <div className="flex items-center justify-end gap-1 mt-1 px-1">
+        <div className="max-w-[80%] sm:max-w-[75%] relative" data-testid={`message-bubble-${msg.message_id}`}>
+          <SharedMatchCard matchData={msg.match_data} isMine={isMine} />
+          <div className="flex items-center justify-end gap-1 mt-0.5 px-1">
             <span className="text-[10px] tabular-nums text-muted-foreground/70">
               {formatTime(msg.created_at)}
             </span>
@@ -1165,6 +1180,7 @@ const ChatPanel = ({ friend, userId, onBack }) => {
       <div className="shrink-0 flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2.5 md:py-3 border-t border-border/30 bg-card/60 backdrop-blur-xl z-10" data-testid="chat-input-bar">
         <button
           onClick={() => setShowMatchModal(true)}
+          onMouseDown={(e) => e.preventDefault()}
           className="shrink-0 w-[38px] h-[38px] rounded-full border-none bg-secondary/70 text-muted-foreground flex items-center justify-center cursor-pointer hover:bg-primary/15 hover:text-primary hover:scale-105 transition-all duration-150"
           data-testid="match-share-btn"
         >
@@ -1186,6 +1202,8 @@ const ChatPanel = ({ friend, userId, onBack }) => {
 
         <button
           onClick={handleSend}
+          onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()}
           disabled={!input.trim() || sending}
           className="shrink-0 w-10 h-10 rounded-full border-none bg-primary text-primary-foreground flex items-center justify-center cursor-pointer hover:scale-[1.06] hover:shadow-lg active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed transition-all duration-150"
           data-testid="chat-send-btn"

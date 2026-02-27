@@ -253,7 +253,7 @@ function AppShell() {
   return (
     <>
       {showLoader && <InitialLoadingScreen onReady={handleReady} />}
-      <div className={`min-h-screen bg-background ${showLoader ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}>
+      <div className={`min-h-screen bg-background overflow-x-hidden ${showLoader ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}>
         <BrowserRouter>
           <AppRouter />
         </BrowserRouter>

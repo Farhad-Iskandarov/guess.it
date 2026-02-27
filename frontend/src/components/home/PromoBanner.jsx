@@ -148,7 +148,7 @@ export const PromoBanner = ({ slides }) => {
       className="relative w-full overflow-hidden rounded-xl select-none"
       data-theme-independent="true"
       data-testid="promo-banner"
-      style={{ height: '405px', cursor: 'grab', touchAction: 'pan-y' }}
+      style={{ cursor: 'grab', touchAction: 'pan-y' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onMouseDown={handleMouseDown}
@@ -187,7 +187,7 @@ export const PromoBanner = ({ slides }) => {
             />
             {/* Content */}
             <div className="absolute inset-0 flex items-center z-10">
-              <div className="container mx-auto" style={{ paddingLeft: '4.5rem', paddingRight: '2.5rem' }}>
+              <div className="container mx-auto px-4 sm:px-8 md:pl-[4.5rem] md:pr-10">
                 <SlideContent slide={slide} />
               </div>
             </div>
