@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-02-27T16:34:35.144540",
+  "total_tests": 10,
+  "passed_tests": 8,
+  "success_rate": 0.8,
+  "results": [
+    {
+      "test": "Health Check",
+      "success": true,
+      "message": "Status: healthy",
+      "details": {}
+    },
+    {
+      "test": "Root API Endpoint",
+      "success": true,
+      "message": "Message: GuessIt API is running",
+      "details": {}
+    },
+    {
+      "test": "User Registration",
+      "success": false,
+      "message": "HTTP 422",
+      "details": {}
+    },
+    {
+      "test": "User Login (Setup)",
+      "success": false,
+      "message": "Failed to create test user for login",
+      "details": {}
+    },
+    {
+      "test": "Get Current User (Unauthorized)",
+      "success": true,
+      "message": "Correctly returned 401 for unauthenticated request",
+      "details": {}
+    },
+    {
+      "test": "News Endpoint",
+      "success": true,
+      "message": "Found 0 articles",
+      "details": {}
+    },
+    {
+      "test": "Subscription Plans",
+      "success": true,
+      "message": "Found all 3 plans: ['Standard', 'Champion', 'Elite']",
+      "details": {}
+    },
+    {
+      "test": "Football Matches",
+      "success": true,
+      "message": "Found 0 matches",
+      "details": {}
+    },
+    {
+      "test": "Contact Settings",
+      "success": true,
+      "message": "All required fields present",
+      "details": {}
+    },
+    {
+      "test": "Admin Login",
+      "success": true,
+      "message": "Admin login successful, role: admin",
+      "details": {}
+    }
+  ]
+}

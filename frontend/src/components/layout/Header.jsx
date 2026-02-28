@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap } from 'lucide-react';
+import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap, Newspaper, Phone, BarChart3, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
@@ -155,6 +155,23 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
           <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/subscribe')} data-testid="nav-subscribe">
             <span className="flex items-center gap-2">Subscribe <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-bold">PRO</span></span>
           </DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer" onClick={() => nav('/saved-matches')} data-testid="nav-saved-matches">
+            <Bookmark className="w-4 h-4 mr-2" /> Saved Matches
+          </DropdownMenuItem>
+          {/* Mobile-only navigation links — visible only on screens where nav bar is hidden */}
+          <DropdownMenuSeparator className="lg:hidden" />
+          <DropdownMenuItem className="cursor-pointer lg:hidden" onClick={() => nav('/friends')} data-testid="nav-mobile-friends">
+            <Users className="w-4 h-4 mr-2" /> Friends
+          </DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer lg:hidden" onClick={() => nav('/leaderboard')} data-testid="nav-mobile-leaderboard">
+            <BarChart3 className="w-4 h-4 mr-2" /> Leaderboard
+          </DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer lg:hidden" onClick={() => nav('/news')} data-testid="nav-mobile-news">
+            <Newspaper className="w-4 h-4 mr-2" /> News
+          </DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer lg:hidden" onClick={() => nav('/contact')} data-testid="nav-mobile-contact">
+            <Phone className="w-4 h-4 mr-2" /> Contact
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={onLogout}>
             Log out
@@ -173,7 +190,7 @@ const SearchResultCard = memo(({ match, onClick }) => {
   return (
     <button
       onClick={() => onClick(match)}
-      className="w-full text-left px-3 py-2.5 hover:bg-[hsl(var(--card-hover))] transition-colors border-b border-border/30 last:border-b-0 group"
+      className="w-full text-left px-4 sm:px-3 py-3 sm:py-2.5 hover:bg-[hsl(var(--card-hover))] transition-colors border-b border-border/30 last:border-b-0 group"
       data-testid={`search-result-${match.id}`}
     >
       {/* Competition + Status */}
@@ -375,8 +392,8 @@ const GlobalSearch = ({ onMatchSelect }) => {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Search Input — full-width overlay on mobile */}
-      <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5 w-[180px] sm:w-[240px] md:min-w-[320px] border border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
+      {/* Search Input */}
+      <div className="flex items-center gap-2 bg-secondary rounded-lg px-3 py-1.5 w-[160px] sm:w-[240px] md:min-w-[320px] border border-border focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
         <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         <input
           ref={inputRef}
@@ -397,10 +414,11 @@ const GlobalSearch = ({ onMatchSelect }) => {
         </button>
       </div>
 
-      {/* Dropdown */}
+      {/* Dropdown — mobile-optimized */}
       {(query.length >= 2 || hasSearched) && (
         <div
-          className="absolute top-full right-0 mt-2 w-[calc(100vw-2rem)] sm:w-[340px] md:w-[400px] max-h-[480px] overflow-y-auto rounded-xl bg-card border border-border shadow-lg shadow-black/20 z-[100] scrollbar-hide"
+          className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-[4.5rem] sm:top-full sm:mt-2 sm:w-[340px] md:w-[400px] max-h-[60vh] sm:max-h-[480px] overflow-y-auto overscroll-contain rounded-xl bg-card border border-border shadow-lg shadow-black/30 z-[100] scrollbar-hide"
+          style={{ WebkitOverflowScrolling: 'touch' }}
           data-testid="search-dropdown"
         >
           {/* Loading */}
@@ -424,7 +442,7 @@ const GlobalSearch = ({ onMatchSelect }) => {
           {results.length > 0 && (
             <div>
               {/* Group label */}
-              <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground border-b border-border/30">
+              <div className="px-4 sm:px-3 py-2.5 sm:py-2 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground border-b border-border/30">
                 {results.length} match{results.length !== 1 ? 'es' : ''} found
               </div>
               {results.map((match) => (

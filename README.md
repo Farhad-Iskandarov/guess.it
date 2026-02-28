@@ -217,10 +217,30 @@ yarn start
 - Global leaderboard
 - Friends system (send/accept/decline requests)
 - Real-time messaging & chat
-- In-app notifications
+- In-app notifications (real-time via WebSockets)
 - User profiles with avatar & banner uploads
 - Favorite matches & teams
+- **Saved Matches** - Bookmark matches and access them from the profile menu (`/saved-matches`)
 - Dark/Light theme toggle
+
+### Notification System (Real-Time)
+- **Friend Prediction Notifications** - When a friend predicts a match, all their friends receive a notification (e.g., "Your friend Alex predicted on Barcelona vs Real Madrid")
+- **Friends Leaderboard Rank Changes** - Notified when position changes among friends (e.g., "You moved up to #2 in your friends leaderboard!")
+- **Global Leaderboard (Top 100)** - Users in the top 100 receive notifications on rank changes (e.g., "You are now #5 in Global Leaderboard!")
+- All notifications are pushed via WebSocket for instant delivery — no page refresh needed
+
+### Profile Page
+- **Combined API Endpoint** (`/api/profile/bundle`) - Single call fetches predictions, favorites, and friends leaderboard with parallel DB + API queries
+- Stats overview (predictions, correct, wrong, points)
+- Recent activity feed (enriched with match data: team names, scores, competition)
+- **Favorite Teams** section with scrollable compact view (max 5 visible)
+- Friends list with quick navigation
+- **My Leaderboard** - Rankings among friends in a clean horizontal layout
+- Achievements system (auto-unlocks on milestones)
+- Performance ring chart with win rate
+- **Error state UI** - Clean error message with "Try Again" retry button (no blank pages or infinite spinners)
+- **Skeleton loaders** - Immediate skeleton rendering for perceived fast loading
+- Target load time: < 2 seconds
 
 ### Prediction System
 - **Winner Predictions (1/X/2)** - Predict match winners for points

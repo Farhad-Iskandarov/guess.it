@@ -244,6 +244,64 @@ async def get_leaderboard(
     return {"users": users}
 
 
+@router.get("/leaderboard/check-rank")
+async def check_global_rank(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Check if user's global leaderboard rank changed (top 100 only)"""
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_token = auth_header[7:]
+    if not session_token:
+        return {"rank": None}
+
+    from routes.auth import validate_session
+    session = await validate_session(db, session_token)
+    if not session:
+        return {"rank": None}
+
+    user_id = session["user_id"]
+    user = session  # validate_session returns full user
+    if not user:
+        return {"rank": None}
+
+    # Count users with more points
+    rank = await db.users.count_documents({"points": {"$gt": user.get("points", 0)}}) + 1
+
+    if rank > 100:
+        return {"rank": rank, "in_top_100": False}
+
+    # Check for rank change
+    prev_key = f"global_rank:{user_id}"
+    prev = await db.rank_tracking.find_one({"key": prev_key}, {"_id": 0})
+    old_rank = prev.get("rank") if prev else None
+    notification_sent = False
+
+    if old_rank and old_rank != rank:
+        from routes.notifications import create_notification
+        if rank < old_rank:
+            msg = f"You are now #{rank} in Global Leaderboard!"
+        else:
+            msg = f"You dropped to #{rank} in Global Leaderboard"
+        try:
+            await create_notification(db, user_id, "leaderboard_global", msg,
+                                      {"rank": rank, "old_rank": old_rank})
+            notification_sent = True
+        except Exception:
+            pass
+
+    await db.rank_tracking.update_one(
+        {"key": prev_key},
+        {"$set": {"key": prev_key, "rank": rank, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+
+    return {"rank": rank, "in_top_100": True, "old_rank": old_rank, "notification_sent": notification_sent}
+
+
 @router.get("/matches/today")
 async def today_matches(
     db: AsyncIOMotorDatabase = Depends(get_db),

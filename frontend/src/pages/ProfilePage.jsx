@@ -4,8 +4,7 @@ import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
 import { useFriends } from '@/lib/FriendsContext';
-import { getMyDetailedPredictions } from '@/services/predictions';
-import { getFavoriteClubs, removeFavoriteClub } from '@/services/favorites';
+import { removeFavoriteClub } from '@/services/favorites';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -331,31 +330,47 @@ export const ProfilePage = () => {
   const [summary, setSummary] = useState({ correct: 0, wrong: 0, pending: 0, points: 0 });
   const [favorites, setFavorites] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [removingFavorite, setRemovingFavorite] = useState(null);
+  const [friendsLeaderboard, setFriendsLeaderboard] = useState([]);
+  const [myFriendsRank, setMyFriendsRank] = useState(null);
 
-  // Fetch user data — parallelized, don't block on user refresh
+  // Single bundle fetch — all data in one call, all DB queries parallelized server-side
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      // Core data fetches in parallel — don't wait for user refresh
-      const [predictionsData, favoritesData] = await Promise.all([
-        getMyDetailedPredictions(),
-        getFavoriteClubs()
-      ]);
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/profile/bundle`, {
+        credentials: 'include',
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!res.ok) throw new Error(res.status === 401 ? 'auth' : 'Failed to load profile');
+      const data = await res.json();
 
-      setPredictions(predictionsData.predictions || []);
-      setSummary(predictionsData.summary || { correct: 0, wrong: 0, pending: 0, points: 0 });
-      setFavorites(favoritesData.favorites || []);
+      const p = data.predictions || {};
+      setPredictions(p.predictions || []);
+      setSummary(p.summary || { correct: 0, wrong: 0, pending: 0, points: 0 });
+      setFavorites((data.favorites || {}).favorites || []);
+
+      const lb = data.friends_leaderboard || {};
+      setFriendsLeaderboard(lb.leaderboard || []);
+      setMyFriendsRank(lb.my_rank);
+
       setIsLoading(false);
 
-      // Background refresh — non-blocking
-      Promise.all([refreshUser(), fetchFriends(true)]).catch(() => {});
-    } catch (error) {
-      console.error('Failed to fetch profile data:', error);
-      toast.error('Failed to load profile data');
+      // Background: refresh user + friends (non-blocking, won't affect UI state)
+      refreshUser().catch(() => {});
+      fetchFriends(true).catch(() => {});
+    } catch (err) {
+      if (err.message === 'auth') {
+        navigate('/login');
+        return;
+      }
+      console.error('Profile fetch failed:', err);
+      setError('Failed to load profile. Please try again.');
       setIsLoading(false);
     }
-  }, [refreshUser, fetchFriends]);
+  }, [refreshUser, fetchFriends, navigate]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -420,6 +435,32 @@ export const ProfilePage = () => {
         <Header user={user} isAuthenticated={isAuthenticated} onLogout={handleLogout} />
         <main className="container mx-auto px-4 md:px-6 py-8 max-w-4xl">
           <ProfileSkeleton />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background" data-testid="profile-page">
+        <Header user={user} isAuthenticated={isAuthenticated} onLogout={handleLogout} />
+        <main className="container mx-auto px-4 md:px-6 py-8 max-w-4xl">
+          <div className="flex flex-col items-center justify-center py-24 text-center" data-testid="profile-error-state">
+            <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-5">
+              <AlertCircle className="w-8 h-8 text-destructive" />
+            </div>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Failed to load profile</h2>
+            <p className="text-sm text-muted-foreground mb-6 max-w-sm">{error}</p>
+            <Button
+              onClick={fetchData}
+              className="gap-2"
+              data-testid="retry-btn"
+            >
+              <Loader2 className="w-4 h-4" />
+              Try Again
+            </Button>
+          </div>
         </main>
         <Footer />
       </div>
@@ -622,7 +663,7 @@ export const ProfilePage = () => {
               />
               
               {favorites.length > 0 ? (
-                <div className="space-y-2">
+                <div className="max-h-[280px] overflow-y-auto overscroll-contain space-y-2 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
                   {favorites.map((team) => (
                     <FavoriteTeamCard
                       key={team.team_id}
@@ -788,6 +829,91 @@ export const ProfilePage = () => {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* ===== My Leaderboard (Friends) — Full Width ===== */}
+          <div className="col-span-1 lg:col-span-2">
+            <div 
+              className="bg-card rounded-xl border border-border/50 p-5 animate-fade-in"
+              style={{ animationDelay: '0.36s' }}
+              data-testid="friends-leaderboard-section"
+            >
+              <SectionHeader 
+                icon={Trophy} 
+                title="My Leaderboard"
+                action={
+                  myFriendsRank && (
+                    <span className="text-xs text-primary font-semibold">
+                      Your rank: #{myFriendsRank}
+                    </span>
+                  )
+                }
+              />
+              
+              {friendsLeaderboard.length > 1 ? (
+                <div className="space-y-1.5">
+                  {friendsLeaderboard.map((entry) => (
+                    <div
+                      key={entry.user_id}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 ${
+                        entry.is_me
+                          ? 'bg-primary/5 border-primary/30'
+                          : 'border-border/30 hover:border-border/50'
+                      }`}
+                      data-testid={`lb-friend-${entry.rank}`}
+                    >
+                      {/* Rank */}
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold ${
+                        entry.rank === 1 ? 'bg-amber-500/15 text-amber-400' :
+                        entry.rank === 2 ? 'bg-zinc-400/15 text-zinc-300' :
+                        entry.rank === 3 ? 'bg-orange-600/15 text-orange-400' :
+                        'bg-muted text-muted-foreground'
+                      }`}>
+                        {entry.rank <= 3 ? ['', '1', '2', '3'][entry.rank] : `#${entry.rank}`}
+                      </div>
+
+                      {/* Avatar */}
+                      <Avatar className="h-8 w-8 border border-border/50">
+                        <AvatarImage src={entry.picture} alt={entry.nickname} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                          {(entry.nickname || 'U').charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+
+                      {/* Name */}
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${entry.is_me ? 'text-primary' : 'text-foreground'}`}>
+                          {entry.nickname || 'User'}{entry.is_me ? ' (You)' : ''}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">Level {entry.level}</p>
+                      </div>
+
+                      {/* Points */}
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-sm font-bold tabular-nums ${entry.is_me ? 'text-primary' : 'text-foreground'}`}>
+                          {entry.points}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">pts</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mb-3">
+                    <Trophy className="w-6 h-6 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">Add friends to see your ranking</p>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => navigate('/friends')}
+                  >
+                    Find Friends
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>

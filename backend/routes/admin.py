@@ -806,6 +806,31 @@ async def delete_api(api_id: str, request: Request, db: AsyncIOMotorDatabase = D
     await log_admin_action(db, admin["user_id"], "delete_api", api_id, f"Deleted API: {api_config['name']}")
     return {"success": True}
 
+
+# ==================== Football API Health Monitor ====================
+
+@router.get("/system/api-health")
+async def get_api_health_status(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get football API health status for admin monitoring"""
+    admin = await get_admin_user(request, db)
+
+    from services.football_api import get_api_health
+    health = get_api_health()
+
+    # Also get active API config info
+    configs = await db.admin_api_configs.find(
+        {"active": True}, {"_id": 0, "api_key": 0}
+    ).to_list(5)
+
+    return {
+        "health": health,
+        "active_configs": configs,
+    }
+
+
 # ==================== Prediction Monitoring ====================
 
 @router.get("/prediction-streaks")

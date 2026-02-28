@@ -857,3 +857,75 @@ async def dismiss_invitation(
         raise HTTPException(status_code=404, detail="Invitation not found")
     
     return {"success": True, "message": "Invitation dismissed"}
+
+
+
+# ==================== Friends Leaderboard ====================
+
+@router.get("/leaderboard")
+async def get_friends_leaderboard(
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get leaderboard ranking among friends (including self)"""
+    user = await get_current_user(request, db)
+    user_id = user["user_id"]
+
+    # Get friend IDs
+    friendships = await db.friendships.find({
+        "$or": [{"user_a": user_id}, {"user_b": user_id}]
+    }, {"_id": 0}).to_list(1000)
+
+    friend_ids = [user_id]  # Include self
+    for f in friendships:
+        friend_ids.append(f["user_b"] if f["user_a"] == user_id else f["user_a"])
+
+    # Get users sorted by points
+    users = await db.users.find(
+        {"user_id": {"$in": friend_ids}},
+        {"_id": 0, "user_id": 1, "nickname": 1, "picture": 1, "points": 1, "level": 1}
+    ).sort("points", -1).to_list(len(friend_ids))
+
+    leaderboard = []
+    my_rank = None
+    for idx, u in enumerate(users):
+        rank = idx + 1
+        entry = {
+            "rank": rank,
+            "user_id": u["user_id"],
+            "nickname": u.get("nickname", "User"),
+            "picture": u.get("picture"),
+            "points": u.get("points", 0),
+            "level": u.get("level", 0),
+            "is_me": u["user_id"] == user_id
+        }
+        leaderboard.append(entry)
+        if u["user_id"] == user_id:
+            my_rank = rank
+
+    # Check for rank changes and send notifications
+    prev_key = f"friends_rank:{user_id}"
+    prev_rank_doc = await db.rank_tracking.find_one({"key": prev_key}, {"_id": 0})
+    old_rank = prev_rank_doc.get("rank") if prev_rank_doc else None
+
+    if my_rank and old_rank and old_rank != my_rank:
+        from routes.notifications import create_notification
+        if my_rank < old_rank:
+            msg = f"You moved up to #{my_rank} in your friends leaderboard!"
+        else:
+            msg = f"You dropped to #{my_rank} in your friends leaderboard"
+        try:
+            await create_notification(db, user_id, "leaderboard_friends", msg,
+                                      {"rank": my_rank, "old_rank": old_rank})
+        except Exception as e:
+            logger.warning(f"Failed to send rank notification: {e}")
+
+    # Store current rank
+    if my_rank:
+        await db.rank_tracking.update_one(
+            {"key": prev_key},
+            {"$set": {"key": prev_key, "rank": my_rank, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
+        )
+
+    return {"leaderboard": leaderboard, "my_rank": my_rank, "total": len(leaderboard)}

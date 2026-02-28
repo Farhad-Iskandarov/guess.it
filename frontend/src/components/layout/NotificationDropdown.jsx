@@ -220,10 +220,10 @@ export const NotificationDropdown = () => {
         </Tooltip>
       </TooltipProvider>
 
-      {/* Dropdown Panel */}
+      {/* Dropdown Panel — mobile-optimized */}
       {isOpen && (
         <div
-          className="absolute right-0 top-full mt-2 w-[360px] max-h-[480px] rounded-xl bg-card border border-border shadow-xl shadow-black/20 z-[100] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
+          className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-[4.5rem] sm:top-full sm:mt-2 sm:w-[360px] max-h-[60vh] sm:max-h-[480px] rounded-xl bg-card border border-border shadow-xl shadow-black/30 z-[100] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
           data-testid="notification-dropdown"
         >
           {/* Header */}
@@ -255,7 +255,7 @@ export const NotificationDropdown = () => {
           </div>
 
           {/* Content */}
-          <div className="overflow-y-auto max-h-[400px] scrollbar-hide">
+          <div className="overflow-y-auto max-h-[calc(60vh-3.5rem)] sm:max-h-[400px] overscroll-contain scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -270,7 +270,7 @@ export const NotificationDropdown = () => {
                 />
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                 <Bell className="w-8 h-8 text-muted-foreground/30 mb-2" />
                 <p className="text-sm text-muted-foreground">No notifications yet</p>
                 <p className="text-xs text-muted-foreground/60 mt-0.5">We'll notify you when something happens</p>

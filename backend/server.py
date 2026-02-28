@@ -11,7 +11,7 @@ from typing import List
 from fastapi import WebSocket, WebSocketDisconnect
 import uuid
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Import auth routes
 from routes.auth import router as auth_router
@@ -64,6 +64,116 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@api_router.get("/profile/bundle")
+async def get_profile_bundle(request: Request):
+    """Combined profile endpoint — returns predictions, favorites, friends leaderboard in one call.
+    Runs all queries in parallel for speed."""
+    from routes.auth import get_current_user
+    from routes.auth import validate_session
+
+    user_obj = await get_current_user(request, db)
+    user_id = user_obj.user_id
+
+    # Get full user doc for points/level
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+
+    async def fetch_predictions():
+        from services.football_api import get_matches
+        preds = await db.predictions.find({"user_id": user_id}, {"_id": 0}).to_list(500)
+        # Summary
+        correct = sum(1 for p in preds if p.get("result") == "correct" or (p.get("points_awarded") and p.get("points_value", 0) > 0))
+        wrong = sum(1 for p in preds if p.get("result") == "wrong" or (p.get("points_awarded") and p.get("points_value", 0) < 0))
+        pending = len(preds) - correct - wrong
+
+        # Recent 5 predictions — enriched with match data
+        sorted_preds = sorted(preds, key=lambda p: p.get("updated_at", ""), reverse=True)[:5]
+        if sorted_preds:
+            # Get matches from in-memory cache (fast) or API — max 10 day range
+            now = datetime.now(timezone.utc)
+            date_from = (now - timedelta(days=3)).strftime("%Y-%m-%d")
+            date_to = (now + timedelta(days=5)).strftime("%Y-%m-%d")
+            try:
+                all_matches = await get_matches(db, date_from=date_from, date_to=date_to)
+                match_map = {m["id"]: m for m in all_matches}
+            except Exception:
+                match_map = {}
+
+            for pred in sorted_preds:
+                m = match_map.get(pred["match_id"])
+                if m:
+                    pred["match"] = {
+                        "homeTeam": m.get("homeTeam", {}),
+                        "awayTeam": m.get("awayTeam", {}),
+                        "competition": m.get("competition", {}),
+                        "dateTime": m.get("dateTime"),
+                        "status": m.get("status"),
+                        "score": m.get("score", {}),
+                    }
+                    status = m.get("status")
+                    score = m.get("score", {})
+                    if status == "FINISHED" and score.get("home") is not None:
+                        actual = "draw"
+                        if score["home"] > score.get("away", 0):
+                            actual = "home"
+                        elif score.get("away", 0) > score["home"]:
+                            actual = "away"
+                        pred["result"] = "correct" if pred["prediction"] == actual else "wrong"
+                    else:
+                        pred["result"] = pred.get("result", "pending")
+                else:
+                    pred["result"] = pred.get("result", "pending")
+
+        return {
+            "predictions": sorted_preds,
+            "total": len(preds),
+            "summary": {
+                "correct": correct, "wrong": wrong, "pending": pending,
+                "points": user.get("points", 0) if user else 0
+            }
+        }
+
+    async def fetch_favorites():
+        favs = await db.favorites.find({"user_id": user_id}, {"_id": 0}).to_list(50)
+        return {"favorites": favs}
+
+    async def fetch_friends_leaderboard():
+        friendships = await db.friendships.find(
+            {"$or": [{"user_a": user_id}, {"user_b": user_id}]}, {"_id": 0}
+        ).to_list(1000)
+        friend_ids = [user_id]
+        for f in friendships:
+            friend_ids.append(f["user_b"] if f["user_a"] == user_id else f["user_a"])
+        users_list = await db.users.find(
+            {"user_id": {"$in": friend_ids}},
+            {"_id": 0, "user_id": 1, "nickname": 1, "picture": 1, "points": 1, "level": 1}
+        ).sort("points", -1).to_list(len(friend_ids))
+        lb = []
+        my_rank = None
+        for idx, u in enumerate(users_list):
+            rank = idx + 1
+            entry = {
+                "rank": rank, "user_id": u["user_id"], "nickname": u.get("nickname", "User"),
+                "picture": u.get("picture"), "points": u.get("points", 0),
+                "level": u.get("level", 0), "is_me": u["user_id"] == user_id
+            }
+            lb.append(entry)
+            if u["user_id"] == user_id:
+                my_rank = rank
+        return {"leaderboard": lb, "my_rank": my_rank}
+
+    # Run ALL queries in parallel
+    preds_result, favs_result, lb_result = await asyncio.gather(
+        fetch_predictions(), fetch_favorites(), fetch_friends_leaderboard(),
+        return_exceptions=True
+    )
+
+    return {
+        "predictions": preds_result if not isinstance(preds_result, Exception) else {"predictions": [], "total": 0, "summary": {"correct": 0, "wrong": 0, "pending": 0, "points": 0}},
+        "favorites": favs_result if not isinstance(favs_result, Exception) else {"favorites": []},
+        "friends_leaderboard": lb_result if not isinstance(lb_result, Exception) else {"leaderboard": [], "my_rank": None},
+    }
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):

@@ -88,6 +88,19 @@ _request_times: list[datetime] = []
 _rate_lock = asyncio.Lock()
 _suspended_until: Optional[datetime] = None
 
+# ==================== API Health Tracking ====================
+_api_health = {
+    "last_success": None,
+    "last_error": None,
+    "last_error_msg": None,
+    "total_requests": 0,
+    "total_errors": 0,
+    "last_status_code": None,
+    "last_match_count": 0,
+    "remaining_requests": None,
+    "request_limit": None,
+}
+
 
 async def _check_rate_limit():
     async with _rate_lock:
@@ -161,10 +174,29 @@ async def _http_get(url: str, headers: dict, params: dict = None) -> dict:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, headers=headers, params=params)
+            _api_health["total_requests"] += 1
+            _api_health["last_status_code"] = resp.status_code
+
+            # Track remaining requests from response headers
+            remaining = resp.headers.get("X-Requests-Available-Minute") or resp.headers.get("x-requests-available")
+            limit = resp.headers.get("X-RequestCounter-Reset") or resp.headers.get("x-ratelimit-requests-remaining")
+            if remaining is not None:
+                try: _api_health["remaining_requests"] = int(remaining)
+                except: pass
+            if limit is not None:
+                try: _api_health["request_limit"] = int(limit)
+                except: pass
+
             if resp.status_code == 429:
+                _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
+                _api_health["last_error_msg"] = "Rate limit reached (429)"
+                _api_health["total_errors"] += 1
                 await asyncio.sleep(60)
                 resp = await client.get(url, headers=headers, params=params)
             if resp.status_code != 200:
+                _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
+                _api_health["last_error_msg"] = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                _api_health["total_errors"] += 1
                 logger.error(f"API error {resp.status_code}: {resp.text[:300]}")
                 return {}
             data = resp.json()
@@ -173,11 +205,19 @@ async def _http_get(url: str, headers: dict, params: dict = None) -> dict:
             if errors and isinstance(errors, dict) and len(errors) > 0:
                 if "suspended" in str(errors).lower():
                     _suspended_until = datetime.now(timezone.utc) + timedelta(minutes=2)
+                _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
+                _api_health["last_error_msg"] = str(errors)[:200]
+                _api_health["total_errors"] += 1
                 logger.warning(f"API errors: {errors}")
                 return {}
             _suspended_until = None
+            _api_health["last_success"] = datetime.now(timezone.utc).isoformat()
+            _api_health["last_error_msg"] = None
             return data
     except httpx.RequestError as e:
+        _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
+        _api_health["last_error_msg"] = f"Connection error: {str(e)[:150]}"
+        _api_health["total_errors"] += 1
         logger.error(f"HTTP request error: {e}")
         return {}
 
@@ -624,6 +664,7 @@ async def get_matches(
             matches[1]["featured"] = True
 
     await cache.set(ck, matches)
+    _api_health["last_match_count"] = len(matches)
     return matches
 
 
@@ -779,3 +820,38 @@ async def get_match_by_id(db, match_id: int) -> Optional[dict]:
     if match:
         await cache.set(cache_key, match)
     return match
+
+
+
+def get_api_health() -> dict:
+    """Return current API health metrics."""
+    is_suspended = _suspended_until and datetime.now(timezone.utc) < _suspended_until
+    if _api_health["last_error_msg"] and not _api_health["last_success"]:
+        status = "error"
+    elif is_suspended:
+        status = "suspended"
+    elif _api_health["last_error_msg"] and _api_health["last_success"]:
+        # Had an error but also had success — check which is more recent
+        if _api_health["last_error"] and _api_health["last_success"]:
+            status = "error" if _api_health["last_error"] > _api_health["last_success"] else "active"
+        else:
+            status = "active"
+    elif _api_health["last_success"]:
+        status = "active"
+    else:
+        status = "unknown"
+
+    return {
+        "status": status,
+        "is_suspended": bool(is_suspended),
+        "last_success": _api_health["last_success"],
+        "last_error": _api_health["last_error"],
+        "last_error_msg": _api_health["last_error_msg"],
+        "total_requests": _api_health["total_requests"],
+        "total_errors": _api_health["total_errors"],
+        "last_status_code": _api_health["last_status_code"],
+        "last_match_count": _api_health["last_match_count"],
+        "remaining_requests": _api_health["remaining_requests"],
+        "request_limit": _api_health["request_limit"],
+        "cache_entries": len(cache._cache),
+    }

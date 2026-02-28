@@ -15,7 +15,7 @@ import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCached
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { toast } from 'sonner';
-import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock, Bookmark, Radio, TrendingUp } from 'lucide-react';
+import { Loader2, Wifi, WifiOff, LayoutGrid, List, Heart, Clock, Bookmark, Radio, TrendingUp, ChevronUp } from 'lucide-react';
 
 // League filters - maps to competition codes
 const leagueFilters = [
@@ -850,7 +850,60 @@ export const HomePage = () => {
 
       {/* Footer */}
       <Footer />
+
+      {/* Scroll to Top Button */}
+      <ScrollToTopButton />
     </div>
+  );
+};
+
+// ============ Scroll to Top Button ============
+const ScrollToTopButton = () => {
+  const [visible, setVisible] = useState(false);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    let timer = null;
+    const onScroll = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        const currentY = window.scrollY;
+        const scrollingUp = currentY < lastScrollY.current - 5;
+        const farEnough = currentY > 400;
+
+        if (scrollingUp && farEnough) {
+          setVisible(true);
+        } else if (!scrollingUp || currentY <= 80) {
+          setVisible(false);
+        }
+
+        lastScrollY.current = currentY;
+        timer = null;
+      }, 60);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={scrollToTop}
+      aria-label="Scroll to top"
+      data-testid="scroll-to-top-btn"
+      className="fixed bottom-20 right-5 z-50 w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-black/25 hover:bg-primary/90 active:scale-90 transition-transform duration-200 animate-fade-in"
+    >
+      <ChevronUp className="w-5 h-5" />
+    </button>
   );
 };
 

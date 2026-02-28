@@ -17,7 +17,7 @@ import {
   Activity, MessageSquare, Heart, TrendingUp, ScrollText,
   Server, Star, StarOff, Flame, Lock, KeyRound, Filter,
   ChevronDown, ArrowUpDown, Plus, Power, PowerOff, Zap,
-  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight, Gift
+  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight, Gift, AlertCircle
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -1601,13 +1601,20 @@ const SystemTab = () => {
   const [showAdd, setShowAdd] = useState(false);
   const [newApi, setNewApi] = useState({ name: '', base_url: '', api_key: '' });
   const [adding, setAdding] = useState(false);
+  const [health, setHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(true);
 
   const fetchApis = useCallback(() => {
     setLoading(true);
     api('/system/apis').then(d => setApis(d.apis || [])).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { fetchApis(); }, [fetchApis]);
+  const fetchHealth = useCallback(() => {
+    setHealthLoading(true);
+    api('/system/api-health').then(d => setHealth(d.health || null)).catch(console.error).finally(() => setHealthLoading(false));
+  }, []);
+
+  useEffect(() => { fetchApis(); fetchHealth(); const i = setInterval(fetchHealth, 30000); return () => clearInterval(i); }, [fetchApis, fetchHealth]);
 
   const addApi = async () => {
     if (!newApi.name || !newApi.base_url) { alert('Name and URL required'); return; }
@@ -1646,6 +1653,95 @@ const SystemTab = () => {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300" data-testid="admin-system">
+      {/* ===== API Health Monitor ===== */}
+      <div className="rounded-xl border border-border/50 bg-card p-4" data-testid="api-health-monitor">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" />
+            API Health Monitor
+          </h2>
+          <button onClick={fetchHealth} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors" title="Refresh">
+            <RefreshCw className={`w-3.5 h-3.5 ${healthLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {healthLoading && !health ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+        ) : health ? (
+          <div className="space-y-3">
+            {/* Status Row */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                health.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' :
+                health.status === 'error' ? 'bg-red-500/15 text-red-400' :
+                health.status === 'suspended' ? 'bg-amber-500/15 text-amber-400' :
+                'bg-zinc-500/15 text-zinc-400'
+              }`} data-testid="api-status-badge">
+                <span className={`w-2 h-2 rounded-full ${
+                  health.status === 'active' ? 'bg-emerald-400 animate-pulse' :
+                  health.status === 'error' ? 'bg-red-400' :
+                  health.status === 'suspended' ? 'bg-amber-400' :
+                  'bg-zinc-400'
+                }`} />
+                {health.status === 'active' ? 'Active' : health.status === 'error' ? 'Error' : health.status === 'suspended' ? 'Rate Limited' : 'Unknown'}
+              </div>
+              {health.last_match_count > 0 && (
+                <span className="text-[10px] text-muted-foreground">{health.last_match_count} matches loaded</span>
+              )}
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-lg bg-secondary/50 p-2.5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Total Requests</p>
+                <p className="text-sm font-bold text-foreground tabular-nums">{health.total_requests}</p>
+              </div>
+              <div className="rounded-lg bg-secondary/50 p-2.5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Errors</p>
+                <p className={`text-sm font-bold tabular-nums ${health.total_errors > 0 ? 'text-red-400' : 'text-foreground'}`}>{health.total_errors}</p>
+              </div>
+              <div className="rounded-lg bg-secondary/50 p-2.5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Cache Entries</p>
+                <p className="text-sm font-bold text-foreground tabular-nums">{health.cache_entries}</p>
+              </div>
+              <div className="rounded-lg bg-secondary/50 p-2.5">
+                <p className="text-[10px] text-muted-foreground mb-0.5">Last Status</p>
+                <p className={`text-sm font-bold tabular-nums ${health.last_status_code === 200 ? 'text-emerald-400' : health.last_status_code ? 'text-red-400' : 'text-muted-foreground'}`}>
+                  {health.last_status_code || '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* Last Update */}
+            {health.last_success && (
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <Clock className="w-3 h-3" />
+                Last successful update: {new Date(health.last_success).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </div>
+            )}
+
+            {/* Error Message */}
+            {health.last_error_msg && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/20" data-testid="api-error-msg">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-[10px] font-semibold text-red-400">Latest Error</p>
+                  <p className="text-[10px] text-red-400/80 mt-0.5 break-all">{health.last_error_msg}</p>
+                  {health.last_error && (
+                    <p className="text-[9px] text-muted-foreground mt-1">
+                      at {new Date(health.last_error).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground py-4 text-center">No health data yet. API has not been called.</p>
+        )}
+      </div>
+
+      {/* ===== Football Data APIs ===== */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-bold text-foreground">Football Data APIs</h2>

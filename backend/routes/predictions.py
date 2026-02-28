@@ -138,6 +138,12 @@ async def create_or_update_prediction(
         
         await db.predictions.insert_one(pred_dict)
         
+        # Notify friends about new prediction (fire-and-forget)
+        try:
+            await _notify_friends_of_prediction(db, user, prediction_data.match_id, prediction_data.prediction)
+        except Exception as e:
+            logger.warning(f"Failed to notify friends of prediction: {e}")
+        
         return PredictionResponse(
             prediction_id=prediction.prediction_id,
             user_id=user_id,
@@ -940,3 +946,52 @@ async def get_friends_activity(
         })
     
     return {"friends": result, "total": len(result)}
+
+
+
+# ==================== Friend Prediction Notification Helper ====================
+
+async def _notify_friends_of_prediction(db, user, match_id: int, prediction: str):
+    """Notify all friends when a user creates a new prediction"""
+    user_id = user["user_id"]
+    nickname = user.get("nickname", "A friend")
+
+    # Get friend IDs
+    friendships = await db.friendships.find({
+        "$or": [{"user_a": user_id}, {"user_b": user_id}]
+    }, {"_id": 0}).to_list(500)
+
+    friend_ids = []
+    for f in friendships:
+        friend_ids.append(f["user_b"] if f["user_a"] == user_id else f["user_a"])
+
+    if not friend_ids:
+        return
+
+    # Try to get match team names from cached matches or DB
+    home_team = "Team A"
+    away_team = "Team B"
+    try:
+        cached = await db.cached_matches.find_one({"id": match_id}, {"_id": 0})
+        if cached:
+            home_team = cached.get("homeTeam", {}).get("name", home_team)
+            away_team = cached.get("awayTeam", {}).get("name", away_team)
+        else:
+            fav = await db.favorite_matches.find_one({"match_id": match_id}, {"_id": 0})
+            if fav:
+                home_team = fav.get("home_team", home_team)
+                away_team = fav.get("away_team", away_team)
+    except Exception:
+        pass
+
+    message = f"Your friend {nickname} predicted on {home_team} vs {away_team}"
+
+    for fid in friend_ids:
+        try:
+            await create_notification(
+                db, fid, "friend_prediction", message,
+                {"predictor_id": user_id, "predictor_nickname": nickname, "match_id": match_id,
+                 "prediction": prediction, "home_team": home_team, "away_team": away_team}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to notify friend {fid}: {e}")
