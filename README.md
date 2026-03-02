@@ -233,6 +233,11 @@ yarn start
 - **Combined API Endpoint** (`/api/profile/bundle`) - Single call fetches predictions, favorites, and friends leaderboard with parallel DB + API queries
 - Stats overview (predictions, correct, wrong, points)
 - Recent activity feed (enriched with match data: team names, scores, competition)
+- **Persistent Match Cache** - Match data stored in MongoDB (`football_matches_cache`) for reliable enrichment even after server restarts
+- **Wide Date Range Enrichment** - Predictions enriched with match data from 14 days back to 5 days forward, with fallback to local DB cache for older matches
+- **Accurate Statistics** - Correct/wrong/pending counts computed from actual match results (not raw DB), accuracy formula: `(correct / (correct + wrong)) * 100` excluding pending/upcoming matches
+- **Filter Navigation** - Clicking Correct/Wrong/Points on profile navigates to `/my-predictions?filter=correct|wrong|points` with auto-selected filter tab
+- **Resilient Rendering** - Predictions always display even if match API data is temporarily unavailable
 - **Favorite Teams** section with scrollable compact view (max 5 visible)
 - Friends list with quick navigation
 - **My Leaderboard** - Rankings among friends in a clean horizontal layout
@@ -249,7 +254,14 @@ yarn start
   - Leading zeros auto-stripped (`02` → `2`, `00` → `0`)
   - Consistent design across all pages: Main Page, Chat, Match Detail, My Predictions
 - **Configurable Points System** - Admin can configure all point values dynamically
-- **My Predictions Page** - View, edit, remove all predictions before match starts
+- **My Predictions Page** - View, edit, remove all predictions before match starts. Performance-optimized with 3-tier match resolution (MongoDB cache → API cache → parallel lookup). URL-based filter navigation (`?filter=correct|wrong|points`) with auto-selected summary card.
+- **GuessIt Button Timer** - Smart countdown timer inside the prediction button with 4 phases:
+  - **>24h before match**: Standard "G GUESS IT" button (no timer)
+  - **24h to 6h before match**: "Starts in Xh" label (calm informational state)
+  - **6h to 1h before match**: Live HH:MM:SS countdown with tabular numbers
+  - **Last 60 minutes**: Urgency mode — gradual green-to-red color shift, soft pulse animation, micro-vibration under 10 minutes
+  - **Hover animation**: Timer slides up and fades out, "G + GUESS IT" slides into view with cubic-bezier easing
+  - Timer syncs with server UTC time. Post-save state unchanged. Locked state unchanged.
 - **Automatic Level System** - User levels auto-calculate based on point thresholds (0, 100, 120, 200, 250, 350, 500, 750, 1000, 1500, 2000). Levels sync instantly after gifted or earned points.
 
 ### Homepage Tabs
@@ -274,6 +286,12 @@ yarn start
 ### Admin Panel
 - **Manual Points Gifting** - Gift points to individual or multiple users with custom messages, real-time notifications, and full audit trail
 - **API Management** - Add, validate, activate, and switch between football data providers without downtime
+- **API Health Monitor (Production-Grade)** - Full inspection of all API requests and errors:
+  - **Requests Tab** - Every API call logged with endpoint URL, HTTP method, status code, response time (ms), timestamp, request parameters, response preview (expandable JSON), and source (cron/manual/system). Each row is clickable to expand full details. Includes search, filtering (status code, date range), sorting, and pagination.
+  - **Errors Tab** - Every API error logged with error message, status code, endpoint, full error response, timestamp, stack trace (for backend errors), and retry attempt count. Each error is expandable for full inspection.
+  - **Summary Tab** - Real-time overview with status badge, total requests, errors, cache entries, average/max/min response times, 24h activity, last successful update time, and latest error details.
+  - **Settings Tab** - Configurable log retention period (7/14/30/60/90 days), auto-cleanup toggle, and manual cleanup button with deletion count feedback.
+  - All logs stored in MongoDB with indexed fields for fast queries and pagination to prevent overload.
 
 ### Chat & Social
 - Real-time messaging with friends
@@ -315,7 +333,7 @@ yarn start
 | Subscribed Emails | View newsletter subscriptions |
 | Contact Messages | View, flag, delete contact form submissions |
 | Contact Settings | Edit support email, location info |
-| System | **API configuration** - Add, validate, activate football data providers |
+| System | **API configuration** - Add, validate, activate football data providers; **API Health Monitor** - detailed request/error logs, search, filtering, pagination, auto-cleanup |
 | Prediction Monitor | Monitor prediction streaks |
 | Favorites | View user favorites |
 | Notifications | Send notifications |
@@ -463,6 +481,12 @@ yarn start
 | POST | `/api/admin/system/apis/validate` | Validate API key |
 | POST | `/api/admin/system/apis/{id}/activate` | Activate API (validates, clears cache, fetches data) |
 | DELETE | `/api/admin/system/apis/{id}` | Delete API config |
+| GET | `/api/admin/system/api-requests` | Paginated request logs (search, filter by status/date) |
+| GET | `/api/admin/system/api-errors` | Paginated error logs (search, filter by status/date) |
+| GET | `/api/admin/system/api-logs/stats` | Log statistics (totals, response times, 24h activity) |
+| GET | `/api/admin/system/api-logs/settings` | Get log retention settings |
+| PUT | `/api/admin/system/api-logs/settings` | Update retention settings (days, auto-cleanup) |
+| POST | `/api/admin/system/api-logs/cleanup` | Manual cleanup of old logs |
 
 ---
 

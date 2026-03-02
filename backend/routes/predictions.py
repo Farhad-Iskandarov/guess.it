@@ -292,28 +292,43 @@ async def get_my_predictions_detailed(
             "user_points": user_points, "user_level": user_level
         }
 
-    # Fetch matches with wide date range to cover recent + upcoming
+    # Fetch matches — persistent cache first, then API, then individual lookups
     now = datetime.now(timezone.utc)
-    date_from = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-    date_to = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+    all_predicted_ids = list(set(p["match_id"] for p in predictions) | set(exact_score_map.keys()))
 
-    try:
-        all_matches = await get_matches(db, date_from=date_from, date_to=date_to)
-    except Exception:
-        all_matches = []
-
-    match_map = {m["id"]: m for m in all_matches}
-
-    # For any predicted matches not in the bulk fetch, fetch individually by ID
-    all_predicted_ids = set(p["match_id"] for p in predictions) | set(exact_score_map.keys())
-    missing_ids = [mid for mid in all_predicted_ids if mid not in match_map]
-    for mid in missing_ids:
+    # 1. Fast: bulk lookup from persistent MongoDB cache
+    match_map = {}
+    if all_predicted_ids:
         try:
-            match = await get_match_by_id(db, mid)
-            if match:
-                match_map[mid] = match
+            cached = await db.football_matches_cache.find(
+                {"id": {"$in": all_predicted_ids}}, {"_id": 0}
+            ).to_list(len(all_predicted_ids))
+            match_map = {m["id"]: m for m in cached}
         except Exception:
             pass
+
+    # 2. Medium: fill gaps from in-memory API cache
+    missing_ids = [mid for mid in all_predicted_ids if mid not in match_map]
+    if missing_ids:
+        date_from = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        date_to = (now + timedelta(days=7)).strftime("%Y-%m-%d")
+        try:
+            api_matches = await get_matches(db, date_from=date_from, date_to=date_to)
+            for m in api_matches:
+                if m["id"] not in match_map:
+                    match_map[m["id"]] = m
+        except Exception:
+            pass
+
+    # 3. Slow fallback: individual fetch only for still-missing (max 5 to avoid rate limits)
+    still_missing = [mid for mid in all_predicted_ids if mid not in match_map][:5]
+    if still_missing:
+        import asyncio as _aio
+        tasks = [get_match_by_id(db, mid) for mid in still_missing]
+        results_raw = await _aio.gather(*tasks, return_exceptions=True)
+        for m in results_raw:
+            if m and not isinstance(m, Exception) and isinstance(m, dict):
+                match_map[m["id"]] = m
 
     results = []
     correct = 0

@@ -267,13 +267,48 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
 VoteButton.displayName = 'VoteButton';
 
 // ============ GUESS IT Button ============
-const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onClick, locked, hasExactScore }) => {
+const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onClick, locked, hasExactScore, utcDate, matchStatus }) => {
   const hasSelection = !!currentSelection;
   const hasSaved = !!savedPrediction;
   const isCurrentSaved = hasSaved && savedPrediction === currentSelection;
   const hasUnsavedChanges = hasSaved && currentSelection && savedPrediction !== currentSelection;
-  // Mutual exclusivity: if exact score is locked, show saved-orange state
   const blockedByExactScore = hasExactScore && !hasSaved;
+
+  // Timer state
+  const [now, setNow] = useState(Date.now());
+  const kickoff = utcDate ? new Date(utcDate).getTime() : 0;
+  const remaining = kickoff ? Math.max(0, kickoff - now) : 0;
+  const remainingS = Math.floor(remaining / 1000);
+  const remainingH = remaining / 3600000;
+
+  // Timer phase: 'label' (>6h), 'countdown' (6h-1h), 'urgency' (<1h), 'locked' (0), 'none' (>24h or no date)
+  const timerPhase = !utcDate || matchStatus === 'LIVE' || matchStatus === 'FINISHED' || locked ? 'none'
+    : remaining <= 0 ? 'locked'
+    : remainingH > 24 ? 'none'
+    : remainingH > 6 ? 'label'
+    : remainingH > 1 ? 'countdown'
+    : 'urgency';
+
+  // Tick every second only when countdown/urgency active
+  useEffect(() => {
+    if (timerPhase !== 'countdown' && timerPhase !== 'urgency' && timerPhase !== 'label') return;
+    const interval = timerPhase === 'label' ? 60000 : 1000;
+    const id = setInterval(() => setNow(Date.now()), interval);
+    return () => clearInterval(id);
+  }, [timerPhase]);
+
+  // Format countdown
+  const formatCountdown = () => {
+    const h = Math.floor(remainingS / 3600);
+    const m = Math.floor((remainingS % 3600) / 60);
+    const s = remainingS % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const formatLabel = () => {
+    const h = Math.ceil(remainingH);
+    return `Starts in ${h}h`;
+  };
 
   const getButtonState = () => {
     if (locked) return { text: 'Closed', showCheck: false, showUpdate: false, isSaved: false, isLocked: true, isExactScore: false };
@@ -286,8 +321,12 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
   };
 
   const state = getButtonState();
-  // Disabled when: locked, no selection (and no exact score), loading, OR exact score blocks voting
   const isDisabled = locked || isLoading || blockedByExactScore || (!hasSelection && !hasSaved);
+  const showTimer = (timerPhase === 'label' || timerPhase === 'countdown' || timerPhase === 'urgency') && !state.isSaved && !state.isLocked && !isLoading;
+
+  // Urgency intensity: 0-1, increases as time approaches 0
+  const urgencyIntensity = timerPhase === 'urgency' ? Math.min(1, (3600 - remainingS) / 3600) : 0;
+  const isLastTenMin = timerPhase === 'urgency' && remainingS <= 600;
 
   return (
     <Button
@@ -295,33 +334,63 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
       disabled={isDisabled}
       data-testid="guess-it-btn"
       className={`
-        relative match-action-btn h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
+        group/guess relative match-action-btn h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base overflow-hidden
         ${state.isLocked
           ? 'bg-muted border-2 border-border text-muted-foreground cursor-not-allowed'
           : state.isSaved
             ? state.isExactScore
               ? 'bg-amber-500/20 border-2 border-amber-500 text-amber-500'
               : 'bg-primary/20 border-2 border-primary text-primary hover:bg-primary/30'
-            : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
+            : timerPhase === 'urgency'
+              ? 'border-2 border-red-500/50 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
+              : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
         }
         ${isDisabled && !state.isSaved && !state.isLocked ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''}
+        ${timerPhase === 'urgency' ? 'guess-btn-urgency' : ''}
+        ${isLastTenMin ? 'guess-btn-pulse' : ''}
       `}
-      style={{ transition: 'background-color 0.1s ease, transform 0.1s ease, box-shadow 0.1s ease' }}
+      style={{
+        transition: 'background-color 0.3s ease, transform 0.1s ease, box-shadow 0.1s ease, border-color 0.3s ease',
+        ...(timerPhase === 'urgency' && !state.isSaved ? {
+          backgroundColor: `hsl(${Math.round(142 - urgencyIntensity * 142)}, ${Math.round(50 + urgencyIntensity * 20)}%, ${Math.round(35 - urgencyIntensity * 10)}%)`,
+        } : {}),
+      }}
     >
-      <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
-        {state.isLocked ? (
-          <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
-        ) : isLoading ? (
-          <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-        ) : state.showCheck ? (
-          <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-        ) : state.showUpdate ? (
-          <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
-        ) : (
-          <span className="text-base sm:text-lg font-bold">G</span>
-        )}
-        <span className="text-[10px] sm:text-xs md:text-sm font-semibold">{state.text}</span>
-      </div>
+      {showTimer ? (
+        /* Timer + GuessIt slide container */
+        <div className="relative w-full h-full flex items-center justify-center">
+          {/* Timer layer — visible by default, slides up on hover */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] group-hover/guess:-translate-y-full group-hover/guess:opacity-0">
+            {timerPhase === 'label' && (
+              <span className="text-[10px] sm:text-xs font-semibold opacity-90">{formatLabel()}</span>
+            )}
+            {(timerPhase === 'countdown' || timerPhase === 'urgency') && (
+              <span className="text-xs sm:text-sm md:text-base font-bold tabular-nums tracking-wider">{formatCountdown()}</span>
+            )}
+          </div>
+          {/* GuessIt layer — hidden below, slides up on hover */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center translate-y-full opacity-0 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] group-hover/guess:translate-y-0 group-hover/guess:opacity-100">
+            <span className="text-base sm:text-lg font-bold">G</span>
+            <span className="text-[10px] sm:text-xs md:text-sm font-semibold">GUESS IT</span>
+          </div>
+        </div>
+      ) : (
+        /* Standard button content (saved/locked/loading/GUESS IT) */
+        <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
+          {state.isLocked ? (
+            <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
+          ) : isLoading ? (
+            <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+          ) : state.showCheck ? (
+            <Check className="w-4 h-4 sm:w-5 sm:h-5" />
+          ) : state.showUpdate ? (
+            <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+          ) : (
+            <span className="text-base sm:text-lg font-bold">G</span>
+          )}
+          <span className="text-[10px] sm:text-xs md:text-sm font-semibold">{state.text}</span>
+        </div>
+      )}
     </Button>
   );
 });
@@ -969,7 +1038,7 @@ const MatchRow = memo(({
             <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
           </div>
           <div className="flex items-center gap-1 md:gap-2">
-            <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} />
+            <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} utcDate={match.utcDate} matchStatus={match.status} />
             <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked || hasSavedPrediction} />
             <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection || hasSavedPrediction} hasExactScore={hasExactScore} />
           </div>
@@ -1030,7 +1099,7 @@ const MatchRow = memo(({
               <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} />
+              <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} utcDate={match.utcDate} matchStatus={match.status} />
               <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked || hasSavedPrediction} />
               <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection || hasSavedPrediction} hasExactScore={hasExactScore} />
             </div>

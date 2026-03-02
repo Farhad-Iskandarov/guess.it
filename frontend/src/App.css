@@ -871,3 +871,21 @@ button, a, input, select, textarea {
 .bookmark-animate {
     animation: bookmark-pop 0.3s ease-out;
 }
+
+
+/* ===== GuessIt Button Timer Animations ===== */
+@keyframes guess-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+.guess-btn-urgency {
+  animation: guess-pulse 2.5s ease-in-out infinite;
+}
+@keyframes guess-micro-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-0.5px); }
+  75% { transform: translateX(0.5px); }
+}
+.guess-btn-pulse {
+  animation: guess-pulse 1.8s ease-in-out infinite, guess-micro-shake 0.4s ease-in-out infinite;
+}

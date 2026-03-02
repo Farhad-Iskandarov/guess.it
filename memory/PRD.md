@@ -1,59 +1,54 @@
 # GuessIt - Football Prediction Platform
 
 ## Original Problem Statement
-Clone the GitHub repository https://github.com/Farhad-Iskandarov/guess.it exactly as-is into a fully editable and runnable environment. Then implement 6 feature updates without breaking existing functionality.
+1. Clone from https://github.com/Farhad-Iskandarov/guess.it
+2. API Health Monitor upgrade
+3. Fix Recent Activity on Profile Page
+4. Fix Profile statistics and add filter navigation
+5. Performance fix for MyPredictions + GuessIt Button Timer
 
 ## Architecture
-- **Frontend:** React 19 + CRACO + Tailwind CSS 3 + shadcn/ui (Radix) + Recharts
-- **Backend:** FastAPI (Python 3.11) + Motor (async MongoDB) + Pydantic v2
-- **Database:** MongoDB (DB: guessit)
-- **Real-time:** WebSockets (live matches, chat, notifications)
+- **Frontend:** React 19, CRACO, Tailwind CSS 3, shadcn/ui (Radix), Recharts
+- **Backend:** FastAPI (Python 3.11), Motor (async MongoDB), Pydantic v2
+- **Database:** MongoDB (guessit)
+- **Real-time:** WebSockets
 - **Auth:** Session-based (httpOnly cookies) + Google OAuth
 - **Football Data:** Multi-provider (football-data.org v4 + API-Football v3)
-- **Payments:** Stripe (subscription system)
+- **Payments:** Stripe
 
 ## What's Been Implemented
-- [2026-02-27] Full repository clone from GitHub
-- [2026-02-27] Environment setup (MongoDB, JWT, Stripe test key, admin credentials)
-- [2026-02-27] Mobile UI fixes: search dropdown, notification dropdown, profile menu
-- [2026-02-27] Scroll to Top button on Main Page
-- [2026-02-27] **Saved Matches Feature**: New page at /saved-matches, added to profile dropdown, shows bookmarked match cards
-- [2026-02-27] **Friend Prediction Notifications**: Real-time WS notifications when friends create new predictions
-- [2026-02-27] **Favorite Teams scroll fix**: Max 280px height with overflow scroll (compact view ~5 teams)
-- [2026-02-27] **My Leaderboard section**: Full-width friends ranking in Profile page with rank badges
-- [2026-02-27] **Leaderboard rank notifications**: Friends leaderboard rank change notifications + Global top 100 rank change notifications
-- [2026-02-27] **Profile performance optimization**: Single `/api/profile/bundle` endpoint (parallel DB+API queries), error state UI with retry, 1.15s load time
-- [2026-02-27] **Profile sections fixed**: Recent Activity enriched with match data (team names, scores), Favorites fixed (wrong collection name), both sections fully functional
 
-## Admin Credentials
-- Email: admin@guessit.com
-- Password: Admin123!
+### Session 1 - Clone
+- [x] Exact clone of repo from GitHub
 
-## New API Endpoints
-- `GET /api/friends/leaderboard` — Friends-only leaderboard with rank tracking
-- `GET /api/football/leaderboard/check-rank` — Global rank check (top 100 notifications)
-- `GET /api/favorites/matches` — Saved/bookmarked matches
+### Session 2 - API Health Monitor
+- [x] 6 new admin endpoints for logs, stats, settings, cleanup
+- [x] SystemTab with 4 sub-tabs
 
-## Core Features
-- User registration/login (email + Google OAuth)
-- Match predictions with points system (friend prediction notifications)
-- Exact score predictions
-- Global leaderboard (top 100 rank notifications)
-- Friends system with friends leaderboard
-- Real-time messaging/chat
-- In-app real-time notifications (WebSocket)
-- User profiles with avatar/banner
-- Saved Matches page
-- Favorite matches/teams (compact scroll)
-- My Leaderboard (friends ranking)
-- Dark/Light theme toggle
-- Admin panel (14 tabs)
-- Stripe subscriptions
-- News/Blog, Contact form, Newsletter
+### Session 3 - Recent Activity Fix
+- [x] Fixed `if _db_ref:` bug, added persistent match cache
+
+### Session 4 - Statistics & Filter Navigation
+- [x] Correct/wrong/pending computed from match results
+- [x] ?filter= navigation from Profile to MyPredictions
+
+### Session 5 - Performance + Timer (Mar 2, 2026)
+- [x] MyPredictions: 3-tier match resolution (MongoDB cache → API cache → parallel lookup)
+- [x] Response time: 30ms (from potentially seconds with serial API calls)
+- [x] GuessIt Button: 4-phase countdown timer (>24h: none, 24-6h: label, 6-1h: countdown, <1h: urgency)
+- [x] Hover slide animation (timer → GUESS IT) with cubic-bezier easing
+- [x] Urgency CSS: green→red gradient, pulse animation, micro-shake under 10min
+- [x] Testing: Backend 100%, Frontend 95%
+
+## Environment
+- Admin: admin@guessit.com / Admin123!
+- Test user: test@guessit.com / Test123!
+- DB: guessit on localhost:27017
 
 ## Prioritized Backlog
-- P0: Configure real Football API key for live match data
-- P1: Configure Google OAuth credentials
-- P2: Configure production Stripe keys
-- P3: Add prediction streak tracking
-- P4: Add swipe-to-dismiss gestures on mobile dropdowns
+### P0
+- Football API key for production data
+### P1
+- Google OAuth credentials
+### P2
+- Feature enhancements per user requests

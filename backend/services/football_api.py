@@ -11,6 +11,7 @@ import logging
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from pymongo import UpdateOne
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,60 @@ _api_health = {
     "request_limit": None,
 }
 
+# ==================== DB Reference for Logging ====================
+_db_ref = None
+_log_buffer: list[dict] = []
+_error_buffer: list[dict] = []
+_buffer_lock = asyncio.Lock()
+
+def set_db_for_logging(db):
+    """Set the database reference for API request/error logging."""
+    global _db_ref
+    _db_ref = db
+
+async def _flush_log_buffer():
+    """Flush buffered logs to MongoDB."""
+    global _log_buffer, _error_buffer
+    async with _buffer_lock:
+        if _db_ref is None:
+            return
+        if _log_buffer:
+            try:
+                await _db_ref.api_request_logs.insert_many(_log_buffer)
+            except Exception as e:
+                logger.warning(f"Failed to flush request logs: {e}")
+            _log_buffer = []
+        if _error_buffer:
+            try:
+                await _db_ref.api_error_logs.insert_many(_error_buffer)
+            except Exception as e:
+                logger.warning(f"Failed to flush error logs: {e}")
+            _error_buffer = []
+
+async def _log_api_request(entry: dict):
+    """Buffer an API request log entry."""
+    async with _buffer_lock:
+        _log_buffer.append(entry)
+        if len(_log_buffer) >= 5:
+            if _db_ref is not None:
+                try:
+                    await _db_ref.api_request_logs.insert_many(_log_buffer)
+                except Exception:
+                    pass
+                _log_buffer.clear()
+
+async def _log_api_error(entry: dict):
+    """Buffer an API error log entry."""
+    async with _buffer_lock:
+        _error_buffer.append(entry)
+        if len(_error_buffer) >= 3:
+            if _db_ref is not None:
+                try:
+                    await _db_ref.api_error_logs.insert_many(_error_buffer)
+                except Exception:
+                    pass
+                _error_buffer.clear()
+
 
 async def _check_rate_limit():
     async with _rate_lock:
@@ -162,18 +217,24 @@ def _detect_provider(base_url: str) -> str:
 
 # ==================== Generic HTTP ====================
 
-async def _http_get(url: str, headers: dict, params: dict = None) -> dict:
-    """Make a GET request with rate limiting and error handling."""
+async def _http_get(url: str, headers: dict, params: dict = None, source: str = "system") -> dict:
+    """Make a GET request with rate limiting, error handling, and detailed logging."""
     global _suspended_until
+    import traceback as tb_module
+    import uuid as uuid_module
 
     if _suspended_until and datetime.now(timezone.utc) < _suspended_until:
         return {}
 
     await _check_rate_limit()
 
+    request_id = f"req_{uuid_module.uuid4().hex[:12]}"
+    start_time = datetime.now(timezone.utc)
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, headers=headers, params=params)
+            elapsed_ms = round((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
             _api_health["total_requests"] += 1
             _api_health["last_status_code"] = resp.status_code
 
@@ -187,18 +248,68 @@ async def _http_get(url: str, headers: dict, params: dict = None) -> dict:
                 try: _api_health["request_limit"] = int(limit)
                 except: pass
 
+            # Build response preview (truncated)
+            resp_preview = ""
+            try:
+                resp_preview = resp.text[:1000]
+            except Exception:
+                pass
+
+            # Build base log entry
+            log_entry = {
+                "request_id": request_id,
+                "endpoint": url,
+                "method": "GET",
+                "status_code": resp.status_code,
+                "response_time_ms": elapsed_ms,
+                "timestamp": start_time.isoformat(),
+                "params": {k: str(v) for k, v in (params or {}).items()},
+                "response_preview": resp_preview[:500],
+                "source": source,
+                "headers_sent": {k: v for k, v in headers.items() if k.lower() not in ("x-auth-token", "x-apisports-key", "authorization")},
+            }
+            await _log_api_request(log_entry)
+
             if resp.status_code == 429:
                 _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
                 _api_health["last_error_msg"] = "Rate limit reached (429)"
                 _api_health["total_errors"] += 1
+                error_entry = {
+                    "error_id": f"err_{uuid_module.uuid4().hex[:12]}",
+                    "request_id": request_id,
+                    "endpoint": url,
+                    "status_code": 429,
+                    "error_message": "Rate limit reached (429)",
+                    "full_error_response": resp_preview[:2000],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "stack_trace": None,
+                    "retry_count": 1,
+                    "source": source,
+                }
+                await _log_api_error(error_entry)
                 await asyncio.sleep(60)
                 resp = await client.get(url, headers=headers, params=params)
+
             if resp.status_code != 200:
                 _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
                 _api_health["last_error_msg"] = f"HTTP {resp.status_code}: {resp.text[:200]}"
                 _api_health["total_errors"] += 1
+                error_entry = {
+                    "error_id": f"err_{uuid_module.uuid4().hex[:12]}",
+                    "request_id": request_id,
+                    "endpoint": url,
+                    "status_code": resp.status_code,
+                    "error_message": f"HTTP {resp.status_code}",
+                    "full_error_response": resp.text[:2000],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "stack_trace": None,
+                    "retry_count": 0,
+                    "source": source,
+                }
+                await _log_api_error(error_entry)
                 logger.error(f"API error {resp.status_code}: {resp.text[:300]}")
                 return {}
+
             data = resp.json()
             # Check for API-Football style errors
             errors = data.get("errors", {})
@@ -208,16 +319,58 @@ async def _http_get(url: str, headers: dict, params: dict = None) -> dict:
                 _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
                 _api_health["last_error_msg"] = str(errors)[:200]
                 _api_health["total_errors"] += 1
+                error_entry = {
+                    "error_id": f"err_{uuid_module.uuid4().hex[:12]}",
+                    "request_id": request_id,
+                    "endpoint": url,
+                    "status_code": resp.status_code,
+                    "error_message": str(errors)[:200],
+                    "full_error_response": str(errors)[:2000],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "stack_trace": None,
+                    "retry_count": 0,
+                    "source": source,
+                }
+                await _log_api_error(error_entry)
                 logger.warning(f"API errors: {errors}")
                 return {}
+
             _suspended_until = None
             _api_health["last_success"] = datetime.now(timezone.utc).isoformat()
             _api_health["last_error_msg"] = None
             return data
     except httpx.RequestError as e:
+        elapsed_ms = round((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
         _api_health["last_error"] = datetime.now(timezone.utc).isoformat()
         _api_health["last_error_msg"] = f"Connection error: {str(e)[:150]}"
         _api_health["total_errors"] += 1
+        error_entry = {
+            "error_id": f"err_{uuid_module.uuid4().hex[:12]}",
+            "request_id": request_id,
+            "endpoint": url,
+            "status_code": 0,
+            "error_message": f"Connection error: {str(e)[:200]}",
+            "full_error_response": str(e)[:2000],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "stack_trace": tb_module.format_exc()[:3000],
+            "retry_count": 0,
+            "source": source,
+        }
+        await _log_api_error(error_entry)
+        # Also log the failed request
+        log_entry = {
+            "request_id": request_id,
+            "endpoint": url,
+            "method": "GET",
+            "status_code": 0,
+            "response_time_ms": elapsed_ms,
+            "timestamp": start_time.isoformat(),
+            "params": {k: str(v) for k, v in (params or {}).items()},
+            "response_preview": f"Connection error: {str(e)[:200]}",
+            "source": source,
+            "headers_sent": {},
+        }
+        await _log_api_request(log_entry)
         logger.error(f"HTTP request error: {e}")
         return {}
 
@@ -665,6 +818,24 @@ async def get_matches(
 
     await cache.set(ck, matches)
     _api_health["last_match_count"] = len(matches)
+
+    # Persist matches to MongoDB for profile enrichment (background, non-blocking)
+    if matches and db is not None:
+        try:
+            ops = []
+            for m in matches:
+                ops.append(
+                    UpdateOne(
+                        {"id": m["id"]},
+                        {"$set": {**{k: v for k, v in m.items() if k != "votes" and k != "totalVotes" and k != "featured" and k != "mostPicked"}, "cached_at": datetime.now(timezone.utc).isoformat()}},
+                        upsert=True,
+                    )
+                )
+            if ops:
+                await db.football_matches_cache.bulk_write(ops, ordered=False)
+        except Exception:
+            pass
+
     return matches
 
 
@@ -825,6 +996,9 @@ async def get_match_by_id(db, match_id: int) -> Optional[dict]:
 
 def get_api_health() -> dict:
     """Return current API health metrics."""
+    # Trigger async flush of any buffered logs
+    asyncio.ensure_future(_flush_log_buffer())
+    
     is_suspended = _suspended_until and datetime.now(timezone.utc) < _suspended_until
     if _api_health["last_error_msg"] and not _api_health["last_success"]:
         status = "error"

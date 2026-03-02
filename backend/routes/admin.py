@@ -831,7 +831,217 @@ async def get_api_health_status(
     }
 
 
-# ==================== Prediction Monitoring ====================
+# ==================== API Request Logs ====================
+
+@router.get("/system/api-requests")
+async def get_api_request_logs(
+    request: Request,
+    page: int = 1,
+    limit: int = 50,
+    status_code: Optional[int] = None,
+    search: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    sort_order: str = "desc",
+    source: str = "",
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get paginated API request logs with filtering"""
+    admin = await get_admin_user(request, db)
+
+    # Flush any buffered logs first
+    from services.football_api import _flush_log_buffer
+    await _flush_log_buffer()
+
+    query = {}
+    if status_code is not None:
+        query["status_code"] = status_code
+    if search:
+        safe_search = re.escape(search.strip()[:200])
+        query["endpoint"] = {"$regex": safe_search, "$options": "i"}
+    if date_from:
+        query.setdefault("timestamp", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("timestamp", {})["$lte"] = date_to
+    if source:
+        query["source"] = source
+
+    sort_dir = -1 if sort_order == "desc" else 1
+    skip = (max(1, page) - 1) * min(limit, 100)
+
+    logs = await db.api_request_logs.find(query, {"_id": 0}).sort(
+        "timestamp", sort_dir
+    ).skip(skip).limit(min(limit, 100)).to_list(100)
+
+    total = await db.api_request_logs.count_documents(query)
+
+    return {
+        "logs": logs,
+        "total": total,
+        "page": page,
+        "pages": max(1, (total + min(limit, 100) - 1) // min(limit, 100))
+    }
+
+
+@router.get("/system/api-errors")
+async def get_api_error_logs(
+    request: Request,
+    page: int = 1,
+    limit: int = 50,
+    status_code: Optional[int] = None,
+    search: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    sort_order: str = "desc",
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get paginated API error logs with filtering"""
+    admin = await get_admin_user(request, db)
+
+    from services.football_api import _flush_log_buffer
+    await _flush_log_buffer()
+
+    query = {}
+    if status_code is not None:
+        query["status_code"] = status_code
+    if search:
+        safe_search = re.escape(search.strip()[:200])
+        query["$or"] = [
+            {"endpoint": {"$regex": safe_search, "$options": "i"}},
+            {"error_message": {"$regex": safe_search, "$options": "i"}}
+        ]
+    if date_from:
+        query.setdefault("timestamp", {})["$gte"] = date_from
+    if date_to:
+        query.setdefault("timestamp", {})["$lte"] = date_to
+
+    sort_dir = -1 if sort_order == "desc" else 1
+    skip = (max(1, page) - 1) * min(limit, 100)
+
+    logs = await db.api_error_logs.find(query, {"_id": 0}).sort(
+        "timestamp", sort_dir
+    ).skip(skip).limit(min(limit, 100)).to_list(100)
+
+    total = await db.api_error_logs.count_documents(query)
+
+    return {
+        "logs": logs,
+        "total": total,
+        "page": page,
+        "pages": max(1, (total + min(limit, 100) - 1) // min(limit, 100))
+    }
+
+
+@router.get("/system/api-logs/settings")
+async def get_log_settings(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get API log retention settings"""
+    admin = await get_admin_user(request, db)
+    settings = await db.api_log_settings.find_one({"key": "retention"}, {"_id": 0})
+    if not settings:
+        return {"retention_days": 14, "auto_cleanup": True}
+    return {
+        "retention_days": settings.get("retention_days", 14),
+        "auto_cleanup": settings.get("auto_cleanup", True)
+    }
+
+
+@router.put("/system/api-logs/settings")
+async def update_log_settings(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Update API log retention settings"""
+    admin = await get_admin_user(request, db)
+    body = await request.json()
+    retention_days = max(1, min(90, int(body.get("retention_days", 14))))
+    auto_cleanup = bool(body.get("auto_cleanup", True))
+
+    await db.api_log_settings.update_one(
+        {"key": "retention"},
+        {"$set": {
+            "key": "retention",
+            "retention_days": retention_days,
+            "auto_cleanup": auto_cleanup,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": admin["user_id"]
+        }},
+        upsert=True
+    )
+    await log_admin_action(db, admin["user_id"], "update_log_settings", "retention",
+                           f"Set retention to {retention_days} days, auto_cleanup={auto_cleanup}")
+    return {"success": True, "retention_days": retention_days, "auto_cleanup": auto_cleanup}
+
+
+@router.post("/system/api-logs/cleanup")
+async def cleanup_api_logs(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Manual cleanup of old API logs based on retention settings"""
+    admin = await get_admin_user(request, db)
+    
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    
+    retention_days = int(body.get("retention_days", 14))
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()
+
+    req_result = await db.api_request_logs.delete_many({"timestamp": {"$lt": cutoff}})
+    err_result = await db.api_error_logs.delete_many({"timestamp": {"$lt": cutoff}})
+
+    deleted_requests = req_result.deleted_count
+    deleted_errors = err_result.deleted_count
+
+    await log_admin_action(db, admin["user_id"], "cleanup_api_logs", "",
+                           f"Cleaned up {deleted_requests} request logs and {deleted_errors} error logs older than {retention_days} days")
+
+    return {
+        "success": True,
+        "deleted_requests": deleted_requests,
+        "deleted_errors": deleted_errors,
+        "retention_days": retention_days
+    }
+
+
+@router.get("/system/api-logs/stats")
+async def get_api_log_stats(request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get statistics for API logs"""
+    admin = await get_admin_user(request, db)
+
+    total_requests = await db.api_request_logs.count_documents({})
+    total_errors = await db.api_error_logs.count_documents({})
+
+    # Status code distribution
+    status_pipeline = [
+        {"$group": {"_id": "$status_code", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]
+    status_dist = await db.api_request_logs.aggregate(status_pipeline).to_list(10)
+
+    # Avg response time
+    avg_pipeline = [
+        {"$match": {"response_time_ms": {"$gt": 0}}},
+        {"$group": {"_id": None, "avg_ms": {"$avg": "$response_time_ms"}, "max_ms": {"$max": "$response_time_ms"}, "min_ms": {"$min": "$response_time_ms"}}}
+    ]
+    avg_result = await db.api_request_logs.aggregate(avg_pipeline).to_list(1)
+    response_stats = avg_result[0] if avg_result else {"avg_ms": 0, "max_ms": 0, "min_ms": 0}
+    response_stats.pop("_id", None)
+
+    # Errors last 24h
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    errors_24h = await db.api_error_logs.count_documents({"timestamp": {"$gte": yesterday}})
+    requests_24h = await db.api_request_logs.count_documents({"timestamp": {"$gte": yesterday}})
+
+    return {
+        "total_requests": total_requests,
+        "total_errors": total_errors,
+        "status_distribution": [{"status_code": s["_id"], "count": s["count"]} for s in status_dist],
+        "response_stats": {
+            "avg_ms": round(response_stats.get("avg_ms", 0), 1),
+            "max_ms": round(response_stats.get("max_ms", 0), 1),
+            "min_ms": round(response_stats.get("min_ms", 0), 1),
+        },
+        "errors_24h": errors_24h,
+        "requests_24h": requests_24h,
+    }
 
 @router.get("/prediction-streaks")
 async def get_prediction_streaks(

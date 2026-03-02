@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
@@ -765,6 +765,7 @@ const LoadingSkeleton = () => (
 export const MyPredictionsPage = () => {
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [predictions, setPredictions] = useState([]);
   const [summary, setSummary] = useState({ correct: 0, wrong: 0, pending: 0, points: 0 });
   const [total, setTotal] = useState(0);
@@ -773,7 +774,10 @@ export const MyPredictionsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
-  const [summaryFilter, setSummaryFilter] = useState('total');
+  const [summaryFilter, setSummaryFilter] = useState(() => {
+    const f = new URLSearchParams(window.location.search).get('filter');
+    return (f && ['correct', 'wrong', 'pending', 'points', 'total'].includes(f)) ? f : 'total';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState(() => {
     return (typeof window !== 'undefined' && localStorage.getItem('guessit-predictions-view')) || 'grid';
@@ -820,6 +824,21 @@ export const MyPredictionsPage = () => {
       navigate('/login');
     }
   }, [authLoading, isAuthenticated, fetchPredictions, navigate]);
+
+  // Sync URL when summaryFilter changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (summaryFilter && summaryFilter !== 'total') {
+      params.set('filter', summaryFilter);
+    } else {
+      params.delete('filter');
+    }
+    const newSearch = params.toString();
+    const currentSearch = window.location.search.replace('?', '');
+    if (newSearch !== currentSearch) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [summaryFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Edit prediction handler
   const handleEditPrediction = useCallback(async (matchId, newPrediction) => {

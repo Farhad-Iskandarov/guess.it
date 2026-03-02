@@ -82,24 +82,62 @@ async def get_profile_bundle(request: Request):
     async def fetch_predictions():
         from services.football_api import get_matches
         preds = await db.predictions.find({"user_id": user_id}, {"_id": 0}).to_list(500)
-        # Summary
-        correct = sum(1 for p in preds if p.get("result") == "correct" or (p.get("points_awarded") and p.get("points_value", 0) > 0))
-        wrong = sum(1 for p in preds if p.get("result") == "wrong" or (p.get("points_awarded") and p.get("points_value", 0) < 0))
-        pending = len(preds) - correct - wrong
+
+        # ---- Compute correct/wrong by checking ACTUAL match results ----
+        # Collect all match IDs from predictions
+        pred_match_ids = list(set(p["match_id"] for p in preds))
+
+        # Fetch match data from persistent cache (covers all dates)
+        match_map = {}
+        if pred_match_ids:
+            try:
+                cached_matches = await db.football_matches_cache.find(
+                    {"id": {"$in": pred_match_ids}}, {"_id": 0}
+                ).to_list(len(pred_match_ids))
+                match_map = {m["id"]: m for m in cached_matches}
+            except Exception:
+                pass
+
+        # Also try in-memory API cache for any missing matches
+        missing_ids = [mid for mid in pred_match_ids if mid not in match_map]
+        if missing_ids:
+            now = datetime.now(timezone.utc)
+            date_from = (now - timedelta(days=14)).strftime("%Y-%m-%d")
+            date_to = (now + timedelta(days=5)).strftime("%Y-%m-%d")
+            try:
+                api_matches = await get_matches(db, date_from=date_from, date_to=date_to)
+                for m in api_matches:
+                    if m["id"] in missing_ids and m["id"] not in match_map:
+                        match_map[m["id"]] = m
+            except Exception:
+                pass
+
+        # Calculate summary from actual match results
+        correct = 0
+        wrong = 0
+        pending = 0
+        for p in preds:
+            m = match_map.get(p["match_id"])
+            if m and m.get("status") == "FINISHED":
+                score = m.get("score", {})
+                if score.get("home") is not None and score.get("away") is not None:
+                    actual = "draw"
+                    if score["home"] > score["away"]:
+                        actual = "home"
+                    elif score["away"] > score["home"]:
+                        actual = "away"
+                    if p["prediction"] == actual:
+                        correct += 1
+                    else:
+                        wrong += 1
+                else:
+                    pending += 1
+            else:
+                pending += 1
 
         # Recent 5 predictions — enriched with match data
         sorted_preds = sorted(preds, key=lambda p: p.get("updated_at", ""), reverse=True)[:5]
         if sorted_preds:
-            # Get matches from in-memory cache (fast) or API — max 10 day range
-            now = datetime.now(timezone.utc)
-            date_from = (now - timedelta(days=3)).strftime("%Y-%m-%d")
-            date_to = (now + timedelta(days=5)).strftime("%Y-%m-%d")
-            try:
-                all_matches = await get_matches(db, date_from=date_from, date_to=date_to)
-                match_map = {m["id"]: m for m in all_matches}
-            except Exception:
-                match_map = {}
-
             for pred in sorted_preds:
                 m = match_map.get(pred["match_id"])
                 if m:
@@ -123,6 +161,15 @@ async def get_profile_bundle(request: Request):
                     else:
                         pred["result"] = pred.get("result", "pending")
                 else:
+                    # No match data found — still include prediction with minimal info
+                    pred["match"] = {
+                        "homeTeam": {"name": f"Match #{pred['match_id']}"},
+                        "awayTeam": {"name": ""},
+                        "competition": {},
+                        "dateTime": pred.get("created_at"),
+                        "status": "UNKNOWN",
+                        "score": {},
+                    }
                     pred["result"] = pred.get("result", "pending")
 
         return {
@@ -584,6 +631,19 @@ async def startup_event():
     
     # Seed default Football API key if none exists
     await seed_default_api_key(db)
+    
+    # Set db reference for API logging
+    from services.football_api import set_db_for_logging
+    set_db_for_logging(db)
+    
+    # API monitoring indexes
+    await db.api_request_logs.create_index([("timestamp", -1)])
+    await db.api_request_logs.create_index([("status_code", 1)])
+    await db.api_request_logs.create_index([("endpoint", 1)])
+    await db.api_error_logs.create_index([("timestamp", -1)])
+    await db.api_error_logs.create_index([("status_code", 1)])
+    await db.api_error_logs.create_index([("endpoint", 1)])
+    await db.football_matches_cache.create_index([("id", 1)], unique=True)
     
     # Seed admin account if it doesn't exist
     await seed_admin_account(db)

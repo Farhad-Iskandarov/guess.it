@@ -126,7 +126,9 @@ const RecentActivityItem = memo(({ prediction }) => {
     ? new Date(prediction.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : '';
 
-  if (!prediction.match) return null;
+  const matchHome = prediction.match?.homeTeam?.name || `Match #${prediction.match_id}`;
+  const matchAway = prediction.match?.awayTeam?.name || '';
+  const matchLabel = matchAway ? `${matchHome} vs ${matchAway}` : matchHome;
 
   return (
     <div
@@ -151,7 +153,7 @@ const RecentActivityItem = memo(({ prediction }) => {
       {/* Match info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground truncate">
-          {prediction.match.homeTeam?.name} vs {prediction.match.awayTeam?.name}
+          {matchLabel}
         </p>
         <p className="text-xs text-muted-foreground">{date} - Picked {predLabels[prediction.prediction]}</p>
       </div>
@@ -583,18 +585,21 @@ export const ProfilePage = () => {
             value={summary.correct}
             color="bg-emerald-500/15 text-emerald-400"
             subtext={accuracy > 0 ? `${accuracy}% accuracy` : undefined}
+            onClick={() => navigate('/my-predictions?filter=correct')}
           />
           <StatCard
             icon={XCircle}
             label="Wrong"
             value={summary.wrong}
             color="bg-red-500/15 text-red-400"
+            onClick={() => navigate('/my-predictions?filter=wrong')}
           />
           <StatCard
             icon={Star}
             label="Points"
             value={userPoints}
             color="bg-amber-500/15 text-amber-400"
+            onClick={() => navigate('/my-predictions?filter=points')}
           />
         </div>
 

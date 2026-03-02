@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/lib/AuthContext';
@@ -17,7 +17,8 @@ import {
   Activity, MessageSquare, Heart, TrendingUp, ScrollText,
   Server, Star, StarOff, Flame, Lock, KeyRound, Filter,
   ChevronDown, ArrowUpDown, Plus, Power, PowerOff, Zap,
-  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight, Gift, AlertCircle
+  UserCheck, Edit, Mail, Newspaper, Crown, DollarSign, ToggleLeft, ToggleRight, Gift, AlertCircle,
+  FileText, ExternalLink, ChevronUp, Database, Settings, Calendar
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -1604,6 +1605,28 @@ const SystemTab = () => {
   const [health, setHealth] = useState(null);
   const [healthLoading, setHealthLoading] = useState(true);
 
+  // Health Monitor sub-tabs
+  const [monitorTab, setMonitorTab] = useState('summary');
+  const [requestLogs, setRequestLogs] = useState({ logs: [], total: 0, page: 1, pages: 1 });
+  const [errorLogs, setErrorLogs] = useState({ logs: [], total: 0, page: 1, pages: 1 });
+  const [logStats, setLogStats] = useState(null);
+  const [logSettings, setLogSettings] = useState({ retention_days: 14, auto_cleanup: true });
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [expandedRow, setExpandedRow] = useState(null);
+  // Filters
+  const [reqSearch, setReqSearch] = useState('');
+  const [reqStatusFilter, setReqStatusFilter] = useState('');
+  const [reqDateFrom, setReqDateFrom] = useState('');
+  const [reqDateTo, setReqDateTo] = useState('');
+  const [reqPage, setReqPage] = useState(1);
+  const [errSearch, setErrSearch] = useState('');
+  const [errStatusFilter, setErrStatusFilter] = useState('');
+  const [errDateFrom, setErrDateFrom] = useState('');
+  const [errDateTo, setErrDateTo] = useState('');
+  const [errPage, setErrPage] = useState(1);
+  const [cleaningUp, setCleaningUp] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const fetchApis = useCallback(() => {
     setLoading(true);
     api('/system/apis').then(d => setApis(d.apis || [])).catch(console.error).finally(() => setLoading(false));
@@ -1614,7 +1637,46 @@ const SystemTab = () => {
     api('/system/api-health').then(d => setHealth(d.health || null)).catch(console.error).finally(() => setHealthLoading(false));
   }, []);
 
-  useEffect(() => { fetchApis(); fetchHealth(); const i = setInterval(fetchHealth, 30000); return () => clearInterval(i); }, [fetchApis, fetchHealth]);
+  const fetchLogStats = useCallback(() => {
+    api('/system/api-logs/stats').then(d => setLogStats(d)).catch(console.error);
+  }, []);
+
+  const fetchLogSettings = useCallback(() => {
+    api('/system/api-logs/settings').then(d => setLogSettings(d)).catch(console.error);
+  }, []);
+
+  const fetchRequestLogs = useCallback((page = 1) => {
+    setLogsLoading(true);
+    const params = new URLSearchParams({ page, limit: 30 });
+    if (reqSearch) params.append('search', reqSearch);
+    if (reqStatusFilter) params.append('status_code', reqStatusFilter);
+    if (reqDateFrom) params.append('date_from', new Date(reqDateFrom).toISOString());
+    if (reqDateTo) params.append('date_to', new Date(reqDateTo + 'T23:59:59').toISOString());
+    api(`/system/api-requests?${params}`).then(d => {
+      setRequestLogs(d);
+      setReqPage(d.page);
+    }).catch(console.error).finally(() => setLogsLoading(false));
+  }, [reqSearch, reqStatusFilter, reqDateFrom, reqDateTo]);
+
+  const fetchErrorLogs = useCallback((page = 1) => {
+    setLogsLoading(true);
+    const params = new URLSearchParams({ page, limit: 30 });
+    if (errSearch) params.append('search', errSearch);
+    if (errStatusFilter) params.append('status_code', errStatusFilter);
+    if (errDateFrom) params.append('date_from', new Date(errDateFrom).toISOString());
+    if (errDateTo) params.append('date_to', new Date(errDateTo + 'T23:59:59').toISOString());
+    api(`/system/api-errors?${params}`).then(d => {
+      setErrorLogs(d);
+      setErrPage(d.page);
+    }).catch(console.error).finally(() => setLogsLoading(false));
+  }, [errSearch, errStatusFilter, errDateFrom, errDateTo]);
+
+  useEffect(() => { fetchApis(); fetchHealth(); fetchLogStats(); fetchLogSettings(); const i = setInterval(fetchHealth, 30000); return () => clearInterval(i); }, [fetchApis, fetchHealth, fetchLogStats, fetchLogSettings]);
+
+  useEffect(() => {
+    if (monitorTab === 'requests') fetchRequestLogs(1);
+    else if (monitorTab === 'errors') fetchErrorLogs(1);
+  }, [monitorTab, fetchRequestLogs, fetchErrorLogs]);
 
   const addApi = async () => {
     if (!newApi.name || !newApi.base_url) { alert('Name and URL required'); return; }
@@ -1640,7 +1702,6 @@ const SystemTab = () => {
       if (result.matches_loaded !== undefined) {
         alert(`API activated successfully! ${result.matches_loaded} matches loaded.\n${result.validation?.subscription ? 'Plan: ' + result.validation.subscription : ''}\nRequests remaining: ${result.validation?.requests_remaining ?? 'N/A'}`);
       }
-      // Broadcast to other tabs/windows to refresh match data
       window.dispatchEvent(new CustomEvent('api-key-activated'));
     } catch (e) { alert('Activation failed: ' + e.message); }
   };
@@ -1649,6 +1710,52 @@ const SystemTab = () => {
     if (!window.confirm('Delete this API configuration?')) return;
     try { await api(`/system/apis/${apiId}`, { method: 'DELETE' }); fetchApis(); }
     catch (e) { alert(e.message); }
+  };
+
+  const handleCleanup = async () => {
+    if (!window.confirm(`Delete all logs older than ${logSettings.retention_days} days?`)) return;
+    setCleaningUp(true);
+    try {
+      const result = await api('/system/api-logs/cleanup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retention_days: logSettings.retention_days })
+      });
+      alert(`Cleaned up ${result.deleted_requests} request logs and ${result.deleted_errors} error logs.`);
+      fetchLogStats();
+      if (monitorTab === 'requests') fetchRequestLogs(1);
+      if (monitorTab === 'errors') fetchErrorLogs(1);
+    } catch (e) { alert(e.message); }
+    finally { setCleaningUp(false); }
+  };
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await api('/system/api-logs/settings', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logSettings)
+      });
+      alert('Settings saved.');
+    } catch (e) { alert(e.message); }
+    finally { setSavingSettings(false); }
+  };
+
+  const statusBadge = (code) => {
+    if (!code || code === 0) return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-zinc-500/15 text-zinc-400">FAIL</span>;
+    if (code === 200) return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400">{code}</span>;
+    if (code === 429) return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400">{code}</span>;
+    return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/15 text-red-400">{code}</span>;
+  };
+
+  const fmtTime = (iso) => {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+    catch { return iso; }
+  };
+
+  const shortUrl = (url) => {
+    try { return url.replace(/https?:\/\/[^/]+/, '').substring(0, 80); }
+    catch { return url; }
   };
 
   return (
@@ -1660,84 +1767,426 @@ const SystemTab = () => {
             <Activity className="w-4 h-4 text-primary" />
             API Health Monitor
           </h2>
-          <button onClick={fetchHealth} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors" title="Refresh">
+          <button onClick={() => { fetchHealth(); fetchLogStats(); }} className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors" title="Refresh">
             <RefreshCw className={`w-3.5 h-3.5 ${healthLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
-        {healthLoading && !health ? (
-          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
-        ) : health ? (
-          <div className="space-y-3">
-            {/* Status Row */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                health.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' :
-                health.status === 'error' ? 'bg-red-500/15 text-red-400' :
-                health.status === 'suspended' ? 'bg-amber-500/15 text-amber-400' :
-                'bg-zinc-500/15 text-zinc-400'
-              }`} data-testid="api-status-badge">
-                <span className={`w-2 h-2 rounded-full ${
-                  health.status === 'active' ? 'bg-emerald-400 animate-pulse' :
-                  health.status === 'error' ? 'bg-red-400' :
-                  health.status === 'suspended' ? 'bg-amber-400' :
-                  'bg-zinc-400'
-                }`} />
-                {health.status === 'active' ? 'Active' : health.status === 'error' ? 'Error' : health.status === 'suspended' ? 'Rate Limited' : 'Unknown'}
-              </div>
-              {health.last_match_count > 0 && (
-                <span className="text-[10px] text-muted-foreground">{health.last_match_count} matches loaded</span>
-              )}
-            </div>
+        {/* Monitor Sub-Tabs */}
+        <div className="flex gap-1 mb-4 p-1 rounded-lg bg-secondary/30 overflow-x-auto" data-testid="monitor-tabs">
+          {[
+            { id: 'summary', label: 'Summary', icon: Activity },
+            { id: 'requests', label: `Requests${logStats ? ` (${logStats.total_requests})` : ''}`, icon: FileText },
+            { id: 'errors', label: `Errors${logStats ? ` (${logStats.total_errors})` : ''}`, icon: AlertCircle },
+            { id: 'settings', label: 'Settings', icon: Settings },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setMonitorTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all whitespace-nowrap ${
+                monitorTab === tab.id
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+              }`}
+              data-testid={`monitor-tab-${tab.id}`}
+            >
+              <tab.icon className="w-3 h-3" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="rounded-lg bg-secondary/50 p-2.5">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Total Requests</p>
-                <p className="text-sm font-bold text-foreground tabular-nums">{health.total_requests}</p>
-              </div>
-              <div className="rounded-lg bg-secondary/50 p-2.5">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Errors</p>
-                <p className={`text-sm font-bold tabular-nums ${health.total_errors > 0 ? 'text-red-400' : 'text-foreground'}`}>{health.total_errors}</p>
-              </div>
-              <div className="rounded-lg bg-secondary/50 p-2.5">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Cache Entries</p>
-                <p className="text-sm font-bold text-foreground tabular-nums">{health.cache_entries}</p>
-              </div>
-              <div className="rounded-lg bg-secondary/50 p-2.5">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Last Status</p>
-                <p className={`text-sm font-bold tabular-nums ${health.last_status_code === 200 ? 'text-emerald-400' : health.last_status_code ? 'text-red-400' : 'text-muted-foreground'}`}>
-                  {health.last_status_code || '—'}
-                </p>
-              </div>
-            </div>
-
-            {/* Last Update */}
-            {health.last_success && (
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <Clock className="w-3 h-3" />
-                Last successful update: {new Date(health.last_success).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
-              </div>
-            )}
-
-            {/* Error Message */}
-            {health.last_error_msg && (
-              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/20" data-testid="api-error-msg">
-                <AlertCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-semibold text-red-400">Latest Error</p>
-                  <p className="text-[10px] text-red-400/80 mt-0.5 break-all">{health.last_error_msg}</p>
-                  {health.last_error && (
-                    <p className="text-[9px] text-muted-foreground mt-1">
-                      at {new Date(health.last_error).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
-                    </p>
+        {/* ---- SUMMARY TAB ---- */}
+        {monitorTab === 'summary' && (
+          <>
+            {healthLoading && !health ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+            ) : health ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                    health.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' :
+                    health.status === 'error' ? 'bg-red-500/15 text-red-400' :
+                    health.status === 'suspended' ? 'bg-amber-500/15 text-amber-400' :
+                    'bg-zinc-500/15 text-zinc-400'
+                  }`} data-testid="api-status-badge">
+                    <span className={`w-2 h-2 rounded-full ${
+                      health.status === 'active' ? 'bg-emerald-400 animate-pulse' :
+                      health.status === 'error' ? 'bg-red-400' :
+                      health.status === 'suspended' ? 'bg-amber-400' : 'bg-zinc-400'
+                    }`} />
+                    {health.status === 'active' ? 'Active' : health.status === 'error' ? 'Error' : health.status === 'suspended' ? 'Rate Limited' : 'Unknown'}
+                  </div>
+                  {health.last_match_count > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{health.last_match_count} matches loaded</span>
                   )}
                 </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <div className="rounded-lg bg-secondary/50 p-2.5">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Total Requests</p>
+                    <p className="text-sm font-bold text-foreground tabular-nums">{health.total_requests}</p>
+                  </div>
+                  <div className="rounded-lg bg-secondary/50 p-2.5">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Errors</p>
+                    <p className={`text-sm font-bold tabular-nums ${health.total_errors > 0 ? 'text-red-400' : 'text-foreground'}`}>{health.total_errors}</p>
+                  </div>
+                  <div className="rounded-lg bg-secondary/50 p-2.5">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Cache</p>
+                    <p className="text-sm font-bold text-foreground tabular-nums">{health.cache_entries}</p>
+                  </div>
+                  <div className="rounded-lg bg-secondary/50 p-2.5">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Last Status</p>
+                    <p className={`text-sm font-bold tabular-nums ${health.last_status_code === 200 ? 'text-emerald-400' : health.last_status_code ? 'text-red-400' : 'text-muted-foreground'}`}>
+                      {health.last_status_code || '—'}
+                    </p>
+                  </div>
+                  {logStats && (
+                    <div className="rounded-lg bg-secondary/50 p-2.5">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Avg Response</p>
+                      <p className="text-sm font-bold text-foreground tabular-nums">{logStats.response_stats?.avg_ms || 0}ms</p>
+                    </div>
+                  )}
+                </div>
+
+                {logStats && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-secondary/30 p-2.5">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Requests (24h)</p>
+                      <p className="text-sm font-bold text-foreground tabular-nums">{logStats.requests_24h}</p>
+                    </div>
+                    <div className="rounded-lg bg-secondary/30 p-2.5">
+                      <p className="text-[10px] text-muted-foreground mb-0.5">Errors (24h)</p>
+                      <p className={`text-sm font-bold tabular-nums ${logStats.errors_24h > 0 ? 'text-red-400' : 'text-foreground'}`}>{logStats.errors_24h}</p>
+                    </div>
+                  </div>
+                )}
+
+                {health.last_success && (
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    Last successful update: {fmtTime(health.last_success)}
+                  </div>
+                )}
+
+                {health.last_error_msg && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/5 border border-red-500/20" data-testid="api-error-msg">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-[10px] font-semibold text-red-400">Latest Error</p>
+                      <p className="text-[10px] text-red-400/80 mt-0.5 break-all">{health.last_error_msg}</p>
+                      {health.last_error && <p className="text-[9px] text-muted-foreground mt-1">at {fmtTime(health.last_error)}</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground py-4 text-center">No health data yet. API has not been called.</p>
+            )}
+          </>
+        )}
+
+        {/* ---- REQUESTS TAB ---- */}
+        {monitorTab === 'requests' && (
+          <div className="space-y-3" data-testid="requests-tab">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-[180px]">
+                <label className="text-[10px] text-muted-foreground block mb-1">Search endpoint</label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input value={reqSearch} onChange={e => setReqSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchRequestLogs(1)} placeholder="Search..." className="h-8 text-xs pl-8" data-testid="req-search" />
+                </div>
+              </div>
+              <div className="w-24">
+                <label className="text-[10px] text-muted-foreground block mb-1">Status</label>
+                <select value={reqStatusFilter} onChange={e => { setReqStatusFilter(e.target.value); }} className="h-8 w-full px-2 rounded-lg border border-border bg-secondary/50 text-xs text-foreground" data-testid="req-status-filter">
+                  <option value="">All</option>
+                  <option value="200">200</option>
+                  <option value="429">429</option>
+                  <option value="500">500</option>
+                  <option value="0">Failed</option>
+                </select>
+              </div>
+              <div className="w-32">
+                <label className="text-[10px] text-muted-foreground block mb-1">From</label>
+                <input type="date" value={reqDateFrom} onChange={e => setReqDateFrom(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-border bg-secondary/50 text-xs text-foreground" data-testid="req-date-from" />
+              </div>
+              <div className="w-32">
+                <label className="text-[10px] text-muted-foreground block mb-1">To</label>
+                <input type="date" value={reqDateTo} onChange={e => setReqDateTo(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-border bg-secondary/50 text-xs text-foreground" data-testid="req-date-to" />
+              </div>
+              <Button size="sm" variant="outline" onClick={() => fetchRequestLogs(1)} className="h-8 text-xs gap-1" data-testid="req-apply-filters">
+                <Filter className="w-3 h-3" />Apply
+              </Button>
+            </div>
+
+            {/* Request Logs Table */}
+            {logsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+            ) : requestLogs.logs.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-8 text-center">No request logs found.</p>
+            ) : (
+              <div className="rounded-lg border border-border/40 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-secondary/30 text-left">
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground w-8"></th>
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground">Timestamp</th>
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground">Method</th>
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground">Endpoint</th>
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground">Status</th>
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground">Time</th>
+                        <th className="px-3 py-2 text-[10px] font-semibold text-muted-foreground">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {requestLogs.logs.map((log, i) => (
+                        <React.Fragment key={log.request_id || i}>
+                          <tr
+                            className={`border-t border-border/20 cursor-pointer transition-colors ${expandedRow === log.request_id ? 'bg-primary/5' : 'hover:bg-secondary/30'}`}
+                            onClick={() => setExpandedRow(expandedRow === log.request_id ? null : log.request_id)}
+                            data-testid={`req-row-${i}`}
+                          >
+                            <td className="px-3 py-2">
+                              <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${expandedRow === log.request_id ? 'rotate-180' : ''}`} />
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap tabular-nums">{fmtTime(log.timestamp)}</td>
+                            <td className="px-3 py-2"><span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 text-[10px] font-bold">{log.method}</span></td>
+                            <td className="px-3 py-2 text-foreground max-w-[300px] truncate font-mono text-[10px]" title={log.endpoint}>{shortUrl(log.endpoint)}</td>
+                            <td className="px-3 py-2">{statusBadge(log.status_code)}</td>
+                            <td className="px-3 py-2 tabular-nums text-muted-foreground">{log.response_time_ms}ms</td>
+                            <td className="px-3 py-2"><span className="px-1.5 py-0.5 rounded bg-secondary text-muted-foreground text-[10px]">{log.source || 'system'}</span></td>
+                          </tr>
+                          {expandedRow === log.request_id && (
+                            <tr className="bg-primary/[0.03]" data-testid={`req-detail-${i}`}>
+                              <td colSpan={7} className="px-4 py-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                                  <div>
+                                    <p className="text-muted-foreground font-semibold mb-1">Full Endpoint</p>
+                                    <p className="font-mono text-foreground break-all text-[10px] bg-secondary/50 rounded p-2">{log.endpoint}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground font-semibold mb-1">Request ID</p>
+                                    <p className="font-mono text-foreground text-[10px] bg-secondary/50 rounded p-2">{log.request_id}</p>
+                                  </div>
+                                  {log.params && Object.keys(log.params).length > 0 && (
+                                    <div>
+                                      <p className="text-muted-foreground font-semibold mb-1">Parameters</p>
+                                      <pre className="font-mono text-foreground text-[10px] bg-secondary/50 rounded p-2 overflow-auto max-h-32">{JSON.stringify(log.params, null, 2)}</pre>
+                                    </div>
+                                  )}
+                                  {log.response_preview && (
+                                    <div>
+                                      <p className="text-muted-foreground font-semibold mb-1">Response Preview</p>
+                                      <pre className="font-mono text-foreground text-[10px] bg-secondary/50 rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap break-all">{(() => {
+                                        try { return JSON.stringify(JSON.parse(log.response_preview), null, 2).substring(0, 800); }
+                                        catch { return log.response_preview?.substring(0, 800); }
+                                      })()}</pre>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination */}
+                {requestLogs.pages > 1 && (
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-border/30 bg-secondary/20">
+                    <span className="text-[10px] text-muted-foreground">Page {reqPage} of {requestLogs.pages} ({requestLogs.total} total)</span>
+                    <div className="flex gap-1">
+                      <button disabled={reqPage <= 1} onClick={() => { setReqPage(p => p - 1); fetchRequestLogs(reqPage - 1); }} className="p-1 rounded hover:bg-secondary disabled:opacity-30" data-testid="req-prev"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                      <button disabled={reqPage >= requestLogs.pages} onClick={() => { setReqPage(p => p + 1); fetchRequestLogs(reqPage + 1); }} className="p-1 rounded hover:bg-secondary disabled:opacity-30" data-testid="req-next"><ChevronRight className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground py-4 text-center">No health data yet. API has not been called.</p>
+        )}
+
+        {/* ---- ERRORS TAB ---- */}
+        {monitorTab === 'errors' && (
+          <div className="space-y-3" data-testid="errors-tab">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-[180px]">
+                <label className="text-[10px] text-muted-foreground block mb-1">Search endpoint/message</label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input value={errSearch} onChange={e => setErrSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchErrorLogs(1)} placeholder="Search..." className="h-8 text-xs pl-8" data-testid="err-search" />
+                </div>
+              </div>
+              <div className="w-24">
+                <label className="text-[10px] text-muted-foreground block mb-1">Status</label>
+                <select value={errStatusFilter} onChange={e => setErrStatusFilter(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-border bg-secondary/50 text-xs text-foreground" data-testid="err-status-filter">
+                  <option value="">All</option>
+                  <option value="429">429</option>
+                  <option value="500">500</option>
+                  <option value="0">Connection</option>
+                </select>
+              </div>
+              <div className="w-32">
+                <label className="text-[10px] text-muted-foreground block mb-1">From</label>
+                <input type="date" value={errDateFrom} onChange={e => setErrDateFrom(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-border bg-secondary/50 text-xs text-foreground" data-testid="err-date-from" />
+              </div>
+              <div className="w-32">
+                <label className="text-[10px] text-muted-foreground block mb-1">To</label>
+                <input type="date" value={errDateTo} onChange={e => setErrDateTo(e.target.value)} className="h-8 w-full px-2 rounded-lg border border-border bg-secondary/50 text-xs text-foreground" data-testid="err-date-to" />
+              </div>
+              <Button size="sm" variant="outline" onClick={() => fetchErrorLogs(1)} className="h-8 text-xs gap-1" data-testid="err-apply-filters">
+                <Filter className="w-3 h-3" />Apply
+              </Button>
+            </div>
+
+            {/* Error Logs */}
+            {logsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+            ) : errorLogs.logs.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-2"><Check className="w-6 h-6 text-emerald-500" /></div>
+                <p className="text-xs text-muted-foreground">No errors found. Everything is running smoothly.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {errorLogs.logs.map((err, i) => (
+                  <div key={err.error_id || i} className="rounded-lg border border-border/40 overflow-hidden" data-testid={`err-row-${i}`}>
+                    <div
+                      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${expandedRow === err.error_id ? 'bg-red-500/5' : 'hover:bg-secondary/30'}`}
+                      onClick={() => setExpandedRow(expandedRow === err.error_id ? null : err.error_id)}
+                    >
+                      <ChevronDown className={`w-3 h-3 text-muted-foreground shrink-0 transition-transform ${expandedRow === err.error_id ? 'rotate-180' : ''}`} />
+                      <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{err.error_message}</p>
+                        <p className="text-[10px] text-muted-foreground truncate font-mono">{shortUrl(err.endpoint)}</p>
+                      </div>
+                      {statusBadge(err.status_code)}
+                      {err.retry_count > 0 && <span className="text-[10px] text-amber-400 shrink-0">Retry: {err.retry_count}</span>}
+                      <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">{fmtTime(err.timestamp)}</span>
+                    </div>
+                    {expandedRow === err.error_id && (
+                      <div className="px-4 py-3 border-t border-border/20 bg-red-500/[0.02] space-y-3" data-testid={`err-detail-${i}`}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                          <div>
+                            <p className="text-muted-foreground font-semibold mb-1">Error Message</p>
+                            <p className="text-red-400 bg-secondary/50 rounded p-2 break-all text-[10px]">{err.error_message}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground font-semibold mb-1">Endpoint</p>
+                            <p className="font-mono text-foreground bg-secondary/50 rounded p-2 break-all text-[10px]">{err.endpoint}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground font-semibold mb-1">Request ID</p>
+                            <p className="font-mono text-foreground bg-secondary/50 rounded p-2 text-[10px]">{err.request_id}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground font-semibold mb-1">Details</p>
+                            <div className="flex gap-2 text-[10px]">
+                              <span>Status: <strong>{err.status_code || 'N/A'}</strong></span>
+                              <span>Retries: <strong>{err.retry_count || 0}</strong></span>
+                              <span>Source: <strong>{err.source || 'system'}</strong></span>
+                            </div>
+                          </div>
+                        </div>
+                        {err.full_error_response && (
+                          <div>
+                            <p className="text-muted-foreground font-semibold mb-1 text-[11px]">Full Error Response</p>
+                            <pre className="font-mono text-[10px] text-red-400/80 bg-secondary/50 rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">{(() => {
+                              try { return JSON.stringify(JSON.parse(err.full_error_response), null, 2); }
+                              catch { return err.full_error_response; }
+                            })()}</pre>
+                          </div>
+                        )}
+                        {err.stack_trace && (
+                          <div>
+                            <p className="text-muted-foreground font-semibold mb-1 text-[11px]">Stack Trace</p>
+                            <pre className="font-mono text-[10px] text-amber-400/80 bg-secondary/50 rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap">{err.stack_trace}</pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {/* Pagination */}
+                {errorLogs.pages > 1 && (
+                  <div className="flex items-center justify-between px-1 py-2">
+                    <span className="text-[10px] text-muted-foreground">Page {errPage} of {errorLogs.pages} ({errorLogs.total} total)</span>
+                    <div className="flex gap-1">
+                      <button disabled={errPage <= 1} onClick={() => { setErrPage(p => p - 1); fetchErrorLogs(errPage - 1); }} className="p-1 rounded hover:bg-secondary disabled:opacity-30" data-testid="err-prev"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                      <button disabled={errPage >= errorLogs.pages} onClick={() => { setErrPage(p => p + 1); fetchErrorLogs(errPage + 1); }} className="p-1 rounded hover:bg-secondary disabled:opacity-30" data-testid="err-next"><ChevronRight className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---- SETTINGS TAB ---- */}
+        {monitorTab === 'settings' && (
+          <div className="space-y-4" data-testid="settings-tab">
+            <div className="rounded-lg bg-secondary/30 p-4 space-y-4">
+              <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
+                <Database className="w-3.5 h-3.5 text-primary" />
+                Log Retention Settings
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-1.5 font-semibold">Retention Period (days)</label>
+                  <select value={logSettings.retention_days} onChange={e => setLogSettings(s => ({ ...s, retention_days: Number(e.target.value) }))} className="h-9 w-full px-3 rounded-lg border border-border bg-card text-sm text-foreground" data-testid="retention-days">
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                    <option value={60}>60 days</option>
+                    <option value={90}>90 days</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-1.5 font-semibold">Auto Cleanup</label>
+                  <button
+                    onClick={() => setLogSettings(s => ({ ...s, auto_cleanup: !s.auto_cleanup }))}
+                    className={`flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors ${logSettings.auto_cleanup ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-secondary border-border text-muted-foreground'}`}
+                    data-testid="auto-cleanup-toggle"
+                  >
+                    {logSettings.auto_cleanup ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                    {logSettings.auto_cleanup ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button size="sm" onClick={handleSaveSettings} disabled={savingSettings} className="gap-1.5" data-testid="save-log-settings">
+                  {savingSettings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Save Settings
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-secondary/30 p-4 space-y-3">
+              <h3 className="text-xs font-bold text-foreground flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                Manual Cleanup
+              </h3>
+              <p className="text-[10px] text-muted-foreground">
+                Remove all API request and error logs older than the configured retention period ({logSettings.retention_days} days).
+              </p>
+              {logStats && (
+                <div className="flex gap-4 text-[10px]">
+                  <span className="text-muted-foreground">Stored requests: <strong className="text-foreground">{logStats.total_requests}</strong></span>
+                  <span className="text-muted-foreground">Stored errors: <strong className="text-foreground">{logStats.total_errors}</strong></span>
+                </div>
+              )}
+              <Button size="sm" variant="outline" onClick={handleCleanup} disabled={cleaningUp} className="gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10" data-testid="cleanup-btn">
+                {cleaningUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Run Cleanup Now
+              </Button>
+            </div>
+          </div>
         )}
       </div>
 
