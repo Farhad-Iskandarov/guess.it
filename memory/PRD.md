@@ -1,35 +1,52 @@
 # GuessIt - Football Prediction Platform
 
+## Original Problem Statement
+1. Clone project from https://github.com/Farhad-Iskandarov/guess.it
+2. Production Hardening Phase v1.5 — scalability upgrades for 10K users
+3. Leaderboard UI redesign — premium competitive sports ranking interface
+
 ## Architecture
-- **Frontend:** React 19, CRACO, Tailwind CSS 3, shadcn/ui (Radix), Recharts
-- **Backend:** FastAPI (Python 3.11), Motor (async MongoDB), Pydantic v2
-- **Database:** MongoDB (DB: guessit)
-- **Real-time:** WebSockets | **Payments:** Stripe | **Auth:** Session-based + Google OAuth
+- Frontend: React 19, CRACO, Tailwind CSS 3, shadcn/ui, Recharts
+- Backend: FastAPI (Python 3.11), Uvicorn, Pydantic v2
+- Database: MongoDB (compound unique indexes)
+- Cache & Pub/Sub: Redis 7
+- Real-time: WebSockets (parallel broadcast)
+- Auth: Session-based (httpOnly cookies) + Google OAuth
+- Payments: Stripe
+- Background Worker: Standalone reminder_worker.py
 
-## What's Been Implemented
+## Implementation History
 
-### Session 1: Project Clone
-- Full clone from GitHub, dependencies installed, admin seeded
+### Phase 1: Clone [2026-03-03]
+- Full project clone from GitHub, all files preserved
 
-### Session 2: Loading UX
-- Skeleton loading, AbortController, stale-while-revalidate caching
+### Phase 2: Production Hardening v1.5 [2026-03-03]
+- P0: Reminder worker extraction, prediction race fix (unique index + upsert), atomic $inc, parallel WS broadcast
+- P1: Redis infrastructure, leaderboard caching, rate limiting, metrics endpoint
+- Benchmarked: 1,636 writes/sec, 0 duplicates, 100% atomic accuracy
 
-### Session 3: Local Timezone
-- `formatLocalDateTime()` utility, 8 components updated
-
-### Session 4: Behavioral Notifications
-- Reminder engine (pre-kickoff, favorite club matchday, favorite club urgency)
-
-### Session 5: Match Card UX Overhaul
-- Removed GuessIt/Remove buttons, tap-to-toggle 1/X/2, countdown in meta bar, bolder Advance
-
-### Session 6: Leaderboard System
-- **Backend**: New `GET /api/football/leaderboard/weekly` endpoint, `weekly_points` field tracking, weekly reset job (Monday 00:00 UTC with archive), DB indexes
-- **Frontend**: Complete LeaderboardPage rewrite with Weekly/Global tabs, podium top-3 cards, ranking list, skeleton loading, empty states, current user highlight
-- **Points system**: When points are awarded, both `points` (global) and `weekly_points` (weekly) increment simultaneously
-- **README updated**
+### Phase 3: Leaderboard UI Redesign [2026-03-03]
+- Centered 3-column podium (2nd|1st|3rd) with gold/silver/bronze hierarchy
+- 1st place: crown icon, largest avatar, gold glow, dominant visual
+- Max-width 1000px container, card background with shadow
+- Improved table: stronger header, row hover effects, formatted numbers, color-coded accuracy
+- Current user highlighting with "(You)" label
+- Empty slot placeholders when < 3 users
+- Responsive: works on 390px mobile through 1920px desktop
+- Entrance animations with staggered delays
+- NO logic changes — design only
 
 ## Prioritized Backlog
-### P0 — None
-### P1 — Configure Football API key, Stripe key, Google OAuth
-### P2 — Monthly leaderboard, Regional leaderboard, Weekly rewards, Browser Push Notifications
+### P0 (Next)
+- [ ] Gunicorn multi-worker deployment
+- [ ] OS file descriptor tuning
+
+### P1
+- [ ] Auto football API failover
+- [ ] Notification retry queue
+- [ ] Prediction lock countdown timer
+
+### P2
+- [ ] MongoDB replica set
+- [ ] Redis Sentinel
+- [ ] APM dashboard

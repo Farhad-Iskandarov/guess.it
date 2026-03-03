@@ -50,19 +50,21 @@ async def process_exact_score_results(db: AsyncIOMotorDatabase, match_id: int, h
         if is_exact:
             update_data["points_value"] = exact_bonus
             
-            # Award bonus points to user
-            user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "points": 1, "level": 1})
-            if user:
-                new_points = user.get("points", 0) + exact_bonus
-                new_level = calculate_level_from_thresholds(new_points, level_thresholds)
-                
+            # P0 FIX: Atomic $inc for points to prevent lost updates
+            await db.users.update_one(
+                {"user_id": user_id},
+                {
+                    "$inc": {"points": exact_bonus, "weekly_points": exact_bonus},
+                    "$set": {"updated_at": now}
+                }
+            )
+            # Recalculate level after atomic increment
+            updated_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "points": 1})
+            if updated_user:
+                new_level = calculate_level_from_thresholds(updated_user.get("points", 0), level_thresholds)
                 await db.users.update_one(
                     {"user_id": user_id},
-                    {"$set": {
-                        "points": new_points,
-                        "level": new_level,
-                        "updated_at": now
-                    }}
+                    {"$set": {"level": new_level}}
                 )
             
             # Send success notification

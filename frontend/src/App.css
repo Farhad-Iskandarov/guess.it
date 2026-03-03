@@ -261,64 +261,26 @@ button, a, input, select, textarea {
 }
 
 /* ===== Leaderboard Podium ===== */
-.podium-wrapper {
+/* ===== LEADERBOARD PODIUM REDESIGN ===== */
+
+.podium-section {
     overflow: hidden;
 }
-.podium-stage {
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 0.75rem;
-    max-width: 520px;
-    margin: 0 auto;
-}
-@media (min-width: 640px) {
-    .podium-stage { gap: 1.25rem; }
-}
 
-/* Slot ordering: 2nd | 1st | 3rd */
-.podium-slot { display: flex; flex-direction: column; align-items: center; width: 130px; flex-shrink: 0; }
-.podium-slot-1 { order: 2; width: 150px; }
-.podium-slot-2 { order: 1; }
-.podium-slot-3 { order: 3; }
-@media (min-width: 640px) {
-    .podium-slot { width: 150px; }
-    .podium-slot-1 { width: 180px; }
-}
-
-/* Pedestal blocks with height hierarchy */
-.podium-block {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.75rem 0.75rem 0 0;
-    margin-top: 0.25rem;
-    backdrop-filter: blur(4px);
-}
-.podium-block-1 { height: 96px; }
-.podium-block-2 { height: 68px; }
-.podium-block-3 { height: 48px; }
-@media (min-width: 640px) {
-    .podium-block-1 { height: 120px; }
-    .podium-block-2 { height: 84px; }
-    .podium-block-3 { height: 60px; }
-}
-
-/* Entrance animation — blocks rise up + fade in */
+/* Entrance animation */
 @keyframes podium-rise {
-    from { opacity: 0; transform: translateY(40px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(50px) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .podium-entrance {
     opacity: 0;
-    animation: podium-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: podium-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Winner glow — 1st place only */
 @keyframes winner-glow-pulse {
-    0%, 100% { box-shadow: 0 0 12px 2px rgba(234, 179, 8, 0.25); }
-    50%      { box-shadow: 0 0 24px 6px rgba(234, 179, 8, 0.4); }
+    0%, 100% { box-shadow: 0 0 16px 3px rgba(245, 158, 11, 0.2); }
+    50%      { box-shadow: 0 0 32px 8px rgba(245, 158, 11, 0.35); }
 }
 .podium-winner-glow {
     border-radius: 50%;
@@ -328,10 +290,24 @@ button, a, input, select, textarea {
 /* Hover lift — desktop only */
 @media (hover: hover) {
     .podium-card-hover {
-        transition: transform 0.25s ease, filter 0.25s ease;
+        transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
     }
     .podium-card-hover:hover {
-        transform: translateY(-4px) scale(1.03);
+        transform: translateY(-6px) scale(1.04);
+    }
+}
+
+/* Responsive podium: stack on very small screens */
+@media (max-width: 440px) {
+    .podium-section .flex.items-end {
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem !important;
+    }
+    .podium-section .order-1,
+    .podium-section .order-2,
+    .podium-section .order-3 {
+        order: unset !important;
     }
 }
 

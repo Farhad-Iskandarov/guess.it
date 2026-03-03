@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timezone, timedelta
+from pymongo.errors import DuplicateKeyError
 import logging
 
 from models.prediction import (
@@ -10,6 +11,7 @@ from models.prediction import (
 )
 from routes.auth import validate_session
 from routes.notifications import create_notification
+from services.redis_pubsub import check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -83,76 +85,69 @@ async def create_or_update_prediction(
 ):
     """
     Create or update a prediction for a match.
-    If prediction exists for this user+match, update it.
-    Otherwise, create a new prediction.
+    Uses atomic upsert to prevent race conditions under concurrent requests.
+    Rate limited: max 15 predictions per minute per user.
     """
     # Get current user
     user = await get_current_user(request, db)
     user_id = user["user_id"]
-    
-    # Check if prediction already exists
-    existing = await db.predictions.find_one({
-        "user_id": user_id,
-        "match_id": prediction_data.match_id
-    }, {"_id": 0})
-    
+
+    # P1 FIX: Rate limiting on predictions
+    rate_key = f"ratelimit:predictions:{user_id}"
+    allowed = await check_rate_limit(rate_key, max_requests=15, window_seconds=60)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Too many predictions. Please wait a moment.")
+
     now = datetime.now(timezone.utc)
-    
-    if existing:
-        # Update existing prediction
-        await db.predictions.update_one(
-            {"prediction_id": existing["prediction_id"]},
-            {
-                "$set": {
-                    "prediction": prediction_data.prediction,
-                    "updated_at": now.isoformat()
-                }
-            }
-        )
-        
-        # Parse created_at
-        created_at = existing.get("created_at")
-        if isinstance(created_at, str):
-            created_at = datetime.fromisoformat(created_at)
-        
-        return PredictionResponse(
-            prediction_id=existing["prediction_id"],
-            user_id=user_id,
-            match_id=prediction_data.match_id,
-            prediction=prediction_data.prediction,
-            created_at=created_at,
-            updated_at=now,
-            is_new=False
-        )
-    else:
-        # Create new prediction
-        prediction = PredictionInDB(
-            user_id=user_id,
-            match_id=prediction_data.match_id,
-            prediction=prediction_data.prediction
-        )
-        
-        pred_dict = prediction.model_dump()
-        pred_dict['created_at'] = pred_dict['created_at'].isoformat()
-        pred_dict['updated_at'] = pred_dict['updated_at'].isoformat()
-        
-        await db.predictions.insert_one(pred_dict)
-        
-        # Notify friends about new prediction (fire-and-forget)
+
+    # P0 FIX: Atomic upsert — no read-then-write race condition
+    # Uses the unique compound index on (user_id, match_id)
+    prediction_id = f"pred_{__import__('uuid').uuid4().hex[:12]}"
+
+    result = await db.predictions.find_one_and_update(
+        {"user_id": user_id, "match_id": prediction_data.match_id},
+        {
+            "$set": {
+                "prediction": prediction_data.prediction,
+                "updated_at": now.isoformat(),
+            },
+            "$setOnInsert": {
+                "prediction_id": prediction_id,
+                "user_id": user_id,
+                "match_id": prediction_data.match_id,
+                "created_at": now.isoformat(),
+                "points_awarded": False,
+                "points_value": 0,
+            },
+        },
+        upsert=True,
+        return_document=True,
+        projection={"_id": 0},
+    )
+
+    is_new = result.get("prediction_id") == prediction_id
+
+    # Parse timestamps
+    created_at = result.get("created_at")
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+
+    # Notify friends about new prediction (fire-and-forget, only on new)
+    if is_new:
         try:
             await _notify_friends_of_prediction(db, user, prediction_data.match_id, prediction_data.prediction)
         except Exception as e:
             logger.warning(f"Failed to notify friends of prediction: {e}")
-        
-        return PredictionResponse(
-            prediction_id=prediction.prediction_id,
-            user_id=user_id,
-            match_id=prediction_data.match_id,
-            prediction=prediction_data.prediction,
-            created_at=prediction.created_at,
-            updated_at=prediction.updated_at,
-            is_new=True
-        )
+
+    return PredictionResponse(
+        prediction_id=result["prediction_id"],
+        user_id=user_id,
+        match_id=prediction_data.match_id,
+        prediction=prediction_data.prediction,
+        created_at=created_at,
+        updated_at=now,
+        is_new=is_new
+    )
 
 @router.get("/me", response_model=UserPredictionsResponse)
 async def get_my_predictions(
@@ -570,20 +565,36 @@ async def get_my_predictions_detailed(
 
     # Update user points and level if there were changes
     if points_delta != 0:
-        new_points = max(0, user.get("points", 0) + points_delta)
-        new_weekly = max(0, user.get("weekly_points", 0) + points_delta)
-        new_level = calculate_level(new_points, LEVEL_THRESHOLDS)
+        # P0 FIX: Atomic $inc for points to prevent lost updates under concurrency
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {
-                "points": new_points,
-                "weekly_points": new_weekly,
-                "level": new_level,
-                "updated_at": now.isoformat()
-            }}
+            {
+                "$inc": {
+                    "points": points_delta,
+                    "weekly_points": points_delta,
+                },
+                "$set": {
+                    "updated_at": now.isoformat()
+                }
+            }
         )
-        user_points = new_points
-        user_level = new_level
+        # Clamp negative values to 0 (separate operation to avoid negative points)
+        await db.users.update_one(
+            {"user_id": user_id, "points": {"$lt": 0}},
+            {"$set": {"points": 0}}
+        )
+        await db.users.update_one(
+            {"user_id": user_id, "weekly_points": {"$lt": 0}},
+            {"$set": {"weekly_points": 0}}
+        )
+        # Recalculate level after atomic increment
+        updated_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "points": 1})
+        user_points = updated_user.get("points", 0) if updated_user else 0
+        user_level = calculate_level(user_points, LEVEL_THRESHOLDS)
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"level": user_level}}
+        )
     else:
         user_points = user.get("points", 0)
         user_level = user.get("level", 0)
@@ -608,47 +619,63 @@ async def create_exact_score_prediction(
 ):
     """
     Create an exact score prediction for a match.
-    Only one per match per user. Use PUT to update before match starts.
+    Only one per match per user. Uses atomic upsert with unique index.
     """
     user = await get_current_user(request, db)
     user_id = user["user_id"]
-    
-    # Check if exact score prediction already exists for this match
-    existing = await db.exact_score_predictions.find_one({
-        "user_id": user_id,
-        "match_id": prediction_data.match_id
-    }, {"_id": 0})
-    
-    if existing:
+
+    # Rate limit
+    rate_key = f"ratelimit:exact_score:{user_id}"
+    allowed = await check_rate_limit(rate_key, max_requests=10, window_seconds=60)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait.")
+
+    now = datetime.now(timezone.utc)
+    exact_score_id = f"es_{__import__('uuid').uuid4().hex[:12]}"
+
+    # Atomic: only insert if doesn't exist (setOnInsert + upsert with check)
+    try:
+        result = await db.exact_score_predictions.find_one_and_update(
+            {"user_id": user_id, "match_id": prediction_data.match_id},
+            {
+                "$setOnInsert": {
+                    "exact_score_id": exact_score_id,
+                    "user_id": user_id,
+                    "match_id": prediction_data.match_id,
+                    "home_score": prediction_data.home_score,
+                    "away_score": prediction_data.away_score,
+                    "points_awarded": False,
+                    "points_value": 0,
+                    "created_at": now.isoformat(),
+                },
+            },
+            upsert=True,
+            return_document=False,  # Returns None if insert, old doc if exists
+            projection={"_id": 0},
+        )
+
+        if result is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Exact score prediction already exists for this match. Use edit to change it."
+            )
+    except DuplicateKeyError:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="Exact score prediction already exists for this match. Use edit to change it."
         )
-    
-    # Create new exact score prediction
-    exact_pred = ExactScoreInDB(
-        user_id=user_id,
-        match_id=prediction_data.match_id,
-        home_score=prediction_data.home_score,
-        away_score=prediction_data.away_score
-    )
-    
-    pred_dict = exact_pred.model_dump()
-    pred_dict['created_at'] = pred_dict['created_at'].isoformat()
-    
-    await db.exact_score_predictions.insert_one(pred_dict)
-    
+
     logger.info(f"User {user_id} created exact score prediction for match {prediction_data.match_id}: {prediction_data.home_score}-{prediction_data.away_score}")
-    
+
     return ExactScoreResponse(
-        exact_score_id=exact_pred.exact_score_id,
+        exact_score_id=exact_score_id,
         user_id=user_id,
         match_id=prediction_data.match_id,
         home_score=prediction_data.home_score,
         away_score=prediction_data.away_score,
         points_awarded=False,
         points_value=0,
-        created_at=exact_pred.created_at
+        created_at=now
     )
 
 

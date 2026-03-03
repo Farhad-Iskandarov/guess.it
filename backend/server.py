@@ -17,6 +17,10 @@ from datetime import datetime, timezone, timedelta
 from routes.auth import router as auth_router
 from routes.predictions import router as predictions_router
 from routes.football import router as football_router, manager as ws_manager, start_polling, stop_polling
+from services.redis_pubsub import (
+    register_handler, start_subscriber, stop_subscriber,
+    CHANNEL_LIVE_MATCHES, CHANNEL_FRIENDS, CHANNEL_CHAT, CHANNEL_NOTIFICATIONS,
+)
 from routes.favorites import router as favorites_router
 from routes.settings import router as settings_router
 from routes.friends import router as friends_router, friend_manager
@@ -65,6 +69,54 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@api_router.get("/system/metrics")
+async def system_metrics():
+    """System metrics endpoint for monitoring — WebSocket connections, Redis status, worker info."""
+    from routes.football import manager as ws_match_manager
+    from routes.messages import chat_manager, notification_manager
+    from services.redis_pubsub import get_redis
+
+    # WebSocket connection counts
+    ws_match_count = len(ws_match_manager.active_connections) if hasattr(ws_match_manager, 'active_connections') else 0
+    ws_chat_count = sum(len(v) for v in chat_manager.user_connections.values())
+    ws_notify_count = sum(len(v) for v in notification_manager.user_connections.values())
+
+    # Redis status
+    redis_status = "disconnected"
+    try:
+        r = await get_redis()
+        if r:
+            await r.ping()
+            redis_status = "connected"
+    except Exception:
+        redis_status = "error"
+
+    # MongoDB status
+    mongo_status = "connected"
+    try:
+        await db.command("ping")
+    except Exception:
+        mongo_status = "error"
+
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "websocket_connections": {
+            "matches": ws_match_count,
+            "chat": ws_chat_count,
+            "notifications": ws_notify_count,
+            "total": ws_match_count + ws_chat_count + ws_notify_count,
+        },
+        "redis": redis_status,
+        "mongodb": mongo_status,
+        "architecture": {
+            "api_workers": "single (uvicorn + hot-reload)",
+            "reminder_worker": "separate process",
+            "redis_pubsub": redis_status == "connected",
+        },
+    }
 
 
 @api_router.get("/profile/bundle")
@@ -595,7 +647,8 @@ async def seed_admin_account(db):
 @app.on_event("startup")
 async def startup_event():
     """Start background polling for live matches"""
-    # Create indexes for messages and notifications
+    # ==================== MongoDB Indexes ====================
+    # Messages & notifications
     await db.messages.create_index([("sender_id", 1), ("receiver_id", 1), ("created_at", -1)])
     await db.messages.create_index([("receiver_id", 1), ("read", 1)])
     await db.messages.create_index([("receiver_id", 1), ("delivered", 1)])
@@ -626,7 +679,6 @@ async def startup_event():
     await db.predictions.create_index([("user_id", 1), ("points_awarded", 1)])
     # Performance indexes for vote counting and match queries
     await db.predictions.create_index([("match_id", 1), ("prediction", 1)])
-    await db.exact_score_predictions.create_index([("user_id", 1), ("match_id", 1)])
     await db.exact_score_predictions.create_index([("match_id", 1)])
     await db.points_gifts.create_index([("created_at", -1)])
     # Subscription indexes
@@ -634,14 +686,26 @@ async def startup_event():
     await db.user_subscriptions.create_index([("user_id", 1), ("status", 1)])
     await db.payment_transactions.create_index([("session_id", 1)], unique=True)
     await db.payment_transactions.create_index([("user_id", 1)])
-    
+
+    # ==================== P0 FIX: Compound unique indexes to prevent race conditions ====================
+    await db.predictions.create_index(
+        [("user_id", 1), ("match_id", 1)],
+        unique=True,
+        name="unique_user_match_prediction"
+    )
+    await db.exact_score_predictions.create_index(
+        [("user_id", 1), ("match_id", 1)],
+        unique=True,
+        name="unique_user_match_exact_score"
+    )
+
     # Seed default Football API key if none exists
     await seed_default_api_key(db)
-    
+
     # Set db reference for API logging
     from services.football_api import set_db_for_logging
     set_db_for_logging(db)
-    
+
     # API monitoring indexes
     await db.api_request_logs.create_index([("timestamp", -1)])
     await db.api_request_logs.create_index([("status_code", 1)])
@@ -650,16 +714,27 @@ async def startup_event():
     await db.api_error_logs.create_index([("status_code", 1)])
     await db.api_error_logs.create_index([("endpoint", 1)])
     await db.football_matches_cache.create_index([("id", 1)], unique=True)
-    
+
     # Seed admin account if it doesn't exist
     await seed_admin_account(db)
-    
+
     # Seed subscription plans
     await seed_subscription_plans(db)
-    
+
+    # ==================== Redis Pub/Sub for WebSocket scaling ====================
+    # Register handlers so this worker receives broadcasts from the reminder worker
+    async def _handle_live_broadcast(data):
+        """Receive match updates from Redis and broadcast to local WebSocket clients."""
+        if data and ws_manager.active_connections:
+            await ws_manager.broadcast(data)
+
+    register_handler(CHANNEL_LIVE_MATCHES, _handle_live_broadcast)
+    await start_subscriber()
+
+    # Start polling and reminder engine in this process as well (for single-instance compat)
+    # When reminder_worker.py is running separately, these will be redundant but harmless
+    # because reminders are idempotent (dedup by notification existence)
     start_polling(db)
-    
-    # Start behavioral reminder engine (pre-kickoff, favorite club notifications)
     start_reminder_engine(db)
 
 
@@ -667,4 +742,7 @@ async def startup_event():
 async def shutdown_db_client():
     stop_reminder_engine()
     stop_polling()
+    await stop_subscriber()
+    from services.redis_pubsub import close as redis_close
+    await redis_close()
     client.close()

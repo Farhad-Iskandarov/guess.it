@@ -59,19 +59,29 @@ class ConnectionManager:
         logger.info(f"WebSocket disconnected. Total: {len(self.active_connections)}")
 
     async def broadcast(self, data: dict):
-        """Send data to all connected clients"""
+        """Send data to all connected clients using parallel async dispatch."""
         async with self._lock:
             connections = list(self.active_connections)
 
-        disconnected = []
-        for connection in connections:
-            try:
-                await connection.send_json(data)
-            except Exception:
-                disconnected.append(connection)
+        if not connections:
+            return
 
-        for conn in disconnected:
-            await self.disconnect(conn)
+        async def _safe_send(conn):
+            try:
+                await asyncio.wait_for(conn.send_json(data), timeout=5.0)
+            except Exception:
+                return conn
+            return None
+
+        results = await asyncio.gather(
+            *(_safe_send(conn) for conn in connections),
+            return_exceptions=True,
+        )
+
+        # Clean up failed connections
+        for result in results:
+            if isinstance(result, WebSocket):
+                await self.disconnect(result)
 
 
 manager = ConnectionManager()
@@ -234,14 +244,27 @@ async def get_leaderboard(
     limit: int = 50,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get global leaderboard - top users by points"""
+    """Get global leaderboard - top users by points. Cached in Redis for 30s."""
+    from services.redis_pubsub import cache_get, cache_set
+    import json as _json
+
+    cache_key = f"leaderboard:global:{limit}"
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return _json.loads(cached)
+        except Exception:
+            pass
+
     users = await db.users.find(
         {},
         {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1, 
          "points": 1, "level": 1, "predictions_count": 1, "correct_predictions": 1}
     ).sort("points", -1).limit(limit).to_list(limit)
-    
-    return {"users": users}
+
+    result = {"users": users}
+    await cache_set(cache_key, _json.dumps(result, default=str), ttl_seconds=30)
+    return result
 
 
 @router.get("/leaderboard/weekly")
@@ -249,7 +272,18 @@ async def get_weekly_leaderboard(
     limit: int = 50,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get weekly leaderboard - top users by weekly_points (resets every Monday)"""
+    """Get weekly leaderboard - top users by weekly_points. Cached in Redis for 30s."""
+    from services.redis_pubsub import cache_get, cache_set
+    import json as _json
+
+    cache_key = f"leaderboard:weekly:{limit}"
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return _json.loads(cached)
+        except Exception:
+            pass
+
     users = await db.users.find(
         {"weekly_points": {"$gt": 0}},
         {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1,
@@ -258,16 +292,17 @@ async def get_weekly_leaderboard(
 
     # Get week info
     now = datetime.now(timezone.utc)
-    # Monday of current week
     monday = now - timedelta(days=now.weekday())
     week_start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = week_start + timedelta(days=7)
 
-    return {
+    result = {
         "users": users,
         "week_start": week_start.isoformat(),
         "week_end": week_end.isoformat(),
     }
+    await cache_set(cache_key, _json.dumps(result, default=str), ttl_seconds=30)
+    return result
 
 
 @router.get("/leaderboard/check-rank")

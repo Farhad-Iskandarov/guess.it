@@ -128,14 +128,23 @@ class ChatWSManager:
     async def send_to_user(self, user_id: str, data: dict):
         async with self._lock:
             connections = list(self.user_connections.get(user_id, []))
-        dead = []
-        for conn in connections:
+        if not connections:
+            return
+
+        async def _safe_send(conn):
             try:
-                await conn.send_json(data)
+                await asyncio.wait_for(conn.send_json(data), timeout=5.0)
             except Exception:
-                dead.append(conn)
-        for c in dead:
-            await self.disconnect(c, user_id)
+                return conn
+            return None
+
+        results = await asyncio.gather(
+            *(_safe_send(c) for c in connections),
+            return_exceptions=True,
+        )
+        for r in results:
+            if isinstance(r, WebSocket):
+                await self.disconnect(r, user_id)
 
     def is_online(self, user_id: str) -> bool:
         return user_id in self.user_connections and len(self.user_connections[user_id]) > 0
@@ -168,14 +177,23 @@ class UnifiedNotificationManager:
     async def notify(self, user_id: str, data: dict):
         async with self._lock:
             connections = list(self.user_connections.get(user_id, []))
-        dead = []
-        for conn in connections:
+        if not connections:
+            return
+
+        async def _safe_send(conn):
             try:
-                await conn.send_json(data)
+                await asyncio.wait_for(conn.send_json(data), timeout=5.0)
             except Exception:
-                dead.append(conn)
-        for c in dead:
-            await self.disconnect(c, user_id)
+                return conn
+            return None
+
+        results = await asyncio.gather(
+            *(_safe_send(c) for c in connections),
+            return_exceptions=True,
+        )
+        for r in results:
+            if isinstance(r, WebSocket):
+                await self.disconnect(r, user_id)
 
     def is_online(self, user_id: str) -> bool:
         return user_id in self.user_connections and len(self.user_connections[user_id]) > 0
