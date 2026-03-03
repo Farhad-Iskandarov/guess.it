@@ -339,7 +339,7 @@ export const HomePage = () => {
     };
   }, [activeLeague, loadMatches]);
 
-  // Auto-refresh matches every 60 seconds (fallback for non-WebSocket)
+  // Auto-refresh matches every 30 seconds (fallback for non-WebSocket)
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isConnected) {
@@ -347,7 +347,7 @@ export const HomePage = () => {
         const controller = new AbortController();
         loadMatches(activeLeague, controller.signal);
       }
-    }, 60000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [activeLeague, isConnected, loadMatches]);
@@ -611,7 +611,7 @@ export const HomePage = () => {
             ) : (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="ws-disconnected">
                 <WifiOff className="w-3 h-3" />
-                <span>Auto-refreshing every 60s</span>
+                <span>Auto-refreshing every 30s</span>
               </div>
             )}
           </div>

@@ -264,17 +264,50 @@ async def get_profile_bundle(request: Request):
                 my_rank = rank
         return {"leaderboard": lb, "my_rank": my_rank}
 
+    async def fetch_achievements():
+        from services.achievement_engine import get_all_achievements_progress
+        # We need the prediction summary for accurate achievement stats
+        # Use a lightweight approach: get summary from user doc counters
+        return await get_all_achievements_progress(db, user_id, user)
+
     # Run ALL queries in parallel
-    preds_result, favs_result, lb_result = await asyncio.gather(
-        fetch_predictions(), fetch_favorites(), fetch_friends_leaderboard(),
+    preds_result, favs_result, lb_result, achievements_result = await asyncio.gather(
+        fetch_predictions(), fetch_favorites(), fetch_friends_leaderboard(), fetch_achievements(),
         return_exceptions=True
     )
+
+    # If predictions computed successfully, re-compute achievements with accurate summary
+    achievements_data = None
+    if not isinstance(achievements_result, Exception):
+        achievements_data = achievements_result
+        # Refine achievements using actual prediction summary if available
+        if not isinstance(preds_result, Exception) and preds_result.get("summary"):
+            try:
+                from services.achievement_engine import get_all_achievements_progress
+                achievements_data = await get_all_achievements_progress(
+                    db, user_id, user, summary=preds_result["summary"]
+                )
+            except Exception:
+                pass
 
     return {
         "predictions": preds_result if not isinstance(preds_result, Exception) else {"predictions": [], "total": 0, "summary": {"correct": 0, "wrong": 0, "pending": 0, "points": 0}},
         "favorites": favs_result if not isinstance(favs_result, Exception) else {"favorites": []},
         "friends_leaderboard": lb_result if not isinstance(lb_result, Exception) else {"leaderboard": [], "my_rank": None},
+        "achievements": achievements_data if achievements_data else {"display": [], "all": [], "completed_count": 0, "total_count": 0, "stats": {}},
     }
+
+@api_router.get("/achievements")
+async def get_achievements(request: Request):
+    """Get all achievements with progress for the current user."""
+    from routes.auth import get_current_user
+    from services.achievement_engine import get_all_achievements_progress
+
+    user_obj = await get_current_user(request, db)
+    user_id = user_obj.user_id
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return await get_all_achievements_progress(db, user_id, user)
+
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):

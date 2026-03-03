@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMessages } from '@/lib/MessagesContext';
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from '@/services/messages';
+import { getNotifications, markAllNotificationsRead } from '@/services/messages';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import {
-  Bell, Check, CheckCheck, UserPlus, UserCheck, MessageSquare, Trophy, Loader2, X
+  Bell, CheckCircle2, UserPlus, UserCheck, MessageSquare, Trophy, Loader2, X, Award
 } from 'lucide-react';
 import {
   Tooltip,
@@ -24,6 +25,8 @@ const NotifIcon = memo(({ type }) => {
       return <MessageSquare className="w-4 h-4 text-primary" />;
     case 'badge_earned':
       return <Trophy className="w-4 h-4 text-amber-400" />;
+    case 'achievement_unlocked':
+      return <Award className="w-4 h-4 text-amber-400" />;
     default:
       return <Bell className="w-4 h-4 text-muted-foreground" />;
   }
@@ -43,31 +46,21 @@ function timeAgo(dateString) {
 }
 
 // ============ Notification Item ============
-const NotificationItem = memo(({ notif, onMarkRead, onNavigate }) => (
+const NotificationItem = memo(({ notif, onNavigate }) => (
   <button
-    onClick={() => {
-      if (!notif.read) onMarkRead(notif.notification_id);
-      onNavigate(notif);
-    }}
-    className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors border-b border-border/20 last:border-b-0 ${
-      notif.read ? 'opacity-60 hover:opacity-80' : 'hover:bg-secondary/50'
-    }`}
+    onClick={() => onNavigate(notif)}
+    className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors border-b border-border/20 last:border-b-0 hover:bg-secondary/50`}
     data-testid={`notif-item-${notif.notification_id}`}
   >
-    <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${
-      notif.read ? 'bg-muted/50' : 'bg-primary/10'
-    }`}>
+    <div className="flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 bg-primary/10">
       <NotifIcon type={notif.type} />
     </div>
     <div className="flex-1 min-w-0">
-      <p className={`text-sm ${notif.read ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
+      <p className="text-sm text-foreground">
         {notif.message}
       </p>
       <p className="text-[10px] text-muted-foreground mt-0.5">{timeAgo(notif.created_at)}</p>
     </div>
-    {!notif.read && (
-      <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-2" />
-    )}
   </button>
 ));
 NotificationItem.displayName = 'NotificationItem';
@@ -93,16 +86,34 @@ export const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [markingAll, setMarkingAll] = useState(false);
   const dropdownRef = useRef(null);
+  const markingRef = useRef(false); // prevent duplicate mark-all-read calls
 
-  // Load notifications when dropdown opens
-  const loadNotifications = useCallback(async () => {
+  // Load notifications and auto-mark all as read when dropdown opens
+  const loadAndMarkRead = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getNotifications(20, 0);
-      setNotifications(data.notifications || []);
-      setUnreadNotifications(data.unread_count || 0);
+      const notifs = data.notifications || [];
+      setNotifications(notifs);
+
+      const unread = data.unread_count || 0;
+      setUnreadNotifications(unread);
+
+      // Auto-mark all as read if there are unread notifications
+      if (unread > 0 && !markingRef.current) {
+        markingRef.current = true;
+        try {
+          await markAllNotificationsRead();
+          // Update all notifications in state to read
+          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+          setUnreadNotifications(0);
+        } catch (e) {
+          console.error('Failed to auto-mark read:', e);
+        } finally {
+          markingRef.current = false;
+        }
+      }
     } catch (e) {
       console.error('Failed to load notifications:', e);
     } finally {
@@ -113,10 +124,10 @@ export const NotificationDropdown = () => {
   // Toggle dropdown
   const toggle = useCallback(() => {
     setIsOpen(prev => {
-      if (!prev) loadNotifications();
+      if (!prev) loadAndMarkRead();
       return !prev;
     });
-  }, [loadNotifications]);
+  }, [loadAndMarkRead]);
 
   // Close on click outside
   useEffect(() => {
@@ -140,56 +151,41 @@ export const NotificationDropdown = () => {
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen]);
 
-  // Listen for real-time notifications to add to list
+  // Listen for real-time notifications — add to list + show toast for achievements
   useEffect(() => {
     const remove = addNotifListener((data) => {
       if (data.type === 'notification' && data.notification) {
-        setNotifications(prev => [data.notification, ...prev].slice(0, 30));
+        const notif = data.notification;
+        setNotifications(prev => [notif, ...prev].slice(0, 30));
+
+        // Show toast for achievement notifications
+        if (notif.type === 'achievement_unlocked') {
+          toast.success(notif.message || 'Achievement Unlocked!', {
+            duration: 5000,
+            icon: '🏆',
+          });
+        }
       }
     });
     return remove;
   }, [addNotifListener]);
-
-  // Mark single notification read
-  const handleMarkRead = useCallback(async (notifId) => {
-    try {
-      await markNotificationRead(notifId);
-      setNotifications(prev =>
-        prev.map(n => n.notification_id === notifId ? { ...n, read: true } : n)
-      );
-      setUnreadNotifications(prev => Math.max(0, prev - 1));
-    } catch (e) {
-      console.error('Failed to mark read:', e);
-    }
-  }, [setUnreadNotifications]);
-
-  // Mark all read
-  const handleMarkAllRead = useCallback(async () => {
-    setMarkingAll(true);
-    try {
-      await markAllNotificationsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadNotifications(0);
-    } catch (e) {
-      console.error('Failed to mark all read:', e);
-    } finally {
-      setMarkingAll(false);
-    }
-  }, [setUnreadNotifications]);
 
   // Navigate based on notification type
   const handleNavigate = useCallback((notif) => {
     setIsOpen(false);
     switch (notif.type) {
       case 'friend_request':
-        navigate('/friends');
-        break;
       case 'friend_accepted':
         navigate('/friends');
         break;
       case 'new_message':
         navigate('/messages');
         break;
+      case 'achievement_unlocked': {
+        const achId = notif.data?.achievement_id || notif.achievement_id || '';
+        navigate(`/profile?section=achievements&highlight=${achId}`);
+        break;
+      }
       default:
         break;
     }
@@ -220,7 +216,7 @@ export const NotificationDropdown = () => {
         </Tooltip>
       </TooltipProvider>
 
-      {/* Dropdown Panel — mobile-optimized */}
+      {/* Dropdown Panel */}
       {isOpen && (
         <div
           className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-[4.5rem] sm:top-full sm:mt-2 sm:w-[360px] max-h-[60vh] sm:max-h-[480px] rounded-xl bg-card border border-border shadow-xl shadow-black/30 z-[100] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
@@ -229,29 +225,15 @@ export const NotificationDropdown = () => {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
-            <div className="flex items-center gap-1">
-              {unreadNotifications > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleMarkAllRead}
-                  disabled={markingAll}
-                  className="text-xs text-primary hover:text-primary h-7 px-2"
-                  data-testid="mark-all-read-btn"
-                >
-                  {markingAll ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCheck className="w-3 h-3 mr-1" />}
-                  Mark all read
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground"
-                onClick={() => setIsOpen(false)}
-              >
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground"
+              onClick={() => setIsOpen(false)}
+              data-testid="notification-close-btn"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
           </div>
 
           {/* Content */}
@@ -265,7 +247,6 @@ export const NotificationDropdown = () => {
                 <NotificationItem
                   key={notif.notification_id}
                   notif={notif}
-                  onMarkRead={handleMarkRead}
                   onNavigate={handleNavigate}
                 />
               ))

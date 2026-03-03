@@ -17,27 +17,34 @@ import {
 import { useNavigate } from 'react-router-dom';
 
 // ============ Status Badge ============
-const StatusBadge = memo(({ status, statusDetail }) => {
+const StatusBadge = memo(({ status, statusDetail, matchMinute }) => {
   if (status === 'LIVE') {
+    const displayText = statusDetail === 'HT' ? 'HT'
+      : statusDetail === 'PEN' ? 'PEN'
+      : matchMinute ? matchMinute
+      : 'LIVE';
     return (
-      <div className="inline-flex items-center gap-1.5">
+      <div className="inline-flex items-center gap-1.5" data-testid="live-badge">
         <span
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-red-500/20 text-red-400 border border-red-500/30"
-          data-testid="live-badge"
+          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-red-500/20 text-red-400 border border-red-500/30"
         >
-          <Radio className="w-3 h-3 live-pulse-icon" />
-          {statusDetail === 'HT' ? 'Half Time' : 'Live'}
+          <span className="relative flex h-2 w-2 flex-shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
+          {displayText}
         </span>
       </div>
     );
   }
   if (status === 'FINISHED') {
+    const label = statusDetail === 'AET' ? 'AET' : statusDetail === 'PEN' ? 'PEN' : 'FT';
     return (
       <span
         className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground border border-border"
         data-testid="ft-badge"
       >
-        FT
+        {label}
       </span>
     );
   }
@@ -1015,8 +1022,10 @@ const MatchRow = memo(({
     >
       {/* Match Meta - shared between both views */}
       <div className="match-row-meta flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-muted-foreground flex-wrap">
-        <StatusBadge status={match.status} statusDetail={match.statusDetail} />
-        <span className="match-row-datetime whitespace-nowrap">{formatLocalDateTime(match.utcDate)}</span>
+        <StatusBadge status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
+        {match.status === 'NOT_STARTED' && (
+          <span className="match-row-datetime whitespace-nowrap">{formatLocalDateTime(match.utcDate)}</span>
+        )}
         <span className="text-border hidden sm:inline">|</span>
         <span className="truncate">{match.competition}</span>
         <MetaCountdown utcDate={match.utcDate} matchStatus={match.status} hasPrediction={hasAnyPrediction} />

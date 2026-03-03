@@ -109,6 +109,15 @@ async def add_favorite_club(
     }
     await db.favorites.insert_one(doc)
     doc.pop("_id", None)
+
+    # Check achievements after adding favorite (non-blocking)
+    try:
+        from services.achievement_engine import check_and_notify_achievements
+        await check_and_notify_achievements(db, user_id, user)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Achievement check failed: {e}")
+
     return {"message": "Club added to favorites", "favorite": doc}
 
 

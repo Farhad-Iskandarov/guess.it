@@ -445,25 +445,26 @@ export const MatchCard = ({
       <div className="p-5">
         {/* Match Meta */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-          <span>{formatLocalDateTime(match.utcDate)}</span>
+          {/* Status-based display */}
+          {match.status === 'LIVE' || match.status === 'IN_PLAY' ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-red-500/20 text-red-400 border border-red-500/30">
+              <span className="relative flex h-2 w-2 flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              {match.matchMinute || 'LIVE'}
+            </span>
+          ) : match.status === 'FINISHED' ? (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground border border-border">
+              {match.statusDetail === 'AET' ? 'AET' : match.statusDetail === 'PEN' ? 'PEN' : 'FT'}
+            </span>
+          ) : (
+            <span>{formatLocalDateTime(match.utcDate)}</span>
+          )}
           <span className="text-border">|</span>
           <span>{match.sport || 'Football'}</span>
           <span className="text-border">|</span>
           <span className="truncate">{match.competition}</span>
-          {match.status && match.status !== 'SCHEDULED' && match.status !== 'TIMED' && (
-            <>
-              <span className="text-border">|</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                match.status === 'LIVE' || match.status === 'IN_PLAY' 
-                  ? 'bg-red-500/20 text-red-400 animate-pulse' 
-                  : match.status === 'FINISHED' 
-                    ? 'bg-zinc-500/20 text-zinc-400' 
-                    : 'bg-amber-500/20 text-amber-400'
-              }`}>
-                {match.status === 'IN_PLAY' ? 'LIVE' : match.status}
-              </span>
-            </>
-          )}
         </div>
 
         {/* Match Content */}

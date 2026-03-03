@@ -129,6 +129,34 @@ html {
     position: relative;
 }
 
+/* Achievement highlight animation (for deep-link from notification) */
+@keyframes achievement-highlight {
+    0% {
+        box-shadow: 0 0 28px 8px hsl(var(--primary) / 0.5);
+        transform: scale(1.035);
+    }
+    30% {
+        box-shadow: 0 0 22px 5px hsl(var(--primary) / 0.4);
+        transform: scale(1.025);
+    }
+    70% {
+        box-shadow: 0 0 14px 3px hsl(var(--primary) / 0.25);
+        transform: scale(1.01);
+    }
+    100% {
+        box-shadow: 0 0 8px 2px hsl(var(--primary) / 0.15);
+        transform: scale(1);
+    }
+}
+
+.achievement-highlighted {
+    animation: achievement-highlight 2.5s ease-out forwards;
+    border-color: hsl(var(--primary)) !important;
+    background-color: hsl(var(--primary) / 0.08) !important;
+    z-index: 5;
+    position: relative;
+}
+
 /* Theme transition - only apply to major containers, not all elements */
 body,
 .min-h-screen,

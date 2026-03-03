@@ -231,7 +231,9 @@ To reach 10,000 concurrent users:
 
 ### Notifications
 - `GET /api/notifications` — User notifications
-- `WS /api/ws/notifications/{user_id}` — Real-time notifications
+- `POST /api/notifications/read-all` — Mark all notifications as read (auto-triggered on panel open)
+- `GET /api/notifications/unread-count` — Unread notification count
+- `WS /api/ws/notifications/{user_id}` — Real-time notifications (including achievement unlocks)
 
 ### Subscriptions
 - `GET /api/subscriptions/plans` — Available plans
@@ -242,6 +244,10 @@ To reach 10,000 concurrent users:
 - `GET /api/admin/users` — User management
 - `POST /api/admin/gift-points` — Gift points to users
 - Full CRUD for news, banners, match management
+
+### Achievements
+- `GET /api/achievements` — All achievements with real-time progress for current user
+- `GET /api/profile/bundle` — Includes achievements in combined profile data response
 
 ### System
 - `GET /api/health` — Health check
@@ -281,6 +287,64 @@ sudo supervisorctl status
 tail -f /var/log/supervisor/backend.err.log
 tail -f /var/log/supervisor/reminder_worker.err.log
 ```
+
+## Smart Achievement System (Progress-Based)
+
+### Design
+- **25 achievements** across 6 categories: Predictions, Accuracy, Streaks, Social, Level, Weekly
+- **Real-time progress** computed from stored user stats (O(1) per achievement)
+- **Incremental counters** — no heavy recalculation per request
+- **Smart display** — Profile shows only the 6 "closest to completion" uncompleted achievements
+- **Psychological ordering** — sorted by completion % (highest first), creating "almost there" motivation
+
+### Profile Section Behavior
+- Shows **only uncompleted** achievements
+- Sorted by **completion percentage** (closest to done first)
+- Excludes 0% achievements unless needed to fill 6 slots
+- When an achievement is completed, it's **automatically replaced** with the next closest
+
+### "View All" Modal
+- Triggered by "View All" button in achievements section header
+- **Backdrop blur** with smooth zoom-in animation
+- **Tabs**: All / In Progress / Completed with counts
+- **Sorting**: By Progress %, Category, or Difficulty
+- Each achievement shows: icon, title, description, difficulty badge, progress bar, current/threshold, status
+
+### Achievement Categories & Icons
+| Category | Icons | Color | Examples |
+|----------|-------|-------|----------|
+| Predictions | Crosshair, Brain, Target | Blue | First Step, Getting Started, Veteran, Centurion |
+| Accuracy | BadgeCheck, Medal, Gem, Percent, Gauge, ShieldCheck | Green | On Fire, Sharp Eye, Oracle, Analyst, Perfectionist |
+| Streaks | Flame, Zap | Orange/Red | (Future: streak achievements) |
+| Favorites | Heart, HeartHandshake, ShieldHalf | Pink | Fan, Supporter, True Fan |
+| Social | UserPlus, UsersRound, Network | Teal | Social, Popular, Influencer |
+| Level | Star, Trophy, Crown, Sparkles | Gold/Yellow | Rising Star, Champion, Elite, Legend |
+| Weekly | Swords | Amber | Competitor |
+
+### Performance (10K-Safe)
+- All stats stored as pre-incremented counters on user documents
+- Achievement progress computed via O(1) arithmetic (no aggregation)
+- Profile bundle runs all queries in parallel (asyncio.gather)
+- No heavy DB scans — lightweight stat reads only
+
+### Notification Integration
+- Achievement completion triggers automatic notification creation + WebSocket push
+- Notifications auto-marked as read when panel opens (no manual "Mark all as read" button)
+- Toast popup appears instantly for achievement notifications
+- Achievement notifications link directly to profile page
+- Hooks into: prediction creation, friend acceptance, favorite addition, points/level changes
+
+### Match Status Display
+- **LIVE:** Red pulsing dot + match minute (e.g., `LIVE 67'`), HT, PEN, ET indicators
+- **FINISHED:** Shows `FT`, `AET`, or `PEN` — date/time hidden for finished matches
+- **NOT_STARTED:** Shows scheduled date/time (e.g., `Mar 12 · 20:45`) + countdown
+- Auto-refresh every 30 seconds (fallback when WebSocket not connected)
+- WebSocket pushes real-time score and status updates for connected clients
+
+### Header Authentication Fix
+- Header component uses `useAuth()` context as fallback when props are not passed
+- Guarantees consistent auth state across all pages (including Subscribe, News, Contact)
+- Prevents Login/Register buttons from appearing on pages that don't pass explicit auth props
 
 ## Maturity Level
 

@@ -405,6 +405,15 @@ async def accept_friend_request(
     
     logger.info(f"Friend request {request_id} accepted. {user['user_id']} and {friend_request['sender_id']} are now friends")
     
+    # Check achievements for both users (non-blocking)
+    try:
+        from services.achievement_engine import check_and_notify_achievements
+        await check_and_notify_achievements(db, user["user_id"], user)
+        if sender:
+            await check_and_notify_achievements(db, friend_request["sender_id"], sender)
+    except Exception as e:
+        logger.warning(f"Achievement check failed after friend accept: {e}")
+
     return {
         "success": True,
         "message": f"You are now friends with {sender['nickname'] if sender else 'user'}",

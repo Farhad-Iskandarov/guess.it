@@ -1,57 +1,42 @@
 # GuessIt - Football Prediction Platform
 
 ## Original Problem Statement
-1. Clone project from https://github.com/Farhad-Iskandarov/guess.it
-2. Production Hardening Phase v1.5 — scalability for 10K users
-3. Leaderboard UI redesign — premium competitive sports interface
-4. Weekly Competition Engine v2.0 — season-based, zero-reset architecture
+1. Clone project from GitHub (https://github.com/Farhad-Iskandarov/guess.it)
+2. Smart achievement system with progress bars, smart display, View All modal
+3. Notification system: auto-mark-read, real-time achievement notifications
+4. Match card status display: LIVE minute, HT, FT, AET, PEN
+5. Header auth state fix on Subscribe page
+6. Achievement icons: category-based visual system with unique icons and colors per category
 
-## Architecture
-- Frontend: React 19, CRACO, Tailwind CSS 3, shadcn/ui, Recharts
-- Backend: FastAPI (Python 3.11), Uvicorn, Pydantic v2
-- Database: MongoDB (compound unique indexes, season-based isolation)
-- Cache & Pub/Sub: Redis 7 (leaderboard caching, WebSocket scaling, rate limiting)
-- Real-time: WebSockets (parallel broadcast)
-- Weekly Engine: Season-based with precomputed archives, zero-reset
+## What's Been Implemented
 
-## Implementation History
+### 2026-03-03: Project Clone
+- Full project clone from GitHub — all files, routes, services, models
 
-### Phase 1: Clone [2026-03-03]
-- Full project clone from GitHub
+### 2026-03-03: Smart Achievement System
+- 25 achievements, 7 categories, real-time progress, smart display (6 closest), View All modal
 
-### Phase 2: Production Hardening v1.5 [2026-03-03]
-- P0: Reminder worker extraction, prediction race fix, atomic $inc, parallel WS broadcast
-- P1: Redis infrastructure, leaderboard caching, rate limiting, metrics endpoint
+### 2026-03-03: Notification System
+- Auto-mark-read on panel open, real-time achievement notifications, toast popups
 
-### Phase 3: Leaderboard UI Redesign [2026-03-03]
-- Centered 3-column podium (2nd|1st|3rd), gold/silver/bronze, premium sports design
+### 2026-03-03: Match Card Status Display
+- LIVE: red pulsing dot + minute, HT, FT, AET, PEN. Auto-refresh 30s.
 
-### Phase 4: Weekly Competition Engine v2.0 [2026-03-03]
-- **weekly_seasons** collection: One doc per ISO week (2026-W10), auto-created
-- **weekly_user_points** collection: Per (season_id, user_id), atomic $inc, indexed sort
-- **weekly_results_archive**: Top 100 precomputed snapshot per completed season
-- **Zero-Reset**: New season = new season_id, no mass update_many
-- **Season rotation**: Handled by reminder_worker background process
-- **Frontend**: Live countdown (dd:hh:mm:ss), last week's winner highlight, season info banner
-- **Caching**: /weekly/status cached 10s, /weekly/leaderboard cached 15s, /weekly/summary cached 60s
-- **Benchmarks**: 1,942 writes/sec, 1,390 leaderboard queries/sec, 2,092 rank queries/sec
+### 2026-03-03: Header Auth Fix
+- Header uses useAuth() as fallback — fixes Subscribe page auth state
 
-### Testing [2026-03-03]
-- 100% backend + frontend pass rate across all iterations
-- Atomicity verified: 3,000 concurrent writes, zero duplicates, zero lost updates
+### 2026-03-03: Category-Based Achievement Icons
+- 7 categories with unique icon families and color themes
+- Predictions (Blue): Crosshair, Brain, Target
+- Accuracy (Green): BadgeCheck, Medal, Gem, Percent, Gauge, ShieldCheck
+- Favorites (Pink): Heart, HeartHandshake, ShieldHalf — split from Social
+- Social (Teal): UserPlus, UsersRound, Network
+- Level (Gold): Star, Trophy, Crown, Sparkles
+- Weekly (Amber): Swords
+- Category colors applied to: icon bg, progress bars, completed checkmarks, borders
 
 ## Prioritized Backlog
-### P0 (Next)
-- [ ] Gunicorn multi-worker deployment
-- [ ] OS file descriptor tuning (ulimit -n 65535)
-
-### P1
-- [ ] Auto football API failover
-- [ ] Notification retry queue
-- [ ] Prediction lock countdown timer (engagement driver)
-
-### P2
-- [ ] MongoDB replica set
-- [ ] Redis Sentinel for HA
-- [ ] APM monitoring dashboard
-- [ ] Weekly competition email/push summary notifications
+- P0: None
+- P1: Configure Football API key
+- P1: Add streak achievements (category exists, definitions pending)
+- P2: Achievement celebration animations

@@ -139,6 +139,13 @@ async def create_or_update_prediction(
         except Exception as e:
             logger.warning(f"Failed to notify friends of prediction: {e}")
 
+        # Check for achievement completion (fire-and-forget)
+        try:
+            from services.achievement_engine import check_and_notify_achievements
+            await check_and_notify_achievements(db, user_id, user)
+        except Exception as e:
+            logger.warning(f"Achievement check failed: {e}")
+
     return PredictionResponse(
         prediction_id=result["prediction_id"],
         user_id=user_id,
@@ -607,6 +614,15 @@ async def get_my_predictions_detailed(
             )
         except Exception as e:
             logger.warning(f"Weekly engine update failed (non-blocking): {e}")
+
+        # Check for achievement completion after points/level change
+        try:
+            from services.achievement_engine import check_and_notify_achievements
+            refreshed_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+            if refreshed_user:
+                await check_and_notify_achievements(db, user_id, refreshed_user)
+        except Exception as e:
+            logger.warning(f"Achievement check failed: {e}")
     else:
         user_points = user.get("points", 0)
         user_level = user.get("level", 0)

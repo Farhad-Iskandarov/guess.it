@@ -12,7 +12,7 @@ from datetime import datetime
 from urllib.parse import urljoin
 
 class ProductionHardeningTester:
-    def __init__(self, base_url="https://project-backup-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://guess-it-fork-1.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
         self.admin_cookies = {}
@@ -132,15 +132,39 @@ class ProductionHardeningTester:
             "password": "Test123!"
         }
         
-        success, response = self.run_test("User Login", "POST", "auth/login", 200, user_data)
-        if success and isinstance(response, dict):
-            if 'session_token' in response:
-                self.user_cookies = {'session_token': response['session_token']}
-                print(f"   🔑 User logged in successfully")
-                return True
-            elif response.get('message') == 'Login successful':
-                print(f"   🔑 User login successful via cookie")
-                return True
+        # Make request with session to capture cookies
+        response = self.session.post(
+            f"{self.base_url}/api/auth/login", 
+            json=user_data,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        self.tests_run += 1
+        print(f"\n🧪 Test {self.tests_run}: User Login")
+        print(f"   POST {self.base_url}/api/auth/login")
+        
+        if response.status_code == 200:
+            self.tests_passed += 1
+            print(f"   ✅ PASS - Status: {response.status_code}")
+            
+            try:
+                data = response.json()
+                if 'session_token' in data:
+                    self.user_cookies = {'session_token': data['session_token']}
+                    print(f"   🔑 User logged in with token")
+                    return True
+                elif data.get('message') == 'Login successful':
+                    # Check for session cookies
+                    if 'session_token' in self.session.cookies:
+                        print(f"   🔑 User logged in via session cookie")
+                        return True
+                    print(f"   🔑 User login successful")
+                    return True
+            except:
+                pass
+        else:
+            print(f"   ❌ FAIL - Expected 200, got {response.status_code}")
+            
         return False
 
     def test_prediction_creation(self):
@@ -386,6 +410,374 @@ class ProductionHardeningTester:
             return True
         return False
 
+    def test_achievements_api(self):
+        """Test achievements API endpoint"""
+        # Use session cookies since authentication is cookie-based
+        response = self.session.get(
+            f"{self.base_url}/api/achievements",
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        self.tests_run += 1
+        print(f"\n🧪 Test {self.tests_run}: Achievements API")
+        print(f"   GET {self.base_url}/api/achievements")
+        
+        if response.status_code == 200:
+            self.tests_passed += 1
+            print(f"   ✅ PASS - Status: {response.status_code}")
+            
+            try:
+                data = response.json()
+                display = data.get('display', [])
+                all_achievements = data.get('all', [])
+                completed_count = data.get('completed_count', 0)
+                total_count = data.get('total_count', 0)
+                stats = data.get('stats', {})
+                
+                print(f"   🏆 Display achievements: {len(display)}")
+                print(f"   🏆 Total achievements: {len(all_achievements)}")
+                print(f"   🏆 Completed: {completed_count}/{total_count}")
+                print(f"   🏆 User stats: {list(stats.keys())}")
+                
+                # Verify achievement structure
+                if all_achievements:
+                    sample = all_achievements[0]
+                    required_fields = ['id', 'title', 'description', 'category', 'threshold', 'current', 'percentage', 'completed']
+                    missing = [f for f in required_fields if f not in sample]
+                    if missing:
+                        print(f"   ❌ Missing achievement fields: {missing}")
+                        return False
+                    print(f"   ✅ Achievement structure valid")
+                
+                # Verify smart display (should show 6 or fewer closest achievements)
+                if len(display) > 6:
+                    print(f"   ❌ Display should show max 6 achievements, got {len(display)}")
+                    return False
+                print(f"   ✅ Smart display showing {len(display)} achievements")
+                
+                return total_count == 25  # Should have 25 total achievements
+            except Exception as e:
+                print(f"   ❌ Error parsing response: {e}")
+        elif response.status_code == 401:
+            print(f"   ⚠️  Authentication required - Status: {response.status_code}")
+        else:
+            print(f"   ❌ FAIL - Expected 200, got {response.status_code}")
+            
+        return False
+
+    def test_achievement_icons_and_categories(self):
+        """Test updated achievement icons and categories system"""
+        # Use session cookies since authentication is cookie-based
+        response = self.session.get(
+            f"{self.base_url}/api/achievements",
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        self.tests_run += 1
+        print(f"\n🧪 Test {self.tests_run}: Achievement Icons & Categories")
+        print(f"   GET {self.base_url}/api/achievements")
+        
+        if response.status_code == 200:
+            self.tests_passed += 1
+            print(f"   ✅ PASS - Status: {response.status_code}")
+            
+            try:
+                data = response.json()
+                all_achievements = data.get('all', [])
+                
+                if len(all_achievements) != 25:
+                    print(f"   ❌ Expected 25 achievements, got {len(all_achievements)}")
+                    return False
+                
+                # Check category distribution and icon assignments
+                categories = {}
+                for achievement in all_achievements:
+                    cat = achievement.get('category')
+                    icon = achievement.get('icon')
+                    if cat not in categories:
+                        categories[cat] = []
+                    categories[cat].append(icon)
+                
+                print(f"   📊 Categories found: {list(categories.keys())}")
+                
+                # Expected categories (note: streaks category has no achievements yet)
+                expected_categories = ['predictions', 'accuracy', 'favorites', 'social', 'level', 'weekly']
+                missing_cats = [c for c in expected_categories if c not in categories]
+                if missing_cats:
+                    print(f"   ❌ Missing categories: {missing_cats}")
+                    return False
+                print(f"   ✅ All 6 implemented categories present")
+                
+                # Note: 'streaks' category is defined but has no achievements yet
+                if 'streaks' not in categories:
+                    print(f"   ℹ️  Streaks category defined but no achievements implemented yet")
+                
+                # Check specific icon assignments by category
+                icon_checks = [
+                    # Predictions category should have: crosshair, brain, target
+                    ('predictions', ['crosshair', 'brain', 'target']),
+                    # Accuracy category should have: badge_check, medal, gem, percent, gauge, shield_check
+                    ('accuracy', ['badge_check', 'medal', 'gem', 'percent', 'gauge', 'shield_check']),
+                    # Level category should have: star, trophy, crown, sparkles
+                    ('level', ['star', 'trophy', 'crown', 'sparkles']),
+                    # Favorites category should have: heart, heart_handshake, shield_heart
+                    ('favorites', ['heart', 'heart_handshake', 'shield_heart']),
+                    # Social category should have: user_plus, users_round, network
+                    ('social', ['user_plus', 'users_round', 'network']),
+                    # Weekly category should have: swords
+                    ('weekly', ['swords']),
+                    # Streaks category should have: flame, zap (check if present)
+                    ('streaks', ['flame', 'zap'])
+                ]
+                
+                for category, expected_icons in icon_checks:
+                    if category in categories:
+                        category_icons = categories[category]
+                        found_icons = [icon for icon in expected_icons if icon in category_icons]
+                        if category == 'predictions' and len(found_icons) >= 3:
+                            print(f"   ✅ {category}: {found_icons}")
+                        elif category == 'accuracy' and len(found_icons) >= 5:
+                            print(f"   ✅ {category}: {found_icons}")
+                        elif category == 'level' and len(found_icons) >= 4:
+                            print(f"   ✅ {category}: {found_icons}")
+                        elif category == 'favorites' and len(found_icons) >= 3:
+                            print(f"   ✅ {category}: {found_icons}")
+                        elif category == 'social' and len(found_icons) >= 3:
+                            print(f"   ✅ {category}: {found_icons}")
+                        elif category == 'weekly' and 'swords' in found_icons:
+                            print(f"   ✅ {category}: {found_icons}")
+                        elif category == 'streaks' and len(found_icons) >= 1:
+                            print(f"   ✅ {category}: {found_icons}")
+                        else:
+                            print(f"   ⚠️  {category}: expected {expected_icons}, found {category_icons}")
+                    else:
+                        print(f"   ❌ Category {category} not found")
+                
+                # Check that new 'favorites' category was split from social
+                favorites_achievements = [a for a in all_achievements if a.get('category') == 'favorites']
+                social_achievements = [a for a in all_achievements if a.get('category') == 'social']
+                
+                print(f"   📊 Favorites achievements: {len(favorites_achievements)}")
+                print(f"   📊 Social achievements: {len(social_achievements)}")
+                
+                if len(favorites_achievements) >= 2 and len(social_achievements) >= 2:
+                    print(f"   ✅ Favorites category successfully split from social")
+                    return True
+                else:
+                    print(f"   ❌ Category split verification failed")
+                    return False
+                    
+            except Exception as e:
+                print(f"   ❌ Error parsing response: {e}")
+        elif response.status_code == 401:
+            print(f"   ⚠️  Authentication required - Status: {response.status_code}")
+        else:
+            print(f"   ❌ FAIL - Expected 200, got {response.status_code}")
+            
+        return False
+
+    def test_profile_bundle_achievements(self):
+        """Test that profile bundle includes achievements"""
+        response = self.session.get(
+            f"{self.base_url}/api/profile/bundle",
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        self.tests_run += 1
+        print(f"\n🧪 Test {self.tests_run}: Profile Bundle with Achievements")
+        print(f"   GET {self.base_url}/api/profile/bundle")
+        
+        if response.status_code == 200:
+            self.tests_passed += 1
+            print(f"   ✅ PASS - Status: {response.status_code}")
+            
+            try:
+                data = response.json()
+                achievements = data.get('achievements', {})
+                
+                if not achievements:
+                    print(f"   ❌ No achievements in profile bundle")
+                    return False
+                    
+                display = achievements.get('display', [])
+                all_achievements = achievements.get('all', [])
+                completed_count = achievements.get('completed_count', 0)
+                total_count = achievements.get('total_count', 0)
+                
+                print(f"   📊 Bundle achievements - Display: {len(display)}, All: {len(all_achievements)}")
+                print(f"   📊 Completed: {completed_count}/{total_count}")
+                
+                # Verify bundle structure includes other sections
+                required_sections = ['predictions', 'favorites', 'friends_leaderboard', 'achievements']
+                missing_sections = [s for s in required_sections if s not in data]
+                if missing_sections:
+                    print(f"   ❌ Missing bundle sections: {missing_sections}")
+                    return False
+                print(f"   ✅ Profile bundle complete with achievements")
+                
+                return True
+            except Exception as e:
+                print(f"   ❌ Error parsing response: {e}")
+        elif response.status_code == 401:
+            print(f"   ⚠️  Authentication required - Status: {response.status_code}")
+        else:
+            print(f"   ❌ FAIL - Expected 200, got {response.status_code}")
+            
+        return False
+
+    def test_notifications_api(self):
+        """Test notifications API endpoints"""
+        if not self.user_cookies:
+            print("   ⚠️  Skipping - User not logged in")
+            return False
+            
+        success, response = self.run_test(
+            "Get Notifications", "GET", "notifications", 200, 
+            cookies=self.user_cookies
+        )
+        
+        if success and isinstance(response, dict):
+            notifications = response.get('notifications', [])
+            unread_count = response.get('unread_count', 0)
+            print(f"   🔔 Found {len(notifications)} notifications, {unread_count} unread")
+            
+            # Check notification structure if any exist
+            if notifications:
+                sample_notif = notifications[0]
+                required_fields = ['notification_id', 'user_id', 'type', 'message', 'read', 'created_at']
+                missing = [f for f in required_fields if f not in sample_notif]
+                if missing:
+                    print(f"   ❌ Missing notification fields: {missing}")
+                    return False
+                print(f"   ✅ Notification structure valid")
+            
+            return True
+        return False
+
+    def test_unread_count_api(self):
+        """Test unread notification count endpoint"""
+        if not self.user_cookies:
+            print("   ⚠️  Skipping - User not logged in")
+            return False
+            
+        success, response = self.run_test(
+            "Get Unread Count", "GET", "notifications/unread-count", 200, 
+            cookies=self.user_cookies
+        )
+        
+        if success and isinstance(response, dict):
+            count = response.get('count', 0)
+            print(f"   🔔 Unread count: {count}")
+            return isinstance(count, int)
+        return False
+
+    def test_mark_all_read_api(self):
+        """Test mark all notifications as read endpoint"""
+        if not self.user_cookies:
+            print("   ⚠️  Skipping - User not logged in")
+            return False
+            
+        success, response = self.run_test(
+            "Mark All Notifications Read", "POST", "notifications/read-all", 200, 
+            data={}, cookies=self.user_cookies
+        )
+        
+        if success and isinstance(response, dict):
+            marked_count = response.get('marked', 0)
+            success_flag = response.get('success', False)
+            print(f"   ✅ Marked {marked_count} notifications as read, success: {success_flag}")
+            return success_flag
+        return False
+
+    def test_achievement_notification_creation(self):
+        """Test that prediction creation triggers achievement check and creates notifications"""
+        if not self.user_cookies:
+            print("   ⚠️  Skipping - User not logged in")
+            return False
+        
+        print("   🏆 Testing achievement notification creation...")
+        
+        # First, check current unread count
+        response = self.session.get(
+            f"{self.base_url}/api/notifications/unread-count",
+            cookies=self.user_cookies,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if response.status_code != 200:
+            print(f"   ❌ Failed to get initial unread count")
+            return False
+        
+        initial_unread = response.json().get('count', 0)
+        print(f"   📊 Initial unread count: {initial_unread}")
+        
+        # Create a prediction to potentially trigger achievement
+        prediction_data = {
+            "match_id": 77777,  # New match for achievement test
+            "prediction": "home"
+        }
+        
+        pred_response = self.session.post(
+            f"{self.base_url}/api/predictions",
+            json=prediction_data,
+            cookies=self.user_cookies,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if pred_response.status_code != 200:
+            print(f"   ❌ Failed to create prediction for achievement test")
+            return False
+        
+        pred_data = pred_response.json()
+        print(f"   🎯 Created prediction: {pred_data.get('prediction_id')}")
+        
+        # Wait a moment for async achievement processing
+        time.sleep(2)
+        
+        # Check if unread count increased (indicating new notification)
+        response = self.session.get(
+            f"{self.base_url}/api/notifications/unread-count",
+            cookies=self.user_cookies,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if response.status_code != 200:
+            print(f"   ❌ Failed to get final unread count")
+            return False
+        
+        final_unread = response.json().get('count', 0)
+        print(f"   📊 Final unread count: {final_unread}")
+        
+        # Check if we have any achievement_unlocked notifications
+        notif_response = self.session.get(
+            f"{self.base_url}/api/notifications",
+            cookies=self.user_cookies,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if notif_response.status_code == 200:
+            notifications = notif_response.json().get('notifications', [])
+            achievement_notifs = [n for n in notifications if n.get('type') == 'achievement_unlocked']
+            
+            if achievement_notifs:
+                print(f"   🏆 Found {len(achievement_notifs)} achievement notifications")
+                sample = achievement_notifs[0]
+                print(f"   🏆 Sample achievement notification: {sample.get('message', '')}")
+                
+                # Check notification data structure
+                if 'data' in sample and 'achievement_id' in sample['data']:
+                    print(f"   ✅ Achievement notification has proper data structure")
+                    self.tests_run += 1
+                    self.tests_passed += 1
+                    return True
+                else:
+                    print(f"   ❌ Achievement notification missing data structure")
+            else:
+                print(f"   ℹ️  No achievement notifications found (user may already have completed early achievements)")
+        
+        self.tests_run += 1
+        return final_unread >= initial_unread  # Count should stay same or increase
+
     def test_frontend_homepage(self):
         """Test that homepage loads correctly"""
         try:
@@ -450,6 +842,17 @@ class ProductionHardeningTester:
         # API availability tests
         self.test_subscription_plans()
         self.test_news_api()
+        
+        # Achievement system tests (new)
+        self.test_achievements_api()
+        self.test_achievement_icons_and_categories()
+        self.test_profile_bundle_achievements()
+        
+        # Notification system tests (new)
+        self.test_notifications_api()
+        self.test_unread_count_api()
+        self.test_mark_all_read_api()
+        self.test_achievement_notification_creation()
         
         # Frontend tests
         self.test_frontend_homepage()

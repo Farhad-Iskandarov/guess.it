@@ -4,6 +4,7 @@ import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
+import { useAuth } from '@/lib/AuthContext';
 import { useFriends } from '@/lib/FriendsContext';
 import { useMessages } from '@/lib/MessagesContext';
 import { searchMatches } from '@/services/matches';
@@ -457,7 +458,12 @@ const GlobalSearch = ({ onMatchSelect }) => {
 };
 
 // =========== Main Header ===========
-export const Header = ({ user, isAuthenticated = false, onLogin, onLogout, onMatchSelect }) => {
+export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, onLogin, onLogout: propOnLogout, onMatchSelect }) => {
+  // Always use AuthContext as source of truth for auth state
+  const auth = useAuth();
+  const user = propUser ?? auth.user;
+  const isAuthenticated = propIsAuthenticated ?? auth.isAuthenticated;
+  const onLogout = propOnLogout ?? auth.logout;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, memo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
@@ -14,7 +14,11 @@ import {
   User, Users, Trophy, Star, Target, Calendar, Mail, Clock,
   CheckCircle2, XCircle, TrendingUp, Heart, ChevronRight,
   Zap, Award, Shield, Flame, LogOut, Settings, Edit3,
-  BarChart3, PieChart, Loader2, AlertCircle, Trash2
+  BarChart3, PieChart, Loader2, AlertCircle, Trash2,
+  Crown, Medal, Lock, Eye, ArrowUpDown, Filter, X,
+  Crosshair, Brain, BadgeCheck, Gem, Percent, Gauge,
+  ShieldCheck, Sparkles, HeartHandshake, ShieldHalf,
+  UsersRound, UserPlus, Network, Swords
 } from 'lucide-react';
 
 // ============ Level Configuration ============
@@ -32,6 +36,43 @@ const getPointsToNextLevel = (points, level) => {
   if (!nextThreshold) return 0;
   return Math.max(0, nextThreshold - points);
 };
+
+// ============ Icon Map for Achievements ============
+const getIconComponent = (iconKey) => {
+  const map = {
+    // Predictions (Blue/Purple)
+    crosshair: Crosshair, brain: Brain, target: Target,
+    // Accuracy (Green)
+    badge_check: BadgeCheck, medal: Medal, gem: Gem,
+    percent: Percent, gauge: Gauge, shield_check: ShieldCheck,
+    // Streaks (Orange/Red)
+    flame: Flame, zap: Zap,
+    // Level (Gold)
+    star: Star, trophy: Trophy, crown: Crown, sparkles: Sparkles,
+    // Favorites (Pink)
+    heart: Heart, heart_handshake: HeartHandshake, shield_heart: ShieldHalf,
+    // Social (Teal)
+    user_plus: UserPlus, users_round: UsersRound, network: Network, users: Users,
+    // Weekly (Amber)
+    swords: Swords, award: Award,
+    // Legacy fallbacks
+    shield: Shield, check: CheckCircle2, chart: BarChart3, trending: TrendingUp,
+  };
+  return map[iconKey] || Award;
+};
+
+// Category-based color scheme
+const CATEGORY_COLORS = {
+  predictions: { bg: 'bg-blue-500/15', text: 'text-blue-400', bar: 'bg-blue-400', completed: 'text-blue-400', border: 'border-blue-500/30' },
+  accuracy:    { bg: 'bg-emerald-500/15', text: 'text-emerald-400', bar: 'bg-emerald-400', completed: 'text-emerald-400', border: 'border-emerald-500/30' },
+  streaks:     { bg: 'bg-orange-500/15', text: 'text-orange-400', bar: 'bg-orange-400', completed: 'text-orange-400', border: 'border-orange-500/30' },
+  favorites:   { bg: 'bg-pink-500/15', text: 'text-pink-400', bar: 'bg-pink-400', completed: 'text-pink-400', border: 'border-pink-500/30' },
+  social:      { bg: 'bg-teal-500/15', text: 'text-teal-400', bar: 'bg-teal-400', completed: 'text-teal-400', border: 'border-teal-500/30' },
+  level:       { bg: 'bg-yellow-500/15', text: 'text-yellow-400', bar: 'bg-yellow-400', completed: 'text-yellow-400', border: 'border-yellow-500/30' },
+  weekly:      { bg: 'bg-amber-500/15', text: 'text-amber-400', bar: 'bg-amber-400', completed: 'text-amber-400', border: 'border-amber-500/30' },
+};
+
+const getCategoryColor = (category) => CATEGORY_COLORS[category] || CATEGORY_COLORS.predictions;
 
 // ============ Stat Card ============
 const StatCard = memo(({ icon: Icon, label, value, color, subtext, onClick }) => (
@@ -56,33 +97,246 @@ const StatCard = memo(({ icon: Icon, label, value, color, subtext, onClick }) =>
 ));
 StatCard.displayName = 'StatCard';
 
-// ============ Achievement Badge ============
-const AchievementBadge = memo(({ icon: Icon, title, description, unlocked, color }) => (
-  <div
-    className={`relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${
-      unlocked 
-        ? 'bg-card border-border/50 hover:border-primary/40' 
-        : 'bg-muted/30 border-border/30 opacity-50'
-    }`}
-    data-testid={`achievement-${title.toLowerCase().replace(/\s/g, '-')}`}
-  >
-    <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${
-      unlocked ? color : 'bg-muted text-muted-foreground'
-    }`}>
-      <Icon className="w-5 h-5" />
+// ============ Achievement Badge (Upgraded with Progress Bar) ============
+const AchievementBadge = memo(({ achievement, compact = false, isHighlighted = false }) => {
+  const IconComp = getIconComponent(achievement.icon);
+  const isCompleted = achievement.completed;
+  const isLocked = achievement.status === 'locked';
+  const percentage = achievement.percentage || 0;
+  const current = achievement.current || 0;
+  const threshold = achievement.threshold || 1;
+  const catColor = getCategoryColor(achievement.category);
+
+  return (
+    <div
+      className={`relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${
+        isHighlighted
+          ? 'achievement-highlighted'
+          : isCompleted
+            ? `bg-card ${catColor.border} hover:border-opacity-80`
+            : isLocked
+              ? 'bg-muted/20 border-border/30 opacity-60'
+              : 'bg-card border-border/50 hover:border-primary/30'
+      }`}
+      data-testid={`achievement-${achievement.id}`}
+      data-achievement-id={achievement.id}
+    >
+      {/* Icon — category-colored */}
+      <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${
+        isCompleted ? `${catColor.bg} ${catColor.text}` :
+        isLocked ? 'bg-muted text-muted-foreground' :
+        `${catColor.bg} ${catColor.text}`
+      }`}>
+        {isLocked ? <Lock className="w-5 h-5" /> : <IconComp className="w-5 h-5" />}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className={`text-sm font-semibold truncate ${
+            isCompleted ? catColor.completed : isLocked ? 'text-muted-foreground' : 'text-foreground'
+          }`}>
+            {achievement.title}
+          </p>
+          {!compact && achievement.difficulty && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+              achievement.difficulty === 1 ? 'bg-emerald-500/10 text-emerald-400' :
+              achievement.difficulty === 2 ? 'bg-amber-500/10 text-amber-400' :
+              'bg-red-500/10 text-red-400'
+            }`}>
+              {achievement.difficulty === 1 ? 'Easy' : achievement.difficulty === 2 ? 'Medium' : 'Hard'}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground truncate mb-1.5">{achievement.description}</p>
+        
+        {/* Progress Bar — category-colored */}
+        {!isCompleted && (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ease-out ${
+                  percentage > 0 ? catColor.bar : 'bg-muted-foreground/20'
+                }`}
+                style={{ width: `${percentage}%`, opacity: percentage >= 50 ? 1 : 0.7 }}
+              />
+            </div>
+            <span className={`text-[10px] font-medium tabular-nums flex-shrink-0 ${
+              percentage >= 50 ? catColor.text : 'text-muted-foreground'
+            }`}>
+              {current}/{threshold}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Status indicator */}
+      <div className="flex-shrink-0">
+        {isCompleted ? (
+          <CheckCircle2 className={`w-5 h-5 ${catColor.completed}`} />
+        ) : percentage >= 75 ? (
+          <span className={`text-[10px] font-bold ${catColor.text} ${catColor.bg} px-1.5 py-0.5 rounded-full`}>{percentage}%</span>
+        ) : null}
+      </div>
     </div>
-    <div className="flex-1 min-w-0">
-      <p className={`text-sm font-semibold truncate ${unlocked ? 'text-foreground' : 'text-muted-foreground'}`}>
-        {title}
-      </p>
-      <p className="text-xs text-muted-foreground truncate">{description}</p>
-    </div>
-    {unlocked && (
-      <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
-    )}
-  </div>
-));
+  );
+});
 AchievementBadge.displayName = 'AchievementBadge';
+
+
+// ============ Achievements Modal ============
+const AchievementsModal = memo(({ isOpen, onClose, achievements, completedCount, totalCount, highlightId }) => {
+  const [activeTab, setActiveTab] = useState('all');
+  const [sortBy, setSortBy] = useState('progress');
+  const scrollRef = useRef(null);
+
+  // Auto-scroll to highlighted achievement when modal opens
+  useEffect(() => {
+    if (!isOpen || !highlightId || !scrollRef.current) return;
+    const timer = setTimeout(() => {
+      const el = scrollRef.current?.querySelector(`[data-achievement-id="${highlightId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 350); // wait for modal animation
+    return () => clearTimeout(timer);
+  }, [isOpen, highlightId]);
+
+  const filteredAndSorted = useMemo(() => {
+    if (!achievements) return [];
+    
+    let filtered = [...achievements];
+    if (activeTab === 'completed') {
+      filtered = filtered.filter(a => a.completed);
+    } else if (activeTab === 'uncompleted') {
+      filtered = filtered.filter(a => !a.completed);
+    }
+
+    if (sortBy === 'progress') {
+      filtered.sort((a, b) => {
+        if (a.completed && !b.completed) return 1;
+        if (!a.completed && b.completed) return -1;
+        return b.percentage - a.percentage;
+      });
+    } else if (sortBy === 'category') {
+      filtered.sort((a, b) => (a.category || '').localeCompare(b.category || ''));
+    } else if (sortBy === 'difficulty') {
+      filtered.sort((a, b) => (a.difficulty || 0) - (b.difficulty || 0));
+    }
+
+    return filtered;
+  }, [achievements, activeTab, sortBy]);
+
+  const tabs = [
+    { id: 'all', label: 'All', count: achievements?.length || 0 },
+    { id: 'uncompleted', label: 'In Progress', count: (achievements?.length || 0) - completedCount },
+    { id: 'completed', label: 'Completed', count: completedCount },
+  ];
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      data-testid="achievements-modal"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-md animate-in fade-in duration-200"
+        onClick={onClose}
+      />
+
+      {/* Modal Content */}
+      <div className="relative w-full max-w-lg max-h-[85vh] bg-card border border-border/50 rounded-2xl shadow-2xl animate-in zoom-in-95 fade-in duration-300 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 pb-4 border-b border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10">
+              <Award className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Achievements</h2>
+              <p className="text-xs text-muted-foreground">
+                {completedCount}/{totalCount} unlocked
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-muted transition-colors"
+            data-testid="achievements-modal-close"
+          >
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-1 px-5 pt-4 pb-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+              data-testid={`modal-tab-${tab.id}`}
+            >
+              {tab.label}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                activeTab === tab.id ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Sort */}
+        <div className="flex items-center gap-2 px-5 pb-3">
+          <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[11px] text-muted-foreground">Sort:</span>
+          {['progress', 'category', 'difficulty'].map(s => (
+            <button
+              key={s}
+              onClick={() => setSortBy(s)}
+              className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${
+                sortBy === s
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              data-testid={`modal-sort-${s}`}
+            >
+              {s === 'progress' ? 'Progress' : s === 'category' ? 'Category' : 'Difficulty'}
+            </button>
+          ))}
+        </div>
+
+        {/* Achievement List */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pb-5 space-y-2 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {filteredAndSorted.map((achievement) => (
+            <AchievementBadge
+              key={achievement.id}
+              achievement={achievement}
+              isHighlighted={achievement.id === highlightId}
+            />
+          ))}
+          {filteredAndSorted.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mb-3">
+                <Award className="w-6 h-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm text-muted-foreground">No achievements in this category</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+AchievementsModal.displayName = 'AchievementsModal';
+
 
 // ============ Favorite Team Card ============
 const FavoriteTeamCard = memo(({ team, onRemove, isRemoving }) => (
@@ -260,7 +514,6 @@ const ProfileSkeleton = () => (
     {/* Two column skeleton */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
-        {/* Recent Activity */}
         <div className="bg-card rounded-xl border border-border/50 p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg skeleton-bone" />
@@ -280,7 +533,6 @@ const ProfileSkeleton = () => (
         </div>
       </div>
       <div className="space-y-6">
-        {/* Achievements */}
         <div className="bg-card rounded-xl border border-border/50 p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg skeleton-bone" />
@@ -293,12 +545,12 @@ const ProfileSkeleton = () => (
                 <div className="flex-1 space-y-2">
                   <div className="h-4 w-24 skeleton-bone" />
                   <div className="h-3 w-36 skeleton-bone" />
+                  <div className="h-1.5 w-full skeleton-bone rounded-full" />
                 </div>
               </div>
             ))}
           </div>
         </div>
-        {/* Performance */}
         <div className="bg-card rounded-xl border border-border/50 p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg skeleton-bone" />
@@ -327,6 +579,7 @@ export const ProfilePage = () => {
   const { user, isAuthenticated, isLoading: authLoading, logout, refreshUser } = useAuth();
   const { friends, fetchFriends } = useFriends();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [predictions, setPredictions] = useState([]);
   const [summary, setSummary] = useState({ correct: 0, wrong: 0, pending: 0, points: 0 });
@@ -336,6 +589,15 @@ export const ProfilePage = () => {
   const [removingFavorite, setRemovingFavorite] = useState(null);
   const [friendsLeaderboard, setFriendsLeaderboard] = useState([]);
   const [myFriendsRank, setMyFriendsRank] = useState(null);
+
+  // Achievements state
+  const [achievementsDisplay, setAchievementsDisplay] = useState([]);
+  const [achievementsAll, setAchievementsAll] = useState([]);
+  const [achievementsCompleted, setAchievementsCompleted] = useState(0);
+  const [achievementsTotal, setAchievementsTotal] = useState(0);
+  const [showAchievementsModal, setShowAchievementsModal] = useState(false);
+  const [highlightAchievementId, setHighlightAchievementId] = useState(null);
+  const deepLinkHandled = useRef(false);
 
   // Single bundle fetch — all data in one call, all DB queries parallelized server-side
   const fetchData = useCallback(async () => {
@@ -357,6 +619,13 @@ export const ProfilePage = () => {
       const lb = data.friends_leaderboard || {};
       setFriendsLeaderboard(lb.leaderboard || []);
       setMyFriendsRank(lb.my_rank);
+
+      // Achievements
+      const ach = data.achievements || {};
+      setAchievementsDisplay(ach.display || []);
+      setAchievementsAll(ach.all || []);
+      setAchievementsCompleted(ach.completed_count || 0);
+      setAchievementsTotal(ach.total_count || 0);
 
       setIsLoading(false);
 
@@ -381,6 +650,24 @@ export const ProfilePage = () => {
       navigate('/login');
     }
   }, [authLoading, isAuthenticated, fetchData, navigate]);
+
+  // Deep-link: auto-open achievements modal and highlight specific achievement
+  useEffect(() => {
+    if (isLoading || deepLinkHandled.current) return;
+    const section = searchParams.get('section');
+    const highlight = searchParams.get('highlight');
+    if (section === 'achievements') {
+      deepLinkHandled.current = true;
+      setHighlightAchievementId(highlight || null);
+      setShowAchievementsModal(true);
+      // Clean up URL params after handling (keep URL clean)
+      setSearchParams({}, { replace: true });
+      // Clear highlight after animation completes
+      if (highlight) {
+        setTimeout(() => setHighlightAchievementId(null), 3500);
+      }
+    }
+  }, [isLoading, searchParams, setSearchParams]);
 
   // Handle remove favorite
   const handleRemoveFavorite = useCallback(async (teamId) => {
@@ -414,16 +701,6 @@ export const ProfilePage = () => {
 
   // Recent predictions (last 5)
   const recentPredictions = predictions.slice(0, 5);
-
-  // Achievements
-  const achievements = [
-    { icon: Target, title: 'First Prediction', description: 'Make your first prediction', unlocked: totalPredictions > 0, color: 'bg-primary/15 text-primary' },
-    { icon: Flame, title: 'On Fire', description: 'Get 5 correct predictions', unlocked: summary.correct >= 5, color: 'bg-amber-500/15 text-amber-400' },
-    { icon: Trophy, title: 'Champion', description: 'Reach Level 5', unlocked: userLevel >= 5, color: 'bg-yellow-500/15 text-yellow-400' },
-    { icon: Award, title: 'Veteran', description: 'Make 50 predictions', unlocked: totalPredictions >= 50, color: 'bg-violet-500/15 text-violet-400' },
-    { icon: Shield, title: 'Perfectionist', description: 'Achieve 80% accuracy', unlocked: accuracy >= 80 && totalPredictions >= 10, color: 'bg-emerald-500/15 text-emerald-400' },
-    { icon: Heart, title: 'Fan', description: 'Add 3 favorite teams', unlocked: favorites.length >= 3, color: 'bg-red-500/15 text-red-400' },
-  ];
 
   const displayName = user?.nickname || user?.name || user?.email?.split('@')[0] || 'User';
   const initials = displayName.charAt(0).toUpperCase();
@@ -742,7 +1019,7 @@ export const ProfilePage = () => {
 
           {/* Right Column */}
           <div className="space-y-6">
-            {/* Achievements */}
+            {/* ===== Achievements (Smart Display) ===== */}
             <div 
               className="bg-card rounded-xl border border-border/50 p-5 animate-fade-in"
               style={{ animationDelay: '0.4s' }}
@@ -752,16 +1029,40 @@ export const ProfilePage = () => {
                 icon={Award} 
                 title="Achievements"
                 action={
-                  <span className="text-xs text-muted-foreground">
-                    {achievements.filter(a => a.unlocked).length}/{achievements.length} unlocked
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {achievementsCompleted}/{achievementsTotal} unlocked
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary hover:text-primary gap-1 h-7 px-2"
+                      onClick={() => setShowAchievementsModal(true)}
+                      data-testid="view-all-achievements-btn"
+                    >
+                      View All <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 }
               />
               
               <div className="space-y-2">
-                {achievements.map((achievement) => (
-                  <AchievementBadge key={achievement.title} {...achievement} />
-                ))}
+                {achievementsDisplay.length > 0 ? (
+                  achievementsDisplay.map((achievement) => (
+                    <AchievementBadge
+                      key={achievement.id}
+                      achievement={achievement}
+                      compact
+                    />
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mb-3">
+                      <Award className="w-6 h-6 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">Start playing to unlock achievements!</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -925,6 +1226,19 @@ export const ProfilePage = () => {
       </main>
 
       <Footer />
+
+      {/* Achievements Modal */}
+      <AchievementsModal
+        isOpen={showAchievementsModal}
+        onClose={() => {
+          setShowAchievementsModal(false);
+          setHighlightAchievementId(null);
+        }}
+        achievements={achievementsAll}
+        completedCount={achievementsCompleted}
+        totalCount={achievementsTotal}
+        highlightId={highlightAchievementId}
+      />
     </div>
   );
 };
