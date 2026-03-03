@@ -12,6 +12,7 @@ import { getMyPredictions, savePrediction } from '@/services/predictions';
 import { getFavoriteClubs, addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
 import { getFavoriteMatches, addFavoriteMatch, removeFavoriteMatch } from '@/services/messages';
 import { fetchMatches, fetchLiveMatches, fetchCompetitionMatches, getStaleCachedMatches, fetchEndedMatches } from '@/services/matches';
+import { formatLocalDateTime } from '@/utils/formatTime';
 import { useLiveMatches } from '@/hooks/useLiveMatches';
 import { mockBannerSlides } from '@/data/mockData';
 import { toast } from 'sonner';
@@ -86,8 +87,8 @@ const MatchSkeleton = ({ delay = 0 }) => (
 );
 
 const MatchSkeletonGrid = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4" data-testid="match-skeleton-grid">
-    {[...Array(6)].map((_, i) => <MatchSkeleton key={i} delay={i * 80} />)}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 skeleton-grid-stable" data-testid="match-skeleton-grid">
+    {[...Array(6)].map((_, i) => <MatchSkeleton key={i} delay={i * 60} />)}
   </div>
 );
 
@@ -132,6 +133,9 @@ export const HomePage = () => {
 
   // Filter animation key — triggers re-animation on filter change
   const [filterKey, setFilterKey] = useState(0);
+
+  // AbortController ref for cancelling in-flight requests
+  const abortControllerRef = useRef(null);
 
   // Real authentication from AuthContext
   const { user, isAuthenticated, logout } = useAuth();
@@ -275,13 +279,15 @@ export const HomePage = () => {
   }, []);
 
   // Fetch matches from API (with cache support)
-  const loadMatches = useCallback(async (leagueId) => {
+  const loadMatches = useCallback(async (leagueId, signal) => {
     // Show stale cached data instantly while refreshing
     const stale = getStaleCachedMatches(leagueId);
     if (stale && stale.matches && stale.matches.length > 0) {
       setMatches(stale.matches);
       setIsLoadingMatches(false);
     } else {
+      // No cache — clear matches immediately and show skeleton
+      setMatches([]);
       setIsLoadingMatches(true);
     }
     setMatchError(null);
@@ -289,39 +295,57 @@ export const HomePage = () => {
     try {
       let data;
       if (leagueId === 'live') {
-        data = await fetchLiveMatches();
+        data = await fetchLiveMatches({ signal });
       } else if (leagueId === 'all') {
-        data = await fetchMatches();
+        data = await fetchMatches({}, { signal });
       } else {
-        data = await fetchCompetitionMatches(leagueId);
+        data = await fetchCompetitionMatches(leagueId, { signal });
       }
 
-      if (data.matches && data.matches.length > 0) {
-        setMatches(data.matches);
-      } else if (!stale || !stale.matches || stale.matches.length === 0) {
-        setMatches([]);
+      // Only apply results if not aborted
+      if (!signal?.aborted) {
+        if (data.matches && data.matches.length > 0) {
+          setMatches(data.matches);
+        } else if (!stale || !stale.matches || stale.matches.length === 0) {
+          setMatches([]);
+        }
+        setIsLoadingMatches(false);
       }
     } catch (error) {
+      // Ignore AbortError — means user switched filters
+      if (error.name === 'AbortError') return;
       console.error('Failed to fetch matches:', error);
       if (!stale || !stale.matches || stale.matches.length === 0) {
         setMatchError('Failed to load matches. Please try again.');
         setMatches([]);
       }
-    } finally {
       setIsLoadingMatches(false);
     }
   }, []);
 
-  // Load matches on mount and when league changes
+  // Load matches on mount and when league changes — cancel previous request
   useEffect(() => {
-    loadMatches(activeLeague);
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    loadMatches(activeLeague, controller.signal);
+
+    return () => {
+      controller.abort();
+    };
   }, [activeLeague, loadMatches]);
 
   // Auto-refresh matches every 60 seconds (fallback for non-WebSocket)
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isConnected) {
-        loadMatches(activeLeague);
+        // Create a one-off controller for background refresh
+        const controller = new AbortController();
+        loadMatches(activeLeague, controller.signal);
       }
     }, 60000);
 
@@ -448,6 +472,7 @@ export const HomePage = () => {
           away_crest: match.awayTeam?.crest,
           competition: match.competition,
           date_time: match.dateTime,
+          utc_date: match.utcDate,
           status: match.status,
           score_home: match.score?.home,
           score_away: match.score?.away,
@@ -461,6 +486,7 @@ export const HomePage = () => {
           away_crest: match.awayTeam?.crest,
           competition: match.competition,
           date_time: match.dateTime,
+          utc_date: match.utcDate,
           status: match.status,
           score_home: match.score?.home,
           score_away: match.score?.away,
@@ -483,7 +509,6 @@ export const HomePage = () => {
 
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
-    // Only increment filterKey for league changes, not tab switches (tabs use client-side filtering)
     // When switching to favorite tab, reset league to 'all'
     if (tabId === 'favorite') {
       setActiveLeague('all');
@@ -491,17 +516,33 @@ export const HomePage = () => {
     // When switching to ended tab, fetch ended matches (with cache)
     if (tabId === 'ended' && endedMatches.length === 0) {
       setEndedLoading(true);
-      fetchEndedMatches()
-        .then(data => setEndedMatches(data.matches || []))
-        .catch(e => console.error('Failed to fetch ended matches:', e))
-        .finally(() => setEndedLoading(false));
+      const controller = new AbortController();
+      fetchEndedMatches({ signal: controller.signal })
+        .then(data => {
+          if (!controller.signal.aborted) {
+            setEndedMatches(data.matches || []);
+          }
+        })
+        .catch(e => {
+          if (e.name !== 'AbortError') console.error('Failed to fetch ended matches:', e);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setEndedLoading(false);
+        });
     }
   }, [endedMatches.length]);
 
   const handleLeagueChange = useCallback((leagueId) => {
+    if (leagueId === activeLeague) return; // Prevent duplicate calls on same filter
     setActiveLeague(leagueId);
     setFilterKey(prev => prev + 1);
-  }, []);
+    // Immediately clear old matches & show skeleton for responsive feel
+    const stale = getStaleCachedMatches(leagueId);
+    if (!stale || !stale.matches || stale.matches.length === 0) {
+      setMatches([]);
+      setIsLoadingMatches(true);
+    }
+  }, [activeLeague]);
 
   const handlePredictionSaved = useCallback((matchId, prediction) => {
     setSavedPredictions(prev => {
@@ -606,13 +647,15 @@ export const HomePage = () => {
           </div>
         </div>
 
-        {/* Loading State - Skeleton */}
-        {isLoadingMatches && matches.length === 0 && activeTab !== 'ended' && (
-          <MatchSkeletonGrid />
+        {/* Loading State - Skeleton (shown inside body only, during any loading) */}
+        {isLoadingMatches && activeTab !== 'ended' && activeTab !== 'favorite' && (
+          <div key={`skeleton-${activeLeague}`} className="skeleton-container-fade-in" data-testid="match-loading-skeleton">
+            <MatchSkeletonGrid />
+          </div>
         )}
 
         {/* Error State */}
-        {matchError && matches.length === 0 && (
+        {!isLoadingMatches && matchError && matches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="matches-error">
             <p className="text-muted-foreground">{matchError}</p>
             <button
@@ -626,7 +669,7 @@ export const HomePage = () => {
 
         {/* No Matches */}
         {!isLoadingMatches && !matchError && matches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="no-matches">
+          <div className="flex flex-col items-center justify-center py-16 gap-3 content-fade-in" data-testid="no-matches">
             <p className="text-lg text-foreground font-medium">No matches found</p>
             <p className="text-sm text-muted-foreground">
               {activeLeague === 'live'
@@ -723,7 +766,7 @@ export const HomePage = () => {
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${fav.status === 'LIVE' ? 'bg-red-500/20 text-red-400' : fav.status === 'FINISHED' ? 'bg-muted text-muted-foreground' : 'bg-blue-500/15 text-blue-400'}`}>
                                 {fav.status === 'LIVE' ? 'LIVE' : fav.status === 'FINISHED' ? 'FT' : fav.status || 'TBD'}
                               </span>
-                              {fav.date_time && <span className="text-xs">{fav.date_time}</span>}
+                              {fav.date_time && <span className="text-xs">{formatLocalDateTime(fav.utc_date || fav.date_time)}</span>}
                               <span className="text-border hidden sm:inline">|</span>
                               <span className="truncate">{fav.competition}</span>
                               <div className="ml-auto">
@@ -808,7 +851,7 @@ export const HomePage = () => {
         )}
 
         {/* Match Content (non-favorite, non-ended tabs) */}
-        {tabFilteredMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+        {!isLoadingMatches && tabFilteredMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
           <div key={`filter-${activeLeague}`} className={`match-list-animate-in content-fade-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
             {/* Tab-specific headers */}
             {activeTab === 'popular' && (

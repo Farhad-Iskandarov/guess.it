@@ -1,54 +1,35 @@
 # GuessIt - Football Prediction Platform
 
-## Original Problem Statement
-1. Clone from https://github.com/Farhad-Iskandarov/guess.it
-2. API Health Monitor upgrade
-3. Fix Recent Activity on Profile Page
-4. Fix Profile statistics and add filter navigation
-5. Performance fix for MyPredictions + GuessIt Button Timer
-
 ## Architecture
 - **Frontend:** React 19, CRACO, Tailwind CSS 3, shadcn/ui (Radix), Recharts
 - **Backend:** FastAPI (Python 3.11), Motor (async MongoDB), Pydantic v2
-- **Database:** MongoDB (guessit)
-- **Real-time:** WebSockets
-- **Auth:** Session-based (httpOnly cookies) + Google OAuth
-- **Football Data:** Multi-provider (football-data.org v4 + API-Football v3)
-- **Payments:** Stripe
+- **Database:** MongoDB (DB: guessit)
+- **Real-time:** WebSockets | **Payments:** Stripe | **Auth:** Session-based + Google OAuth
 
 ## What's Been Implemented
 
-### Session 1 - Clone
-- [x] Exact clone of repo from GitHub
+### Session 1: Project Clone
+- Full clone from GitHub, dependencies installed, admin seeded
 
-### Session 2 - API Health Monitor
-- [x] 6 new admin endpoints for logs, stats, settings, cleanup
-- [x] SystemTab with 4 sub-tabs
+### Session 2: Loading UX
+- Skeleton loading, AbortController, stale-while-revalidate caching
 
-### Session 3 - Recent Activity Fix
-- [x] Fixed `if _db_ref:` bug, added persistent match cache
+### Session 3: Local Timezone
+- `formatLocalDateTime()` utility, 8 components updated
 
-### Session 4 - Statistics & Filter Navigation
-- [x] Correct/wrong/pending computed from match results
-- [x] ?filter= navigation from Profile to MyPredictions
+### Session 4: Behavioral Notifications
+- Reminder engine (pre-kickoff, favorite club matchday, favorite club urgency)
 
-### Session 5 - Performance + Timer (Mar 2, 2026)
-- [x] MyPredictions: 3-tier match resolution (MongoDB cache → API cache → parallel lookup)
-- [x] Response time: 30ms (from potentially seconds with serial API calls)
-- [x] GuessIt Button: 4-phase countdown timer (>24h: none, 24-6h: label, 6-1h: countdown, <1h: urgency)
-- [x] Hover slide animation (timer → GUESS IT) with cubic-bezier easing
-- [x] Urgency CSS: green→red gradient, pulse animation, micro-shake under 10min
-- [x] Testing: Backend 100%, Frontend 95%
+### Session 5: Match Card UX Overhaul
+- Removed GuessIt/Remove buttons, tap-to-toggle 1/X/2, countdown in meta bar, bolder Advance
 
-## Environment
-- Admin: admin@guessit.com / Admin123!
-- Test user: test@guessit.com / Test123!
-- DB: guessit on localhost:27017
+### Session 6: Leaderboard System
+- **Backend**: New `GET /api/football/leaderboard/weekly` endpoint, `weekly_points` field tracking, weekly reset job (Monday 00:00 UTC with archive), DB indexes
+- **Frontend**: Complete LeaderboardPage rewrite with Weekly/Global tabs, podium top-3 cards, ranking list, skeleton loading, empty states, current user highlight
+- **Points system**: When points are awarded, both `points` (global) and `weekly_points` (weekly) increment simultaneously
+- **README updated**
 
 ## Prioritized Backlog
-### P0
-- Football API key for production data
-### P1
-- Google OAuth credentials
-### P2
-- Feature enhancements per user requests
+### P0 — None
+### P1 — Configure Football API key, Stripe key, Google OAuth
+### P2 — Monthly leaderboard, Regional leaderboard, Weekly rewards, Browser Push Notifications

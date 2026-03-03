@@ -244,6 +244,32 @@ async def get_leaderboard(
     return {"users": users}
 
 
+@router.get("/leaderboard/weekly")
+async def get_weekly_leaderboard(
+    limit: int = 50,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get weekly leaderboard - top users by weekly_points (resets every Monday)"""
+    users = await db.users.find(
+        {"weekly_points": {"$gt": 0}},
+        {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1,
+         "weekly_points": 1, "points": 1, "level": 1, "predictions_count": 1, "correct_predictions": 1}
+    ).sort([("weekly_points", -1), ("correct_predictions", -1)]).limit(limit).to_list(limit)
+
+    # Get week info
+    now = datetime.now(timezone.utc)
+    # Monday of current week
+    monday = now - timedelta(days=now.weekday())
+    week_start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=7)
+
+    return {
+        "users": users,
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+    }
+
+
 @router.get("/leaderboard/check-rank")
 async def check_global_rank(
     request: Request,

@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { ArrowLeft, Clock, Trophy, Target, ChevronDown, UserPlus, Share2, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatLocalDateTimeFull } from '@/utils/formatTime';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -416,11 +417,7 @@ export const MatchDetailPage = () => {
 
   const formatMatchDate = (dateStr) => {
     if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) +
-        ' at ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    } catch { return dateStr; }
+    return formatLocalDateTimeFull(dateStr);
   };
 
   // Loading state
@@ -479,7 +476,7 @@ export const MatchDetailPage = () => {
             </div>
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60">
               <Clock className="w-3 h-3" />
-              <span data-testid="match-datetime">{match.dateTime || formatMatchDate(match.utcDate)}</span>
+              <span data-testid="match-datetime">{formatMatchDate(match.utcDate)}</span>
             </div>
           </div>
 

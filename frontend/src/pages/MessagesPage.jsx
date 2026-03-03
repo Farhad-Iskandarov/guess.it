@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/lib/AuthContext';
 import { useMessages } from '@/lib/MessagesContext';
 import { getChatHistory, sendMessage, markMessagesRead, markMessagesDelivered } from '@/services/messages';
+import { formatLocalDateTime } from '@/utils/formatTime';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -451,7 +452,7 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
 
         {/* Footer: date + Predict button */}
         <div className="flex items-center justify-between mt-1.5">
-          {matchData.dateTime && <span className="text-[9px] text-muted-foreground/60">{sanitizeDisplay(matchData.dateTime)}</span>}
+          {(matchData.utcDate || matchData.dateTime) && <span className="text-[9px] text-muted-foreground/60">{sanitizeDisplay(matchData.utcDate ? formatLocalDateTime(matchData.utcDate) : matchData.dateTime)}</span>}
           {!isLocked && (
             <button
               onClick={(e) => {
@@ -1027,7 +1028,7 @@ const ChatPanel = ({ friend, userId, onBack }) => {
       homeTeam: { name: match.homeTeam?.name, crest: match.homeTeam?.crest },
       awayTeam: { name: match.awayTeam?.name, crest: match.awayTeam?.crest },
       score: match.score || {}, status: match.status,
-      dateTime: match.dateTime, competition: match.competition
+      dateTime: match.dateTime, utcDate: match.utcDate || '', competition: match.competition
     };
 
     const tempId = `temp_${Date.now()}`;

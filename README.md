@@ -248,6 +248,7 @@ yarn start
 - Target load time: < 2 seconds
 
 ### Prediction System
+- **Tap-to-Toggle Predictions** - Click 1/X/2 to instantly save a prediction. Click the same option again to remove it. No extra confirmation button needed — predictions are saved and removed with one tap.
 - **Winner Predictions (1/X/2)** - Predict match winners for points
 - **Exact Score Predictions** - Predict exact final scores for +50 bonus points
   - Clean numeric input (no browser arrows, no forced `0` default)
@@ -255,14 +256,22 @@ yarn start
   - Consistent design across all pages: Main Page, Chat, Match Detail, My Predictions
 - **Configurable Points System** - Admin can configure all point values dynamically
 - **My Predictions Page** - View, edit, remove all predictions before match starts. Performance-optimized with 3-tier match resolution (MongoDB cache → API cache → parallel lookup). URL-based filter navigation (`?filter=correct|wrong|points`) with auto-selected summary card.
-- **GuessIt Button Timer** - Smart countdown timer inside the prediction button with 4 phases:
-  - **>24h before match**: Standard "G GUESS IT" button (no timer)
-  - **24h to 6h before match**: "Starts in Xh" label (calm informational state)
-  - **6h to 1h before match**: Live HH:MM:SS countdown with tabular numbers
-  - **Last 60 minutes**: Urgency mode — gradual green-to-red color shift, soft pulse animation, micro-vibration under 10 minutes
-  - **Hover animation**: Timer slides up and fades out, "G + GUESS IT" slides into view with cubic-bezier easing
-  - Timer syncs with server UTC time. Post-save state unchanged. Locked state unchanged.
+- **Advance Button** - Opens exact score prediction with premium amber/gold styling (font-extrabold, gradient border)
+- **Countdown Timer in Meta Bar** - Kickoff countdown shown next to league name:
+  - **>24h**: No timer shown
+  - **24h to 6h**: "Starts in Xh" label (calm state)
+  - **6h to 1h**: Live HH:MM:SS countdown
+  - **<1h (Urgency)**: Red pulsing timer if user hasn't predicted (gradual color shift as kickoff approaches). Amber timer if user already predicted.
+  - **0min**: Timer disappears, prediction locked
 - **Automatic Level System** - User levels auto-calculate based on point thresholds (0, 100, 120, 200, 250, 350, 500, 750, 1000, 1500, 2000). Levels sync instantly after gifted or earned points.
+
+### Leaderboard System
+- **Weekly Leaderboard** — Resets every Monday 00:00 UTC. All users start from 0 weekly points. Rankings based only on points earned during the current week. Previous week data archived automatically. Tiebreak: most correct predictions.
+- **Global Leaderboard (All-Time)** — Never resets. Accumulates lifetime points. Long-term prestige ranking.
+- **Top 3 Podium** — First 3 positions displayed as highlighted podium cards with larger avatars, gradient rank badges (gold/silver/bronze), level indicators, and accuracy percentages.
+- **Ranking List** — Rank 4+ displayed in a structured table with rank number, avatar, username, predictions count, level badge, points, and accuracy percentage.
+- **Weekly Reset Engine** — Background job in reminder engine checks every 5 minutes. On Monday 00:00 UTC: archives top 50 users to `weekly_leaderboard_archive`, resets all `weekly_points` to 0. Lock document prevents double-resets.
+- **Tab Navigation** — Single page with [Weekly] and [Global] tabs. Instant switching without page reload. Skeleton loading during data fetch.
 
 ### Homepage Tabs
 - **Top Matches** - All active (non-finished) matches
@@ -271,6 +280,46 @@ yarn start
 - **Soon** - Matches scheduled within next 3 days
 - **Ended** - Recently finished matches (last 24h)
 - **Favorite** - Matches from favorite teams & bookmarked matches
+
+### Homepage Performance & Loading UX
+- **Instant page structure** - Header, navbar, banner, tabs, and league filters render immediately on page load. Only the match cards container shows a loading state.
+- **Skeleton card placeholders** - 6 skeleton cards matching real match card size/layout with shimmer animation. Prevents layout shift with stable container height.
+- **Staggered skeleton animation** - Each skeleton card fades in with 60ms staggered delay for a premium cascading effect.
+- **AbortController request cancellation** - When users switch filters rapidly, previous in-flight API requests are automatically cancelled. Only the final filter's results are displayed.
+- **Duplicate request prevention** - Clicking the same filter twice does not trigger a new API call.
+- **Stale-while-revalidate caching** - Cached data is displayed instantly while fresh data loads in the background (5-min TTL for matches, 30s for live data).
+- **Smooth content transitions** - Match cards fade in with a 300ms cubic-bezier animation after data loads. No flicker between loading/content states.
+- **Client-side tab filtering** - Tab switches (Popular, Top Live, Soon) use instant client-side filtering on already-loaded data — no API calls needed.
+- **Error resilience** - API failures show a clean "Try Again" button inside the match area only. Rest of the page remains fully interactive.
+- **No full-page loading screens** - No white screens, no blocking overlays, no spinners covering the entire page.
+
+### Local Timezone Support
+- **Automatic timezone detection** - All match kickoff times are displayed in the user's local timezone using the browser's `Intl.DateTimeFormat` API.
+- **UTC stored, local displayed** - Backend stores and transmits all times in UTC. Frontend converts them using `formatLocalDateTime()` and `formatLocalDateTimeFull()` utilities (`/frontend/src/utils/formatTime.js`).
+- **Applied everywhere** - Main page match cards, filtered views, match detail pages, predictions, messages/chat, saved matches, and bookmarked matches all show local time.
+- **Human-friendly labels** - Times display as "Today, 21:30", "Tomorrow, 18:00", "Wednesday, 20:00", or "02 Mar, 17:30" depending on how far out the match is.
+- **Countdown timers synchronized** - The GuessIt button countdown timer correctly uses UTC-to-local conversion for accurate urgency phases.
+
+### Behavioral Notification System (Reminder Engine)
+The system runs a background scheduler (`/backend/services/reminder_engine.py`) every 5 minutes to send targeted, behavior-based in-app notifications:
+
+- **Pre-Kickoff Bookmark Reminder** - If a user bookmarked a match, hasn't predicted, and kickoff is within 30 minutes → sends "Last chance to predict! {Home} vs {Away} starts in X minutes" notification.
+- **Favorite Club Match Day** - If a user's favorite club plays today → sends "Your favorite club {Club} plays against {Opponent} today!" notification (once per match per user).
+- **Favorite Club Urgency** - If a user's favorite club match is within 60 minutes and user hasn't predicted → sends "{X} min left to predict {Club}'s match!" notification.
+- **Deduplication** - All reminders are idempotent — tracked via notification type + match_id + user_id compound index. No duplicate sends.
+- **Real-time delivery** - Notifications pushed instantly via existing WebSocket infrastructure.
+- **Performance** - Uses batch queries (not per-user loops) to minimize database load.
+
+### GuessIt Button Urgency System
+Progressive urgency effects activate as match kickoff approaches:
+
+- **>24h**: Standard "G GUESS IT" button (no timer)
+- **24h–6h**: "Starts in Xh" label (calm state)
+- **6h–1h**: Live HH:MM:SS countdown with smooth hover transition
+- **<1h (Urgency mode)**: Gradual green→red background color shift, soft pulse animation, subtle glow effect
+- **<10min**: Pulse intensifies, micro-shake animation activates, glow ring visible
+- **<2min (Critical)**: Intense pulse, stronger shake, deep red background, prominent glow ring
+- **0min**: Button locks → shows "Closed" with lock icon, all animations removed
 
 ### Content Features
 - News/Blog system (admin-managed)

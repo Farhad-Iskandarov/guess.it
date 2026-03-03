@@ -27,8 +27,9 @@ function getStale(key) {
 
 /**
  * Fetch matches from our backend (which proxies Football-Data.org)
+ * Supports AbortController signal for request cancellation
  */
-export const fetchMatches = async (params = {}, { skipCache = false } = {}) => {
+export const fetchMatches = async (params = {}, { skipCache = false, signal } = {}) => {
   const searchParams = new URLSearchParams();
   if (params.dateFrom) searchParams.set('date_from', params.dateFrom);
   if (params.dateTo) searchParams.set('date_to', params.dateTo);
@@ -43,7 +44,7 @@ export const fetchMatches = async (params = {}, { skipCache = false } = {}) => {
   }
 
   const url = `${API_URL}/api/football/matches?${searchParams.toString()}`;
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error('Failed to fetch matches');
   const data = await response.json();
   setCache(cacheKey, data);
@@ -53,12 +54,12 @@ export const fetchMatches = async (params = {}, { skipCache = false } = {}) => {
 /**
  * Fetch today's matches
  */
-export const fetchTodayMatches = async () => {
+export const fetchTodayMatches = async ({ signal } = {}) => {
   const cacheKey = 'matches_today';
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(`${API_URL}/api/football/matches/today`);
+  const response = await fetch(`${API_URL}/api/football/matches/today`, { signal });
   if (!response.ok) throw new Error('Failed to fetch today matches');
   const data = await response.json();
   setCache(cacheKey, data);
@@ -68,12 +69,12 @@ export const fetchTodayMatches = async () => {
 /**
  * Fetch live matches
  */
-export const fetchLiveMatches = async () => {
+export const fetchLiveMatches = async ({ signal } = {}) => {
   const cacheKey = 'matches_live';
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(`${API_URL}/api/football/matches/live`);
+  const response = await fetch(`${API_URL}/api/football/matches/live`, { signal });
   if (!response.ok) throw new Error('Failed to fetch live matches');
   const data = await response.json();
   setCache(cacheKey, data);
@@ -83,12 +84,12 @@ export const fetchLiveMatches = async () => {
 /**
  * Fetch upcoming matches
  */
-export const fetchUpcomingMatches = async (days = 7) => {
+export const fetchUpcomingMatches = async (days = 7, { signal } = {}) => {
   const cacheKey = `matches_upcoming_${days}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(`${API_URL}/api/football/matches/upcoming?days=${days}`);
+  const response = await fetch(`${API_URL}/api/football/matches/upcoming?days=${days}`, { signal });
   if (!response.ok) throw new Error('Failed to fetch upcoming matches');
   const data = await response.json();
   setCache(cacheKey, data);
@@ -98,12 +99,12 @@ export const fetchUpcomingMatches = async (days = 7) => {
 /**
  * Fetch matches for a specific competition
  */
-export const fetchCompetitionMatches = async (code) => {
+export const fetchCompetitionMatches = async (code, { signal } = {}) => {
   const cacheKey = `matches_competition_${code}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(`${API_URL}/api/football/matches/competition/${code}`);
+  const response = await fetch(`${API_URL}/api/football/matches/competition/${code}`, { signal });
   if (!response.ok) throw new Error('Failed to fetch competition matches');
   const data = await response.json();
   setCache(cacheKey, data);
@@ -113,12 +114,12 @@ export const fetchCompetitionMatches = async (code) => {
 /**
  * Fetch available competitions
  */
-export const fetchCompetitions = async () => {
+export const fetchCompetitions = async ({ signal } = {}) => {
   const cacheKey = 'competitions';
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(`${API_URL}/api/football/competitions`);
+  const response = await fetch(`${API_URL}/api/football/competitions`, { signal });
   if (!response.ok) throw new Error('Failed to fetch competitions');
   const data = await response.json();
   setCache(cacheKey, data);
@@ -128,8 +129,8 @@ export const fetchCompetitions = async () => {
 /**
  * Search matches by team name
  */
-export const searchMatches = async (query) => {
-  const response = await fetch(`${API_URL}/api/football/search?q=${encodeURIComponent(query)}`);
+export const searchMatches = async (query, { signal } = {}) => {
+  const response = await fetch(`${API_URL}/api/football/search?q=${encodeURIComponent(query)}`, { signal });
   if (!response.ok) throw new Error('Failed to search matches');
   return response.json();
 };
@@ -147,12 +148,12 @@ export const getStaleCachedMatches = (leagueId) => {
 /**
  * Fetch recently ended matches (within last 24 hours)
  */
-export const fetchEndedMatches = async () => {
+export const fetchEndedMatches = async ({ signal } = {}) => {
   const cacheKey = 'matches_ended';
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch(`${API_URL}/api/football/matches/ended`);
+  const response = await fetch(`${API_URL}/api/football/matches/ended`, { signal });
   if (!response.ok) throw new Error('Failed to fetch ended matches');
   const data = await response.json();
   setCache(cacheKey, data);

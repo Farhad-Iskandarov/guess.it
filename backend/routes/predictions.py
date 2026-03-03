@@ -571,11 +571,13 @@ async def get_my_predictions_detailed(
     # Update user points and level if there were changes
     if points_delta != 0:
         new_points = max(0, user.get("points", 0) + points_delta)
+        new_weekly = max(0, user.get("weekly_points", 0) + points_delta)
         new_level = calculate_level(new_points, LEVEL_THRESHOLDS)
         await db.users.update_one(
             {"user_id": user_id},
             {"$set": {
                 "points": new_points,
+                "weekly_points": new_weekly,
                 "level": new_level,
                 "updated_at": now.isoformat()
             }}

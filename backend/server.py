@@ -25,6 +25,7 @@ from routes.notifications import router as notifications_router
 from routes.admin import router as admin_router
 from routes.public import router as public_router
 from routes.subscriptions import router as subscriptions_router, seed_subscription_plans
+from services.reminder_engine import start_reminder_engine, stop_reminder_engine
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -600,6 +601,11 @@ async def startup_event():
     await db.messages.create_index([("receiver_id", 1), ("delivered", 1)])
     await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("read", 1)])
+    # Reminder dedup indexes — prevent duplicate notifications per type/match/user
+    await db.notifications.create_index([("type", 1), ("user_id", 1), ("data.match_id", 1)])
+    # Weekly leaderboard indexes
+    await db.users.create_index([("weekly_points", -1), ("correct_predictions", -1)])
+    await db.weekly_reset_log.create_index("week_key", unique=True)
     await db.favorite_matches.create_index([("user_id", 1), ("match_id", 1)], unique=True)
     await db.favorite_matches.create_index([("user_id", 1), ("created_at", -1)])
     # Admin panel indexes
@@ -652,9 +658,13 @@ async def startup_event():
     await seed_subscription_plans(db)
     
     start_polling(db)
+    
+    # Start behavioral reminder engine (pre-kickoff, favorite club notifications)
+    start_reminder_engine(db)
 
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    stop_reminder_engine()
     stop_polling()
     client.close()

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction } from '@/services/predictions';
 import { addFavoriteClub, removeFavoriteClub } from '@/services/favorites';
 import { addFavoriteMatch, removeFavoriteMatch } from '@/services/messages';
+import { formatLocalDateTime } from '@/utils/formatTime';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -266,6 +267,61 @@ const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disable
 });
 VoteButton.displayName = 'VoteButton';
 
+// ============ Countdown Timer (for meta bar) ============
+const MetaCountdown = memo(({ utcDate, matchStatus, hasPrediction }) => {
+  const [now, setNow] = useState(Date.now());
+  const kickoff = utcDate ? new Date(utcDate).getTime() : 0;
+  const remaining = kickoff ? Math.max(0, kickoff - now) : 0;
+  const remainingS = Math.floor(remaining / 1000);
+  const remainingH = remaining / 3600000;
+
+  const phase = !utcDate || matchStatus === 'LIVE' || matchStatus === 'FINISHED' ? 'none'
+    : remaining <= 0 ? 'none'
+    : remainingH > 24 ? 'none'
+    : remainingH > 6 ? 'label'
+    : remainingH > 1 ? 'countdown'
+    : 'urgency';
+
+  useEffect(() => {
+    if (phase === 'none') return;
+    const interval = phase === 'label' ? 60000 : 1000;
+    const id = setInterval(() => setNow(Date.now()), interval);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  if (phase === 'none') return null;
+
+  const urgencyIntensity = phase === 'urgency' ? Math.min(1, (3600 - remainingS) / 3600) : 0;
+  const isUrgentUnpredicted = phase === 'urgency' && !hasPrediction;
+
+  const formatTime = () => {
+    if (phase === 'label') return `Starts in ${Math.ceil(remainingH)}h`;
+    const h = Math.floor(remainingS / 3600);
+    const m = Math.floor((remainingS % 3600) / 60);
+    const s = remainingS % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  return (
+    <span
+      data-testid="meta-countdown"
+      className={`ml-auto whitespace-nowrap tabular-nums font-semibold text-[10px] sm:text-xs ${
+        isUrgentUnpredicted
+          ? 'meta-countdown-urgency'
+          : phase === 'urgency'
+            ? 'text-amber-400'
+            : 'text-muted-foreground/70'
+      }`}
+      style={isUrgentUnpredicted ? {
+        color: `hsl(${Math.round(30 - urgencyIntensity * 30)}, ${Math.round(80 + urgencyIntensity * 20)}%, ${Math.round(55 - urgencyIntensity * 10)}%)`,
+      } : {}}
+    >
+      {formatTime()}
+    </span>
+  );
+});
+MetaCountdown.displayName = 'MetaCountdown';
+
 // ============ GUESS IT Button ============
 const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onClick, locked, hasExactScore, utcDate, matchStatus }) => {
   const hasSelection = !!currentSelection;
@@ -327,6 +383,16 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
   // Urgency intensity: 0-1, increases as time approaches 0
   const urgencyIntensity = timerPhase === 'urgency' ? Math.min(1, (3600 - remainingS) / 3600) : 0;
   const isLastTenMin = timerPhase === 'urgency' && remainingS <= 600;
+  const isLastTwoMin = timerPhase === 'urgency' && remainingS <= 120;
+
+  // Dynamic urgency class selection
+  const urgencyClass = timerPhase === 'urgency'
+    ? isLastTwoMin
+      ? 'guess-btn-urgency guess-btn-critical guess-glow-active'
+      : isLastTenMin
+        ? 'guess-btn-urgency guess-btn-shake guess-glow-active'
+        : 'guess-btn-urgency'
+    : '';
 
   return (
     <Button
@@ -346,13 +412,13 @@ const GuessItButton = memo(({ currentSelection, savedPrediction, isLoading, onCl
               : 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95'
         }
         ${isDisabled && !state.isSaved && !state.isLocked ? 'opacity-50 cursor-not-allowed hover:scale-100' : ''}
-        ${timerPhase === 'urgency' ? 'guess-btn-urgency' : ''}
-        ${isLastTenMin ? 'guess-btn-pulse' : ''}
+        ${urgencyClass}
       `}
       style={{
         transition: 'background-color 0.3s ease, transform 0.1s ease, box-shadow 0.1s ease, border-color 0.3s ease',
         ...(timerPhase === 'urgency' && !state.isSaved ? {
           backgroundColor: `hsl(${Math.round(142 - urgencyIntensity * 142)}, ${Math.round(50 + urgencyIntensity * 20)}%, ${Math.round(35 - urgencyIntensity * 10)}%)`,
+          borderColor: `hsl(${Math.round(142 - urgencyIntensity * 142)}, ${Math.round(50 + urgencyIntensity * 30)}%, ${Math.round(45 - urgencyIntensity * 10)}%)`,
         } : {}),
       }}
     >
@@ -430,18 +496,19 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
     variant="outline"
     data-testid="advance-prediction-btn"
     className={`
-      relative match-action-btn-sm h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-bold text-xs sm:text-sm md:text-base
-      border-2 border-amber-500/30 hover:border-amber-500
-      bg-gradient-to-br from-amber-500/5 to-orange-500/10 
-      hover:from-amber-500/20 hover:to-orange-500/20
-      text-amber-600 dark:text-amber-400
-      hover:scale-105 hover:shadow-lg hover:shadow-amber-500/20
+      relative match-action-btn-sm h-[56px] sm:h-[72px] md:h-[84px] rounded-xl font-extrabold text-xs sm:text-sm md:text-base
+      border-2 border-amber-500/40 hover:border-amber-500
+      bg-gradient-to-br from-amber-500/10 to-orange-500/15
+      hover:from-amber-500/25 hover:to-orange-500/25
+      text-amber-500 dark:text-amber-400
+      hover:scale-105 hover:shadow-lg hover:shadow-amber-500/25
+      ${disabled ? 'opacity-40 cursor-not-allowed hover:scale-100' : ''}
     `}
     style={{ transition: 'background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease' }}
   >
     <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1">
       <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span className="text-[10px] sm:text-xs md:text-sm font-semibold">Advance</span>
+      <span className="text-[10px] sm:text-xs md:text-sm font-bold tracking-wide">Advance</span>
     </div>
   </Button>
 ));
@@ -558,13 +625,14 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
           match_id: match.id,
           home_team: match.homeTeam.name,
           away_team: match.awayTeam.name,
-          match_date: match.dateTime || match.utcDate,
+          match_date: match.utcDate || match.dateTime,
           match_card: {
             match_id: match.id,
             homeTeam: { name: match.homeTeam?.name, crest: match.homeTeam?.crest || match.homeTeam?.logo },
             awayTeam: { name: match.awayTeam?.name, crest: match.awayTeam?.crest || match.awayTeam?.logo },
             competition: match.competition || '',
             dateTime: match.dateTime || '',
+            utcDate: match.utcDate || '',
             status: match.status || 'NOT_STARTED',
             score: match.score || {}
           }
@@ -901,8 +969,6 @@ const MatchRow = memo(({
   currentSelection,
   savedPrediction,
   onSelectPrediction,
-  onGuessIt,
-  onRefresh,
   onAdvance,
   isLoading,
   prevScores,
@@ -914,7 +980,7 @@ const MatchRow = memo(({
   hasExactScore,
 }) => {
   const navigate = useNavigate();
-  const displayedSelection = currentSelection !== undefined ? currentSelection : savedPrediction;
+  const displayedSelection = savedPrediction || null;
   const isLocked = match.predictionLocked;
 
   const getMostPicked = () => {
@@ -929,8 +995,6 @@ const MatchRow = memo(({
   const mostPickedLabel = !mostPicked ? '-' :
     mostPicked === 'home' ? match.homeTeam.shortName || 'Home' : mostPicked === 'away' ? match.awayTeam.shortName || 'Away' : 'Draw';
 
-  const isCurrentSaved = savedPrediction && savedPrediction === displayedSelection;
-  const hasUnsavedChanges = savedPrediction && displayedSelection && savedPrediction !== displayedSelection;
   const hasSavedPrediction = !!savedPrediction;
   const hasAnyPrediction = hasSavedPrediction || hasExactScore;
 
@@ -952,17 +1016,16 @@ const MatchRow = memo(({
       {/* Match Meta - shared between both views */}
       <div className="match-row-meta flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-muted-foreground flex-wrap">
         <StatusBadge status={match.status} statusDetail={match.statusDetail} />
-        <span className="match-row-datetime whitespace-nowrap">{match.dateTime}</span>
+        <span className="match-row-datetime whitespace-nowrap">{formatLocalDateTime(match.utcDate)}</span>
         <span className="text-border hidden sm:inline">|</span>
         <span className="truncate">{match.competition}</span>
-        <div className="ml-auto">
-          <BookmarkMatch
-            match={match}
-            isBookmarked={favoriteMatchIds?.has(match.id)}
-            onToggle={onToggleFavoriteMatch}
-            isAuthenticated={isAuthenticated}
-          />
-        </div>
+        <MetaCountdown utcDate={match.utcDate} matchStatus={match.status} hasPrediction={hasAnyPrediction} />
+        <BookmarkMatch
+          match={match}
+          isBookmarked={favoriteMatchIds?.has(match.id)}
+          onToggle={onToggleFavoriteMatch}
+          isAuthenticated={isAuthenticated}
+        />
       </div>
 
       {/* Locked Banner */}
@@ -1031,16 +1094,14 @@ const MatchRow = memo(({
           {match.status !== 'NOT_STARTED' && (
             <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
           )}
-          {/* Right: Vote buttons + Action buttons */}
+          {/* Right: Vote buttons + Advance button */}
           <div className="flex items-center gap-1 md:gap-2">
             <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
             <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
             <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
           </div>
           <div className="flex items-center gap-1 md:gap-2">
-            <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} utcDate={match.utcDate} matchStatus={match.status} />
-            <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked || hasSavedPrediction} />
-            <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection || hasSavedPrediction} hasExactScore={hasExactScore} />
+            <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
           </div>
         </div>
       </div>
@@ -1091,7 +1152,7 @@ const MatchRow = memo(({
               <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
             )}
           </div>
-          {/* Vote + Action buttons — stacked on mobile */}
+          {/* Vote + Advance button — stacked on mobile */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
             <div className="flex items-center gap-1 flex-1">
               <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
@@ -1099,9 +1160,7 @@ const MatchRow = memo(({
               <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
-              <GuessItButton currentSelection={displayedSelection} savedPrediction={savedPrediction} isLoading={isLoading} onClick={() => onGuessIt(match.id)} locked={isLocked} hasExactScore={hasExactScore} utcDate={match.utcDate} matchStatus={match.status} />
-              <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked || hasSavedPrediction} />
-              <RemoveButton onClick={() => onRefresh(match.id)} disabled={isLoading || isLocked} hasSelection={!!displayedSelection || hasSavedPrediction} hasExactScore={hasExactScore} />
+              <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
             </div>
           </div>
         </div>
@@ -1115,22 +1174,16 @@ const MatchRow = memo(({
         <span className="text-muted-foreground">
           Most picked: <span className="text-primary font-medium">{mostPickedLabel}</span>
         </span>
-        {isCurrentSaved && (
+        {hasSavedPrediction && (
           <span className="text-primary font-medium flex items-center gap-1">
             <Check className="w-3 h-3" />
-            Pick: {displayedSelection === 'home' ? '1' : displayedSelection === 'draw' ? 'X' : '2'}
+            Pick: {savedPrediction === 'home' ? '1' : savedPrediction === 'draw' ? 'X' : '2'}
           </span>
         )}
         {hasExactScore && (
           <span className="text-amber-500 font-medium flex items-center gap-1">
             <Check className="w-3 h-3" />
             Exact Score
-          </span>
-        )}
-        {hasUnsavedChanges && (
-          <span className="text-yellow-500 font-medium flex items-center gap-1">
-            <RefreshCw className="w-3 h-3" />
-            Unsaved
           </span>
         )}
       </div>
@@ -1179,12 +1232,52 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     prevMatchesRef.current = matches;
   }, [matches]);
 
-  const handleSelectPrediction = useCallback((matchId, prediction) => {
-    setCurrentSelections((prev) => {
-      if (prev[matchId] === prediction) return { ...prev, [matchId]: null };
-      return { ...prev, [matchId]: prediction };
-    });
-  }, []);
+  const handleSelectPrediction = useCallback(async (matchId, prediction) => {
+    const currentSaved = savedPredictions[matchId];
+    
+    // If tapping the same option that's already saved → REMOVE prediction
+    if (currentSaved === prediction) {
+      setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
+      try {
+        await deletePrediction(matchId);
+        if (onPredictionSaved) onPredictionSaved(matchId, null);
+        setCurrentSelections((prev) => { const n = { ...prev }; delete n[matchId]; return n; });
+        toast.success('Prediction removed', { duration: 2000 });
+      } catch (error) {
+        toast.error('Failed to remove prediction', { description: error.message, duration: 3000 });
+      } finally {
+        setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
+      }
+      return;
+    }
+
+    // Auth check
+    if (!isAuthenticated) {
+      setPendingPrediction({ matchId, prediction });
+      setShowAuthModal(true);
+      return;
+    }
+
+    // Optimistic update: immediately show as saved
+    const previousPrediction = currentSaved;
+    if (onPredictionSaved) onPredictionSaved(matchId, prediction);
+    setCurrentSelections((prev) => { const n = { ...prev }; delete n[matchId]; return n; });
+
+    setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
+    try {
+      const result = await savePrediction(matchId, prediction);
+      toast.success(result.is_new ? 'Prediction saved!' : 'Prediction updated!', {
+        description: `You predicted: ${prediction === 'home' ? 'Home Win (1)' : prediction === 'draw' ? 'Draw (X)' : 'Away Win (2)'}`,
+        duration: 2000,
+      });
+    } catch (error) {
+      // Revert optimistic update on failure
+      if (onPredictionSaved) onPredictionSaved(matchId, previousPrediction || null);
+      toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+    } finally {
+      setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
+    }
+  }, [savedPredictions, isAuthenticated, onPredictionSaved]);
 
   const handleRefresh = useCallback(async (matchId) => {
     setCurrentSelections((prev) => ({ ...prev, [matchId]: null }));
@@ -1377,8 +1470,6 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
                   currentSelection={currentSelections[match.id]}
                   savedPrediction={savedPredictions[match.id]}
                   onSelectPrediction={handleSelectPrediction}
-                  onGuessIt={handleGuessIt}
-                  onRefresh={handleRefresh}
                   onAdvance={handleAdvance}
                   isLoading={loadingMatches[match.id]}
                   prevScores={prevScores}
@@ -1411,8 +1502,6 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               currentSelection={currentSelections[match.id]}
               savedPrediction={savedPredictions[match.id]}
               onSelectPrediction={handleSelectPrediction}
-              onGuessIt={handleGuessIt}
-              onRefresh={handleRefresh}
               onAdvance={handleAdvance}
               isLoading={loadingMatches[match.id]}
               prevScores={prevScores}

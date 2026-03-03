@@ -57,6 +57,7 @@ class FavoriteMatchRequest(BaseModel):
     away_crest: Optional[str] = None
     competition: str
     date_time: Optional[str] = None
+    utc_date: Optional[str] = None
     status: Optional[str] = None
     score_home: Optional[int] = None
     score_away: Optional[int] = None
@@ -169,6 +170,7 @@ async def add_favorite_match(
         "away_crest": body.away_crest,
         "competition": body.competition,
         "date_time": body.date_time,
+        "utc_date": body.utc_date,
         "status": body.status,
         "score_home": body.score_home,
         "score_away": body.score_away,

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { TrendingUp, ChevronDown, Target, Users, Lightbulb, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatLocalDateTime } from '@/utils/formatTime';
 
 const VoteButton = ({ type, votes, percentage, isSelected, onClick, isWinning, disabled }) => {
   const labels = { home: '1', draw: 'X', away: '2' };
@@ -218,6 +219,7 @@ const InviteFriend = ({ matchId, match }) => {
         awayTeam: match.awayTeam,
         competition: match.competition || '',
         dateTime: match.dateTime || '',
+        utcDate: match.utcDate || '',
         status: match.status || 'SCHEDULED',
         score: match.score || {}
       };
@@ -443,7 +445,7 @@ export const MatchCard = ({
       <div className="p-5">
         {/* Match Meta */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-          <span>{match.dateTime}</span>
+          <span>{formatLocalDateTime(match.utcDate)}</span>
           <span className="text-border">|</span>
           <span>{match.sport || 'Football'}</span>
           <span className="text-border">|</span>

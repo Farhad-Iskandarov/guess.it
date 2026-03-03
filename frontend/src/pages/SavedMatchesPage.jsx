@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
 import { getFavoriteMatches, removeFavoriteMatch } from '@/services/messages';
+import { formatLocalDateTime } from '@/utils/formatTime';
 import { Button } from '@/components/ui/button';
 import { Bookmark, Trash2, Loader2, ArrowLeft, Clock, Radio } from 'lucide-react';
 
@@ -21,7 +22,7 @@ const SavedMatchCard = memo(({ match, onRemove, removing }) => {
     ? 'Ended' : match.status || 'Scheduled';
 
   const matchDate = match.date_time
-    ? new Date(match.date_time).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    ? formatLocalDateTime(match.utc_date || match.date_time)
     : '';
 
   return (

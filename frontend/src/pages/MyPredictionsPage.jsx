@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction, getMyDetailedPredictions, deleteExactScorePrediction, updateExactScorePrediction } from '@/services/predictions';
+import { formatLocalDateTime } from '@/utils/formatTime';
 import { toast } from 'sonner';
 import {
   Trophy, Clock, CheckCircle2, XCircle, AlertCircle,
@@ -336,7 +337,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
             {/* Status + Meta */}
             <div className="flex items-center gap-2 flex-shrink-0 min-w-[140px]">
               <StatusBadge status={match.status} matchMinute={match.matchMinute} />
-              <span className="text-xs text-muted-foreground">{match.dateTime}</span>
+              <span className="text-xs text-muted-foreground">{formatLocalDateTime(match.utcDate)}</span>
             </div>
 
             {/* Teams row — clickable to open match detail */}
@@ -428,7 +429,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
           <div className="flex items-center justify-between px-5 pt-2 pb-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <StatusBadge status={match.status} matchMinute={match.matchMinute} />
-              <span>{match.dateTime}</span>
+              <span>{formatLocalDateTime(match.utcDate)}</span>
             </div>
             <div className="flex items-center gap-2">
               {result === 'correct' && (
