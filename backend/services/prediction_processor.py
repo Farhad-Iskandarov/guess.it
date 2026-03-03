@@ -66,6 +66,17 @@ async def process_exact_score_results(db: AsyncIOMotorDatabase, match_id: int, h
                     {"user_id": user_id},
                     {"$set": {"level": new_level}}
                 )
+
+            # Weekly Competition Engine: increment season-based weekly points
+            try:
+                from services.weekly_engine import increment_user_weekly_points
+                await increment_user_weekly_points(
+                    db, user_id,
+                    points_delta=exact_bonus,
+                    correct_delta=1,
+                )
+            except Exception as e:
+                logger.warning(f"Weekly engine update failed (non-blocking): {e}")
             
             # Send success notification
             try:

@@ -29,6 +29,7 @@ from routes.notifications import router as notifications_router
 from routes.admin import router as admin_router
 from routes.public import router as public_router
 from routes.subscriptions import router as subscriptions_router, seed_subscription_plans
+from routes.weekly import router as weekly_router
 from services.reminder_engine import start_reminder_engine, stop_reminder_engine
 
 ROOT_DIR = Path(__file__).parent
@@ -311,6 +312,7 @@ api_router.include_router(notifications_router)
 api_router.include_router(admin_router)
 api_router.include_router(public_router)
 api_router.include_router(subscriptions_router)
+api_router.include_router(weekly_router)
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -698,6 +700,25 @@ async def startup_event():
         unique=True,
         name="unique_user_match_exact_score"
     )
+
+    # ==================== Weekly Competition Engine indexes ====================
+    await db.weekly_seasons.create_index("season_id", unique=True)
+    await db.weekly_seasons.create_index("status")
+    await db.weekly_user_points.create_index(
+        [("season_id", 1), ("user_id", 1)],
+        unique=True,
+        name="unique_season_user"
+    )
+    # Critical index for O(log n) leaderboard queries
+    await db.weekly_user_points.create_index(
+        [("season_id", 1), ("weekly_points", -1)],
+        name="season_leaderboard_sort"
+    )
+    await db.weekly_results_archive.create_index("season_id", unique=True)
+
+    # Ensure current weekly season exists
+    from services.weekly_engine import ensure_current_season
+    await ensure_current_season(db)
 
     # Seed default Football API key if none exists
     await seed_default_api_key(db)

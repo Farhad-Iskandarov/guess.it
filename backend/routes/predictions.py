@@ -595,6 +595,18 @@ async def get_my_predictions_detailed(
             {"user_id": user_id},
             {"$set": {"level": user_level}}
         )
+
+        # Weekly Competition Engine: increment season-based weekly points (non-blocking)
+        try:
+            from services.weekly_engine import increment_user_weekly_points
+            await increment_user_weekly_points(
+                db, user_id,
+                points_delta=points_delta,
+                predictions_delta=correct + wrong,  # settled predictions this run
+                correct_delta=correct,
+            )
+        except Exception as e:
+            logger.warning(f"Weekly engine update failed (non-blocking): {e}")
     else:
         user_points = user.get("points", 0)
         user_level = user.get("level", 0)

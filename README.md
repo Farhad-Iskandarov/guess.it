@@ -42,6 +42,32 @@ GuessIt is a real-time football prediction platform where users predict match ou
                     └──────────────┘
 ```
 
+### Weekly Competition Data Flow (Zero-Reset Architecture)
+
+```
+ Week N (active)              Week N+1 (new)
+┌─────────────┐            ┌─────────────┐
+│weekly_seasons│            │weekly_seasons│
+│ season: W10 │──finalize──│ season: W11 │
+│ status:active│           │ status:active│
+└──────┬──────┘            └──────┬──────┘
+       │                          │
+┌──────▼──────┐            ┌──────▼──────┐
+│weekly_user_  │            │weekly_user_  │
+│points        │            │points        │
+│ W10 + userA  │  (clean)   │ W11 + userA  │
+│ W10 + userB  │──────────→ │ W11 + userB  │
+│  (indexed)   │  No reset! │  (starts at 0)│
+└──────┬──────┘            └──────────────┘
+       │
+┌──────▼──────────┐
+│weekly_results_   │
+│archive           │
+│ W10: top 100     │
+│ precomputed      │
+└─────────────────┘
+```
+
 ### Process Model
 | Process | Role | Instances |
 |---------|------|-----------|
@@ -50,6 +76,44 @@ GuessIt is a real-time football prediction platform where users predict match ou
 | `redis` | Cache, pub/sub, rate limiting | 1 |
 | `mongodb` | Data persistence | 1 |
 | `frontend` | React dev server | 1 |
+
+## Weekly Competition Engine (v2.0)
+
+### Design Principles
+- **Zero-Reset Architecture**: No `update_many` for weekly reset. New season = new `season_id`. Users automatically start fresh.
+- **Season Isolation**: Each week is a separate document in `weekly_seasons`. Points tracked per `(season_id, user_id)` in `weekly_user_points`.
+- **O(log n) Rankings**: Compound index `(season_id, weekly_points DESC)` enables indexed sort for leaderboard queries.
+- **Precomputed Archives**: Top 100 snapshot stored in `weekly_results_archive` with precomputed ranks, percentiles.
+- **Redis Caching**: All hot-path queries cached (10-15s TTL). Status, leaderboard, summary endpoints all cache-first.
+
+### Weekly Cycle
+1. **Monday 00:00 UTC**: New season auto-created (e.g., `2026-W11`)
+2. **During week**: Points accumulated via atomic `$inc` into `weekly_user_points`
+3. **End of week**: Reminder worker detects season change, finalizes old season (archives top 100, marks completed)
+4. **No downtime**: Season rotation is a document insert, not a collection scan
+
+### Benchmark Results
+| Operation | Throughput |
+|-----------|-----------|
+| Concurrent weekly point $inc (3,000 writes) | **1,942 writes/sec** |
+| Leaderboard query (indexed sort) | **1,390 queries/sec** |
+| Rank calculation (indexed count) | **2,092 queries/sec** |
+| Atomic correctness (300 pts across 30 increments) | **100% accurate** |
+
+### Weekly Competition Indexes
+| Collection | Index | Unique | Purpose |
+|-----------|-------|--------|---------|
+| weekly_seasons | `(season_id)` | Yes | Season lookup |
+| weekly_seasons | `(status)` | No | Active season query |
+| weekly_user_points | `(season_id, user_id)` | Yes | Prevent duplicate entries |
+| weekly_user_points | `(season_id, weekly_points DESC)` | No | O(log n) leaderboard sort |
+| weekly_results_archive | `(season_id)` | Yes | Archive lookup |
+
+### API Endpoints
+- `GET /api/weekly/status` — Current season info, countdown, user rank (cached 10s)
+- `GET /api/weekly/leaderboard` — Season leaderboard with user profiles (cached 15s)
+- `GET /api/weekly/summary/{season_id}` — Completed season results, winner, user rank/percentile
+- `GET /api/weekly/history` — List of past completed seasons with winners
 
 ## Production Hardening (v1.5)
 

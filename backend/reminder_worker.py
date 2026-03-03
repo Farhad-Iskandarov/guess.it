@@ -43,8 +43,8 @@ from services.reminder_engine import (
     check_pre_kickoff_reminders,
     check_favorite_club_matchday,
     check_favorite_club_urgency,
-    check_weekly_leaderboard_reset,
 )
+from services.weekly_engine import check_season_rotation, ensure_current_season
 from services.football_api import (
     get_live_matches,
     get_today_matches,
@@ -60,13 +60,17 @@ POLLING_INTERVAL = 30    # 30 seconds
 async def reminder_loop():
     """Run all reminder checks every 5 minutes."""
     logger.info(f"Reminder loop started (interval={REMINDER_INTERVAL}s)")
+
+    # Ensure current season exists on startup
+    await ensure_current_season(db)
+
     while True:
         try:
             await asyncio.gather(
                 check_pre_kickoff_reminders(db),
                 check_favorite_club_matchday(db),
                 check_favorite_club_urgency(db),
-                check_weekly_leaderboard_reset(db),
+                check_season_rotation(db),
                 return_exceptions=True,
             )
             logger.debug("Reminder checks complete")

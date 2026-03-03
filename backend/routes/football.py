@@ -272,37 +272,10 @@ async def get_weekly_leaderboard(
     limit: int = 50,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get weekly leaderboard - top users by weekly_points. Cached in Redis for 30s."""
-    from services.redis_pubsub import cache_get, cache_set
-    import json as _json
-
-    cache_key = f"leaderboard:weekly:{limit}"
-    cached = await cache_get(cache_key)
-    if cached:
-        try:
-            return _json.loads(cached)
-        except Exception:
-            pass
-
-    users = await db.users.find(
-        {"weekly_points": {"$gt": 0}},
-        {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1,
-         "weekly_points": 1, "points": 1, "level": 1, "predictions_count": 1, "correct_predictions": 1}
-    ).sort([("weekly_points", -1), ("correct_predictions", -1)]).limit(limit).to_list(limit)
-
-    # Get week info
-    now = datetime.now(timezone.utc)
-    monday = now - timedelta(days=now.weekday())
-    week_start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_end = week_start + timedelta(days=7)
-
-    result = {
-        "users": users,
-        "week_start": week_start.isoformat(),
-        "week_end": week_end.isoformat(),
-    }
-    await cache_set(cache_key, _json.dumps(result, default=str), ttl_seconds=30)
-    return result
+    """Get weekly leaderboard — delegates to season-based weekly competition engine."""
+    from services.weekly_engine import get_weekly_leaderboard_cached, get_current_season_id
+    season_id = get_current_season_id()
+    return await get_weekly_leaderboard_cached(db, season_id, min(limit, 100))
 
 
 @router.get("/leaderboard/check-rank")
