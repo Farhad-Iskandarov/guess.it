@@ -11,12 +11,12 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import {
   User, Camera, Mail, Lock, Edit3, Loader2, Check, X, AlertTriangle,
-  Eye, EyeOff, Shield, Upload, Trash2, Info, ChevronLeft, Bell, Volume2, VolumeX, Globe
+  Eye, EyeOff, Shield, Upload, Trash2, Info, ChevronLeft, ChevronDown, Bell, Volume2, VolumeX, Globe
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
-// ============ Section Card ============
+// ============ Section Card (static, non-collapsible) ============
 const SectionCard = memo(({ icon: Icon, title, description, children }) => (
   <div 
     className="bg-card rounded-xl border border-border/50 p-6 animate-fade-in"
@@ -35,6 +35,63 @@ const SectionCard = memo(({ icon: Icon, title, description, children }) => (
   </div>
 ));
 SectionCard.displayName = 'SectionCard';
+
+// ============ Accordion Section Card (collapsible) ============
+const AccordionSectionCard = memo(({ icon: Icon, title, description, isOpen, onToggle, sectionKey, children }) => {
+  const contentRef = useRef(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  useEffect(() => {
+    if (contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight);
+    }
+  }, [isOpen, children]);
+
+  // Re-measure on window resize to handle responsive layout changes
+  useEffect(() => {
+    if (!isOpen) return;
+    const obs = new ResizeObserver(() => {
+      if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
+    });
+    if (contentRef.current) obs.observe(contentRef.current);
+    return () => obs.disconnect();
+  }, [isOpen]);
+
+  return (
+    <div 
+      className="bg-card rounded-xl border border-border/50 animate-fade-in overflow-hidden"
+      data-testid={`section-${title.toLowerCase().replace(/\s/g, '-')}`}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(sectionKey)}
+        className="w-full flex items-center gap-3 p-6 text-left cursor-pointer hover:bg-muted/30 transition-colors duration-200"
+        data-testid={`section-toggle-${sectionKey}`}
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 flex-shrink-0">
+          <Icon className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+          {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+        </div>
+        <ChevronDown 
+          className={`w-5 h-5 text-muted-foreground flex-shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} 
+        />
+      </button>
+      <div
+        style={{ maxHeight: isOpen ? contentHeight + 32 : 0 }}
+        className="transition-[max-height] duration-300 ease-in-out overflow-hidden"
+      >
+        <div ref={contentRef} className="px-6 pb-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+});
+AccordionSectionCard.displayName = 'AccordionSectionCard';
 
 // ============ Toggle Row ============
 const ToggleRow = memo(({ icon: Icon, iconColor, title, description, checked, onChange, loading, testId }) => (
@@ -66,7 +123,7 @@ const ToggleRow = memo(({ icon: Icon, iconColor, title, description, checked, on
 ToggleRow.displayName = 'ToggleRow';
 
 // ============ Privacy & Notifications Section ============
-const PrivacyNotificationsSection = memo(() => {
+const PrivacyNotificationsSection = memo(({ isOpen, onToggle }) => {
   const [onlineVisibility, setOnlineVisibility] = useState(true);
   const [notificationSound, setNotificationSound] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
@@ -177,7 +234,7 @@ const PrivacyNotificationsSection = memo(() => {
   }, [deliveryStatus]);
 
   return (
-    <SectionCard icon={Bell} title="Privacy & Notifications" description="Control your visibility and notification preferences">
+    <AccordionSectionCard icon={Bell} title="Privacy & Notifications" description="Control your visibility and notification preferences" isOpen={isOpen} onToggle={onToggle} sectionKey="privacy">
       <div className="space-y-1 divide-y divide-border/30">
         <ToggleRow
           icon={Globe}
@@ -220,7 +277,7 @@ const PrivacyNotificationsSection = memo(() => {
           testId="delivery-status"
         />
       </div>
-    </SectionCard>
+    </AccordionSectionCard>
   );
 });
 PrivacyNotificationsSection.displayName = 'PrivacyNotificationsSection';
@@ -289,10 +346,17 @@ export const SettingsPage = () => {
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Accordion state — 'account', 'security', 'privacy', or null (all closed)
+  const [openSection, setOpenSection] = useState('account');
+  const toggleSection = useCallback((key) => {
+    setOpenSection(prev => prev === key ? null : key);
+  }, []);
+
   // Avatar upload state
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [showPictureModal, setShowPictureModal] = useState(false);
 
   // Email change state
   const [newEmail, setNewEmail] = useState('');
@@ -648,9 +712,13 @@ export const SettingsPage = () => {
             description="Upload a photo to personalize your profile"
           >
             <div className="flex flex-col sm:flex-row items-center gap-6">
-              {/* Avatar preview */}
-              <div className="relative group">
-                <Avatar className="w-24 h-24 border-4 border-background shadow-lg">
+              {/* Avatar preview — clickable to open modal */}
+              <div 
+                className="relative group cursor-pointer"
+                onClick={() => currentPicture && !avatarPreview && setShowPictureModal(true)}
+                data-testid="avatar-preview-trigger"
+              >
+                <Avatar className="w-24 h-24 border-4 border-background shadow-lg group-hover:ring-2 group-hover:ring-primary/40 transition-all duration-200">
                   <AvatarImage src={currentPicture} alt={displayName} />
                   <AvatarFallback className="bg-primary/20 text-primary font-bold text-2xl">
                     {initials}
@@ -659,6 +727,11 @@ export const SettingsPage = () => {
                 {avatarPreview && (
                   <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground rounded-full p-1">
                     <Check className="w-3 h-3" />
+                  </div>
+                )}
+                {currentPicture && !avatarPreview && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 group-hover:bg-black/30 transition-all duration-200">
+                    <Eye className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                   </div>
                 )}
               </div>
@@ -734,11 +807,72 @@ export const SettingsPage = () => {
             </div>
           </SectionCard>
 
+          {/* ===== Profile Picture Preview Modal ===== */}
+          {showPictureModal && (
+            <div 
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+              onClick={() => setShowPictureModal(false)}
+              data-testid="picture-preview-modal"
+            >
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+              <div 
+                className="relative z-10 flex flex-col items-center gap-5 max-w-sm w-full animate-scale-in"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Close button */}
+                <button
+                  onClick={() => setShowPictureModal(false)}
+                  className="absolute -top-2 -right-2 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-card border border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  data-testid="picture-modal-close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                {/* Large preview image */}
+                <div className="w-64 h-64 rounded-full overflow-hidden border-4 border-card shadow-2xl">
+                  <img 
+                    src={currentPicture} 
+                    alt={displayName}
+                    className="w-full h-full object-cover object-center"
+                    data-testid="picture-modal-image"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setShowPictureModal(false); fileInputRef.current?.click(); }}
+                    className="gap-2 bg-card/80 backdrop-blur-sm"
+                    data-testid="picture-modal-upload"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Upload New
+                  </Button>
+                  {!isGoogleUser && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setShowPictureModal(false); handleAvatarRemove(); }}
+                      className="gap-2 text-red-400 border-red-500/30 hover:bg-red-500/10 hover:text-red-300 bg-card/80 backdrop-blur-sm"
+                      data-testid="picture-modal-remove"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ===== Account Information Section ===== */}
-          <SectionCard
+          <AccordionSectionCard
             icon={User}
             title="Account Information"
             description="Manage your email and nickname"
+            isOpen={openSection === 'account'}
+            onToggle={toggleSection}
+            sectionKey="account"
           >
             <div className="space-y-6">
               {/* Email Change */}
@@ -860,14 +994,17 @@ export const SettingsPage = () => {
                 )}
               </form>
             </div>
-          </SectionCard>
+          </AccordionSectionCard>
 
           {/* ===== Security Section ===== */}
           {!isGoogleUser && (
-            <SectionCard
+            <AccordionSectionCard
               icon={Shield}
               title="Security"
               description="Update your password"
+              isOpen={openSection === 'security'}
+              onToggle={toggleSection}
+              sectionKey="security"
             >
               <form onSubmit={handlePasswordChange} className="space-y-4">
                 <PasswordInput
@@ -921,15 +1058,18 @@ export const SettingsPage = () => {
                   Update Password
                 </Button>
               </form>
-            </SectionCard>
+            </AccordionSectionCard>
           )}
 
           {/* Google User Security Notice */}
           {isGoogleUser && (
-            <SectionCard
+            <AccordionSectionCard
               icon={Shield}
               title="Security"
               description="Your account security settings"
+              isOpen={openSection === 'security'}
+              onToggle={toggleSection}
+              sectionKey="security"
             >
               <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
                 <div className="flex items-center gap-3">
@@ -949,11 +1089,11 @@ export const SettingsPage = () => {
                   </div>
                 </div>
               </div>
-            </SectionCard>
+            </AccordionSectionCard>
           )}
 
           {/* ============ Privacy & Notifications Section ============ */}
-          <PrivacyNotificationsSection />
+          <PrivacyNotificationsSection isOpen={openSection === 'privacy'} onToggle={toggleSection} />
         </div>
       </main>
 

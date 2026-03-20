@@ -105,6 +105,11 @@ export const HomePage = () => {
     return !(cached && cached.matches && cached.matches.length > 0);
   });
   const [matchError, setMatchError] = useState(null);
+  // Track whether initial fetch has completed — prevents error flash before first response
+  const initialFetchDone = useRef(false);
+  // Monotonically increasing fetch ID — only the latest fetch can modify state
+  // This prevents race conditions between auto-refresh, filter switches, and retries
+  const fetchIdRef = useRef(0);
 
   // View mode
   const [viewMode, setViewMode] = useState(
@@ -278,8 +283,11 @@ export const HomePage = () => {
     fetchBanners();
   }, []);
 
-  // Fetch matches from API (with cache support)
+  // Fetch matches from API (with cache support + automatic retry + stale-fetch protection)
   const loadMatches = useCallback(async (leagueId, signal) => {
+    // Claim a unique fetch ID — only THIS fetch can update state
+    const myFetchId = ++fetchIdRef.current;
+
     // Show stale cached data instantly while refreshing
     const stale = getStaleCachedMatches(leagueId);
     if (stale && stale.matches && stale.matches.length > 0) {
@@ -292,34 +300,63 @@ export const HomePage = () => {
     }
     setMatchError(null);
 
-    try {
-      let data;
-      if (leagueId === 'live') {
-        data = await fetchLiveMatches({ signal });
-      } else if (leagueId === 'all') {
-        data = await fetchMatches({}, { signal });
-      } else {
-        data = await fetchCompetitionMatches(leagueId, { signal });
-      }
+    // Helper: check if this fetch is still the active one
+    const isStale = () => signal?.aborted || fetchIdRef.current !== myFetchId;
 
-      // Only apply results if not aborted
-      if (!signal?.aborted) {
-        if (data.matches && data.matches.length > 0) {
-          setMatches(data.matches);
-        } else if (!stale || !stale.matches || stale.matches.length === 0) {
-          setMatches([]);
+    // Helper to perform a single fetch attempt
+    const doFetch = async () => {
+      if (leagueId === 'live') {
+        return await fetchLiveMatches({ signal });
+      } else if (leagueId === 'all') {
+        return await fetchMatches({}, { signal });
+      } else {
+        return await fetchCompetitionMatches(leagueId, { signal });
+      }
+    };
+
+    // Try up to 2 attempts (initial + 1 retry) before showing error
+    const MAX_ATTEMPTS = 2;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const data = await doFetch();
+
+        // Only apply results if this is still the active fetch
+        if (!isStale()) {
+          if (data.matches && data.matches.length > 0) {
+            setMatches(data.matches);
+          } else if (!stale || !stale.matches || stale.matches.length === 0) {
+            setMatches([]);
+          }
+          setIsLoadingMatches(false);
+          setMatchError(null);
+          initialFetchDone.current = true;
         }
-        setIsLoadingMatches(false);
+        return; // Success — exit
+      } catch (error) {
+        // Ignore AbortError — means user switched filters or component unmounted
+        if (error.name === 'AbortError') return;
+        // If a newer fetch has been started, abandon this one silently
+        if (isStale()) return;
+
+        // If we still have retries left, wait briefly and try again
+        if (attempt < MAX_ATTEMPTS) {
+          console.warn(`Match fetch attempt ${attempt} failed, retrying...`, error.message);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (isStale()) return; // Bail if stale after waiting
+          continue;
+        }
+
+        // Final attempt failed — show error only if still the active fetch
+        console.error('Failed to fetch matches after retries:', error);
+        if (!isStale()) {
+          if (!stale || !stale.matches || stale.matches.length === 0) {
+            setMatchError('Failed to load matches. Please try again.');
+            setMatches([]);
+          }
+          setIsLoadingMatches(false);
+          initialFetchDone.current = true;
+        }
       }
-    } catch (error) {
-      // Ignore AbortError — means user switched filters
-      if (error.name === 'AbortError') return;
-      console.error('Failed to fetch matches:', error);
-      if (!stale || !stale.matches || stale.matches.length === 0) {
-        setMatchError('Failed to load matches. Please try again.');
-        setMatches([]);
-      }
-      setIsLoadingMatches(false);
     }
   }, []);
 
@@ -341,15 +378,21 @@ export const HomePage = () => {
 
   // Auto-refresh matches every 30 seconds (fallback for non-WebSocket)
   useEffect(() => {
+    let refreshController = null;
     const interval = setInterval(() => {
       if (!isConnected) {
-        // Create a one-off controller for background refresh
-        const controller = new AbortController();
-        loadMatches(activeLeague, controller.signal);
+        // Abort previous auto-refresh if still in-flight
+        if (refreshController) refreshController.abort();
+        refreshController = new AbortController();
+        loadMatches(activeLeague, refreshController.signal);
       }
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Abort any in-flight auto-refresh on cleanup (filter switch / unmount)
+      if (refreshController) refreshController.abort();
+    };
   }, [activeLeague, isConnected, loadMatches]);
 
   // Fetch user's predictions on mount and when auth changes
@@ -647,15 +690,15 @@ export const HomePage = () => {
           </div>
         </div>
 
-        {/* Loading State - Skeleton (shown inside body only, during any loading) */}
-        {isLoadingMatches && activeTab !== 'ended' && activeTab !== 'favorite' && (
+        {/* Loading State - Skeleton (shown while fetching, including initial load) */}
+        {(isLoadingMatches || !initialFetchDone.current) && activeTab !== 'ended' && activeTab !== 'favorite' && (
           <div key={`skeleton-${activeLeague}`} className="skeleton-container-fade-in" data-testid="match-loading-skeleton">
             <MatchSkeletonGrid />
           </div>
         )}
 
-        {/* Error State */}
-        {!isLoadingMatches && matchError && matches.length === 0 && (
+        {/* Error State - only shown after initial fetch has completed and actually failed */}
+        {!isLoadingMatches && initialFetchDone.current && matchError && matches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="matches-error">
             <p className="text-muted-foreground">{matchError}</p>
             <button
@@ -667,8 +710,8 @@ export const HomePage = () => {
           </div>
         )}
 
-        {/* No Matches */}
-        {!isLoadingMatches && !matchError && matches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+        {/* No Matches - only shown after initial fetch has completed with empty results */}
+        {!isLoadingMatches && initialFetchDone.current && !matchError && matches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 content-fade-in" data-testid="no-matches">
             <p className="text-lg text-foreground font-medium">No matches found</p>
             <p className="text-sm text-muted-foreground">

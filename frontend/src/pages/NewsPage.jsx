@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Calendar, Tag, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -58,8 +58,12 @@ export const NewsPage = () => {
               return (
                 <article 
                   key={article.article_id} 
-                  className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-lg"
+                  className="group rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-lg cursor-pointer hover:scale-[1.02]"
                   data-testid={`news-article-${article.article_id}`}
+                  onClick={() => window.location.assign(`/news/${article.article_id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') window.location.assign(`/news/${article.article_id}`); }}
+                  role="link"
+                  tabIndex={0}
                 >
                   {/* Image */}
                   <div className="relative h-48 overflow-hidden bg-secondary">
@@ -96,12 +100,10 @@ export const NewsPage = () => {
                     <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
                       {article.excerpt}
                     </p>
-                    <Link to={`/news/${article.article_id}`}>
-                      <Button variant="ghost" size="sm" className="group/btn gap-2 p-0 h-auto hover:bg-transparent" data-testid={`read-more-${article.article_id}`}>
+                    <Button variant="ghost" size="sm" className="group/btn gap-2 p-0 h-auto hover:bg-transparent" data-testid={`read-more-${article.article_id}`}>
                         <span className="text-primary font-semibold">Read More</span>
                         <ArrowRight className="w-4 h-4 text-primary group-hover/btn:translate-x-1 transition-transform" />
                       </Button>
-                    </Link>
                   </div>
                 </article>
               );

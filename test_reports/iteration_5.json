@@ -1,5 +1,5 @@
 {
-  "summary": "Completed testing duplicate-blocking removal from match card invite flow. Backend tests 100% successful, frontend partially tested with core functionality verified.",
+  "summary": "Completed testing of prediction behavior changes on match detail page. Core functionality implemented correctly - 'Guess It' and 'Remove' buttons removed, single-click voting works. Found several UI/UX issues that need attention.",
   "backend_issues": {
     "critical_bugs": [],
     "flaky_endpoints": []
@@ -7,32 +7,61 @@
   "frontend_issues": {
     "ui_bugs": [
       {
-        "component": "AdvancedOptionsModal",
-        "issue": "Authentication state inconsistency - sometimes shows 'Please sign in' even when user is logged in",
-        "selector": "Advanced Options modal",
-        "fix_priority": "LOW",
-        "impact": "Users may see confusing auth prompts but functionality works after refresh"
+        "component": "MatchDetailPage",
+        "issue": "Exact Score section not accessible/visible on match detail page",
+        "selector": "[data-testid='exact-score-section']",
+        "fix_priority": "HIGH"
+      },
+      {
+        "component": "MatchDetailPage", 
+        "issue": "Prediction status element not found after voting",
+        "selector": "[data-testid='prediction-status']",
+        "fix_priority": "MEDIUM"
+      },
+      {
+        "component": "MatchList",
+        "issue": "Vote buttons on main page not visible/clickable",
+        "selector": "[data-testid='vote-btn-home']",
+        "fix_priority": "MEDIUM"
+      },
+      {
+        "component": "Toast System",
+        "issue": "Success toast notifications not clearly visible after voting",
+        "selector": ".sonner-toast, [data-sonner-toast]",
+        "fix_priority": "LOW"
       }
     ],
-    "integration_issues": []
+    "integration_issues": [
+      {
+        "flow": "User session management",
+        "issue": "User session appears to be lost when navigating between pages",
+        "affected_selectors": ["Sign in prompt appears on detail page"]
+      }
+    ]
   },
   "passed_tests": [
-    "Backend health check endpoint GET /api/health",
-    "Backend duplicate invitation test - POST /api/friends/invite/match allows multiple invites",
-    "Backend creates new invitation record and chat message each time",
-    "Frontend homepage loads without errors",
-    "Frontend login functionality works correctly",
-    "Frontend advanced modal opens and displays invite sections",
-    "All prediction CRUD operations work correctly",
-    "User registration and authentication flow"
+    "Backend prediction API endpoints (save/update/delete)",
+    "Match detail page loads correctly",
+    "'Guess It' button successfully removed from detail page",
+    "'Remove' button successfully removed from detail page", 
+    "Vote buttons (1/X/2) are clickable on match detail page",
+    "Single-click voting behavior implemented",
+    "League standings display correctly",
+    "Match information displays correctly"
   ],
-  "test_report_links": ["/app/backend_test.py"],
+  "test_report_links": [
+    "/app/backend_test.py",
+    "/app/prediction_behavior_test.py"
+  ],
   "success_percentage": {
     "backend": "100%",
-    "frontend": "85%"
+    "frontend": "70%"
   },
-  "updated_files": ["/app/backend_test.py"],
-  "action_item_for_main_agent": "",
-  "should_call_test_agent_after_fix": "false",
-  "should_main_agent_test_itself": "true"
+  "updated_files": [
+    "/app/backend_test.py",
+    "/app/prediction_behavior_test.py"
+  ],
+  "action_item_for_main_agent": "Fix Exact Score section visibility on match detail page. Ensure prediction status element shows after voting. Improve toast notification visibility. Fix main page vote button interaction issues. Address user session management between page navigation.",
+  "should_call_test_agent_after_fix": "true",
+  "should_main_agent_test_itself": "false"
 }

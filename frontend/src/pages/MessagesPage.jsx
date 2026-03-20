@@ -993,6 +993,8 @@ const ChatPanel = ({ friend, userId, onBack }) => {
     if (!text || sending) return;
     setInput('');
     setSending(true);
+    // Reset textarea height after clearing
+    if (inputRef.current) inputRef.current.style.height = 'auto';
 
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg = {
@@ -1057,10 +1059,23 @@ const ChatPanel = ({ friend, userId, onBack }) => {
     }
   }, [userId, friend.user_id]);
 
-  // Enter to send
+  // Enter to send (desktop), Shift+Enter for new line (desktop), Enter for new line (mobile)
+  const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  }, [handleSend]);
+    if (e.key === 'Enter') {
+      if (isMobile) {
+        // Mobile: Enter creates new line, send via button only
+        return;
+      }
+      if (e.shiftKey) {
+        // Desktop: Shift+Enter creates new line
+        return;
+      }
+      // Desktop: Enter sends message
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend, isMobile]);
 
   // Group messages by date + track consecutive sender
   const groupedMessages = [];
@@ -1189,15 +1204,21 @@ const ChatPanel = ({ friend, userId, onBack }) => {
         </button>
 
         <div className="flex-1 relative">
-          <Input
+          <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Type a message...`}
-            className="w-full h-10 px-4 rounded-[1.25rem] border border-border/40 bg-secondary/50 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/40 focus:bg-secondary/80 focus:ring-[3px] focus:ring-primary/[0.06] transition-all duration-200"
+            className="w-full min-h-[40px] max-h-[120px] px-4 py-2.5 rounded-[1.25rem] border border-border/40 bg-secondary/50 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-primary/40 focus:bg-secondary/80 focus:ring-[3px] focus:ring-primary/[0.06] transition-all duration-200 resize-none overflow-y-auto leading-[1.35]"
             maxLength={2000}
+            rows={1}
             data-testid="chat-input"
+            style={{ height: 'auto' }}
+            onInput={(e) => {
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+            }}
           />
         </div>
 

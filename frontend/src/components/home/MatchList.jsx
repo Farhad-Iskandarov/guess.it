@@ -524,7 +524,7 @@ AdvanceButton.displayName = 'AdvanceButton';
 // ============ Advanced Options Modal ============
 import { Target, Lightbulb, UserPlus, Users, ChevronRight, X as XIcon, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { saveExactScorePrediction, getExactScorePrediction, getMyExactScorePredictions } from '@/services/predictions';
+import { saveExactScorePrediction, getExactScorePrediction, getMyExactScorePredictions, deleteExactScorePrediction } from '@/services/predictions';
 import { useFriends } from '@/lib/FriendsContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -595,6 +595,22 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
       });
     } catch (error) {
       toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleExactScoreRemove = async () => {
+    setIsSubmitting(true);
+    try {
+      await deleteExactScorePrediction(match.id);
+      setExistingPrediction(null);
+      setHomeScore('');
+      setAwayScore('');
+      if (onExactScoreSaved) onExactScoreSaved(match.id);
+      toast.success('Exact score prediction removed', { duration: 2000 });
+    } catch (error) {
+      toast.error('Failed to remove prediction', { description: error.message, duration: 3000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -750,9 +766,16 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                     <p className="text-sm text-muted-foreground mt-2">
                       Your prediction: {match.homeTeam.name} <strong>{existingPrediction.home_score}</strong> - <strong>{existingPrediction.away_score}</strong> {match.awayTeam.name}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      You can edit this prediction from the <strong>My Predictions</strong> page before the match starts.
-                    </p>
+                    <Button
+                      variant="ghost"
+                      onClick={handleExactScoreRemove}
+                      disabled={isSubmitting}
+                      className="mt-3 w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 gap-2"
+                      data-testid="remove-exact-score-btn"
+                    >
+                      <XIcon className="w-4 h-4" />
+                      {isSubmitting ? 'Removing...' : 'Remove Exact Score'}
+                    </Button>
                   </div>
                 ) : (
                   <>

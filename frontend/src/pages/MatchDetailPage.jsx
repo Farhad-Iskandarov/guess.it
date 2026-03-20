@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatLocalDateTimeFull } from '@/utils/formatTime';
 import { toast } from 'sonner';
+import { savePrediction, deletePrediction } from '@/services/predictions';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -377,42 +378,39 @@ export const MatchDetailPage = () => {
   // Vote handler
   const handleVote = async (voteType) => {
     if (!isAuthenticated) { toast.error('Please sign in to predict'); return; }
-    if (isLocked) return;
-    setUserVote(voteType);
-  };
+    if (isLocked || isSubmitting) return;
 
-  // Guess It handler
-  const handleGuessIt = async () => {
-    if (!userVote || isSubmitting || isLocked) return;
-    setIsSubmitting(true);
-    try {
-      const res = await fetch(`${API_URL}/api/predictions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ match_id: parseInt(matchId), prediction: userVote }),
-      });
-      if (res.ok) {
-        toast.success('Prediction saved!');
-        loadMatch();
-      }
-    } catch { toast.error('Failed to save prediction'); }
-    finally { setIsSubmitting(false); }
-  };
-
-  // Remove handler
-  const handleRemove = async () => {
-    if (isSubmitting || isLocked) return;
-    setIsSubmitting(true);
-    try {
-      const promises = [];
-      if (userVote) promises.push(fetch(`${API_URL}/api/predictions/match/${matchId}`, { method: 'DELETE', credentials: 'include' }));
-      if (exactScore) promises.push(fetch(`${API_URL}/api/predictions/exact-score/match/${matchId}`, { method: 'DELETE', credentials: 'include' }));
-      await Promise.all(promises);
+    // Clicking the same option → remove prediction
+    if (userVote === voteType) {
+      setIsSubmitting(true);
+      const prev = userVote;
       setUserVote(null);
-      setExactScore(null);
-      toast.success('Prediction removed');
+      try {
+        await deletePrediction(matchId);
+        toast.success('Prediction removed', { duration: 2000 });
+        loadMatch();
+      } catch {
+        setUserVote(prev);
+        toast.error('Failed to remove prediction');
+      } finally { setIsSubmitting(false); }
+      return;
+    }
+
+    // New or changed selection → save immediately
+    setIsSubmitting(true);
+    const prev = userVote;
+    setUserVote(voteType);
+    try {
+      const result = await savePrediction(parseInt(matchId), voteType);
+      toast.success(result.is_new ? 'Prediction saved!' : 'Prediction updated!', {
+        description: `You predicted: ${voteType === 'home' ? 'Home Win (1)' : voteType === 'draw' ? 'Draw (X)' : 'Away Win (2)'}`,
+        duration: 2000,
+      });
       loadMatch();
-    } catch { toast.error('Failed to remove'); }
-    finally { setIsSubmitting(false); }
+    } catch {
+      setUserVote(prev);
+      toast.error('Failed to save prediction');
+    } finally { setIsSubmitting(false); }
   };
 
   const formatMatchDate = (dateStr) => {
@@ -568,38 +566,9 @@ export const MatchDetailPage = () => {
           </div>
         )}
 
-        {/* ── Row 2: Guess It / Remove / Lock Exact Score ── */}
+        {/* ── Exact Score & Actions ── */}
         {isAuthenticated && (
           <div className="space-y-3" data-testid="action-buttons-section">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={handleGuessIt}
-                disabled={isSubmitting || !userVote || isLocked}
-                data-testid="detail-guess-it-btn"
-                className={`py-3.5 rounded-xl text-sm font-bold transition-all duration-200 border-2 ${
-                  isLocked ? 'opacity-30 cursor-not-allowed bg-secondary/20 border-border/10 text-muted-foreground' :
-                  userVote
-                    ? 'bg-primary hover:bg-primary/90 border-primary text-primary-foreground hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-primary/20'
-                    : 'bg-secondary/30 border-border/20 text-muted-foreground/60 cursor-not-allowed'
-                }`}
-              >
-                {isSubmitting ? '...' : isLocked ? 'Locked' : userVote ? 'GUESS IT' : 'Select to Guess'}
-              </button>
-              <button
-                onClick={handleRemove}
-                disabled={isSubmitting || !hasPrediction || isLocked}
-                data-testid="detail-remove-btn"
-                className={`py-3.5 rounded-xl text-sm font-bold transition-all duration-200 border-2 ${
-                  isLocked ? 'opacity-30 cursor-not-allowed bg-secondary/20 border-border/10 text-muted-foreground' :
-                  hasPrediction
-                    ? 'bg-transparent border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 active:scale-[0.99]'
-                    : 'opacity-30 cursor-not-allowed bg-secondary/10 border-border/10 text-muted-foreground'
-                }`}
-              >
-                Remove
-              </button>
-            </div>
-
             {/* Exact Score */}
             {!isLocked && (
               <ExactScoreSection

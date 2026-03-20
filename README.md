@@ -346,6 +346,57 @@ tail -f /var/log/supervisor/reminder_worker.err.log
 - Guarantees consistent auth state across all pages (including Subscribe, News, Contact)
 - Prevents Login/Register buttons from appearing on pages that don't pass explicit auth props
 
+### Match Loading State Fix
+- Fixed error message ("failed to load matches") flashing briefly on page refresh and when switching league filters
+- **Root cause**: Race condition between auto-refresh interval and filter switches — stale fetch responses could overwrite new filter's loading state with an error
+- **Fix 1**: Added `fetchIdRef` (monotonically increasing fetch ID) — only the latest fetch can modify state. Stale fetches from auto-refresh or previous filters are silently discarded
+- **Fix 2**: Added `initialFetchDone` ref — error/empty states only render after the first API response arrives
+- **Fix 3**: Added automatic retry (1 retry with 500ms delay) before showing error state
+- **Fix 4**: Auto-refresh AbortController is now properly tracked and aborted on filter switch/unmount
+- State flow: **Loading skeleton → Matches (success) OR Error (only after confirmed failure + retry)**
+
+### Multi-line Message Input
+- Replaced single-line `<Input>` with auto-growing `<textarea>` for multi-line message support
+- Desktop: Enter sends, Shift+Enter creates new line
+- Mobile: Enter creates new line, send button only to send (prevents accidental sends)
+- Textarea auto-grows up to 120px max, resets on send
+- Message rendering already supports `whitespace-pre-wrap` for proper line break display
+
+### Clickable News Cards
+- Made entire news card clickable (image, title, text, empty space) — navigates to news detail page
+- Added hover scale effect (`hover:scale-[1.02]`) and pointer cursor for visual feedback
+- Added keyboard accessibility (`Enter` / `Space` to navigate, `role="link"`, `tabIndex={0}`)
+- Removed inner `<Link>` wrapper to prevent double navigation — "Read More" button still appears but card click handles navigation
+
+### Consistent Prediction Behavior (Match Detail Page)
+- Removed redundant "Guess It" and "Remove" buttons from match detail page
+- Single click on 1/X/2 now saves prediction immediately (same behavior as main page)
+- Clicking the same selected option removes the prediction automatically
+- Uses shared `savePrediction`/`deletePrediction` service for consistent API calls
+- Exact Score section remains fully functional and independent
+
+### Settings Page Accordion Sections
+- Converted settings sections (Account Information, Security, Privacy & Notifications) into accordion behavior
+- Only one section open at a time — clicking a section header opens it and closes others
+- Smooth expand/collapse animation with rotating chevron indicator
+- Profile Picture section remains always visible (non-collapsible, quick-access)
+- Form state preserved when switching sections — inputs are not reset
+- Default: Account Information section open on page load
+
+### Exact Score Prediction Removal (Main Page)
+- Added "Remove Exact Score" button to the Advanced Options Modal when an exact score prediction is saved
+- Clicking removes the prediction, resets UI to input fields, shows success toast
+- Uses existing `deleteExactScorePrediction` service for clean API call
+- Consistent with 1/X/2 toggle behavior — add and remove with simple interactions
+
+### Profile Picture Preview Modal (Settings Page)
+- Clicking the profile avatar opens a centered modal with enlarged circular image
+- Dimmed/blurred background overlay, smooth scale-in animation
+- "Upload New" button closes modal and triggers file picker
+- "Remove" button closes modal and removes the photo
+- Close via X button or clicking outside the modal
+- Hover effect on avatar (ring highlight + eye icon) indicates clickability
+
 ## Maturity Level
 
 **Semi-Production** — All critical race conditions fixed, atomic operations verified, Redis infrastructure in place, scheduler isolated. The remaining gap to full production is switching from single Uvicorn worker to Gunicorn with 4+ workers (a configuration change, not a code change).
