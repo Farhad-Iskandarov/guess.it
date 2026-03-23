@@ -179,7 +179,20 @@ export const HomePage = () => {
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
 
-  // Filter out FINISHED matches from main matches (they should only appear in Ended tab)
+  // Finished matches extracted from main data for the Ended tab
+  const finishedMatches = useMemo(() => {
+    const finished = matches.filter(m =>
+      m.status === 'FINISHED' || m.status === 'AFTER_EXTRA_TIME' || m.status === 'PENALTY_SHOOTOUT'
+    );
+    // Sort by date descending (most recent first)
+    return finished.sort((a, b) => {
+      const da = a.utcDate ? new Date(a.utcDate) : new Date(0);
+      const db = b.utcDate ? new Date(b.utcDate) : new Date(0);
+      return db - da;
+    });
+  }, [matches]);
+
+  // Filter out FINISHED matches — they belong ONLY in the Ended tab
   const activeMatches = useMemo(() => {
     return matches.filter(match => 
       match.status !== 'FINISHED' && 
@@ -203,15 +216,10 @@ export const HomePage = () => {
         return sorted.slice(0, 10);
       }
       case 'soon': {
-        // All matches scheduled for the next 3 days
-        const now = new Date();
-        const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-        const scheduled = matches.filter(m => {
-          if (m.status !== 'NOT_STARTED' && m.status !== 'TIMED' && m.status !== 'SCHEDULED') return false;
-          const matchDate = m.utcDate ? new Date(m.utcDate) : null;
-          if (!matchDate) return false;
-          return matchDate >= now && matchDate <= threeDaysLater;
-        });
+        // All upcoming/scheduled matches (sorted soonest first)
+        const scheduled = matches.filter(m =>
+          m.status === 'NOT_STARTED' || m.status === 'TIMED' || m.status === 'SCHEDULED'
+        );
         // Sort by date ascending (soonest first)
         scheduled.sort((a, b) => {
           const da = a.utcDate ? new Date(a.utcDate) : new Date(0);
@@ -222,7 +230,17 @@ export const HomePage = () => {
       }
       case 'top-matches':
       default:
-        return activeMatches;
+        // Default: show upcoming + live matches sorted by kickoff time (soonest first)
+        return [...activeMatches].sort((a, b) => {
+          // Live matches first
+          const aLive = ['LIVE', 'IN_PLAY', 'HALFTIME', 'PAUSED'].includes(a.status) ? 0 : 1;
+          const bLive = ['LIVE', 'IN_PLAY', 'HALFTIME', 'PAUSED'].includes(b.status) ? 0 : 1;
+          if (aLive !== bLive) return aLive - bLive;
+          // Then by date ascending
+          const da = a.utcDate ? new Date(a.utcDate) : new Date(0);
+          const db = b.utcDate ? new Date(b.utcDate) : new Date(0);
+          return da - db;
+        });
     }
   }, [activeTab, activeMatches, matches]);
 
@@ -556,24 +574,29 @@ export const HomePage = () => {
     if (tabId === 'favorite') {
       setActiveLeague('all');
     }
-    // When switching to ended tab, fetch ended matches (with cache)
+    // When switching to ended tab, populate from finishedMatches if available, else fetch
     if (tabId === 'ended' && endedMatches.length === 0) {
-      setEndedLoading(true);
-      const controller = new AbortController();
-      fetchEndedMatches({ signal: controller.signal })
-        .then(data => {
-          if (!controller.signal.aborted) {
-            setEndedMatches(data.matches || []);
-          }
-        })
-        .catch(e => {
-          if (e.name !== 'AbortError') console.error('Failed to fetch ended matches:', e);
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setEndedLoading(false);
-        });
+      if (finishedMatches.length > 0) {
+        setEndedMatches(finishedMatches);
+      } else {
+        // Fallback: fetch from dedicated endpoint
+        setEndedLoading(true);
+        const controller = new AbortController();
+        fetchEndedMatches({ signal: controller.signal })
+          .then(data => {
+            if (!controller.signal.aborted) {
+              setEndedMatches(data.matches || []);
+            }
+          })
+          .catch(e => {
+            if (e.name !== 'AbortError') console.error('Failed to fetch ended matches:', e);
+          })
+          .finally(() => {
+            if (!controller.signal.aborted) setEndedLoading(false);
+          });
+      }
     }
-  }, [endedMatches.length]);
+  }, [endedMatches.length, finishedMatches]);
 
   const handleLeagueChange = useCallback((leagueId) => {
     if (leagueId === activeLeague) return; // Prevent duplicate calls on same filter
@@ -748,7 +771,7 @@ export const HomePage = () => {
                 <Clock className="w-12 h-12 text-blue-500/30" />
                 <p className="text-lg text-foreground font-medium">No upcoming matches</p>
                 <p className="text-sm text-muted-foreground text-center max-w-md">
-                  No matches scheduled in the next 3 days. Check back later for new fixtures!
+                  No upcoming matches scheduled. Check back later for new fixtures!
                 </p>
               </>
             )}
@@ -867,7 +890,7 @@ export const HomePage = () => {
                 <div className="flex items-center gap-2 mt-4 mb-3">
                   <Clock className="w-4 h-4 text-muted-foreground" />
                   <h3 className="text-base font-semibold text-foreground">Recently Finished</h3>
-                  <span className="text-xs text-muted-foreground">({endedMatches.length} matches in last 24h)</span>
+                  <span className="text-xs text-muted-foreground">({endedMatches.length} matches)</span>
                 </div>
                 <MatchList
                   matches={endedMatches}
@@ -915,7 +938,7 @@ export const HomePage = () => {
               <div className="flex items-center gap-2 mt-4 mb-3" data-testid="soon-header">
                 <Clock className="w-4 h-4 text-blue-500" />
                 <h3 className="text-base font-semibold text-foreground">Coming Up</h3>
-                <span className="text-xs text-muted-foreground">({tabFilteredMatches.length} matches in next 3 days)</span>
+                <span className="text-xs text-muted-foreground">({tabFilteredMatches.length} upcoming matches)</span>
               </div>
             )}
             {/* Full Match List */}

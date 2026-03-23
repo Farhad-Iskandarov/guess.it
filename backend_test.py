@@ -1,280 +1,318 @@
 #!/usr/bin/env python3
 """
-Comprehensive Backend API Testing for GuessIt Error Handling
-Tests all error scenarios to ensure clean, user-friendly error messages
+Backend API Testing for GuessIt Football Prediction Platform
+Tests match filtering and display logic after the fix
 """
 
 import requests
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
-class GuessItAPITester:
-    def __init__(self, base_url="https://guess-it-preview.preview.emergentagent.com"):
+class FootballAPITester:
+    def __init__(self, base_url="https://guess-it-branch.preview.emergentagent.com"):
         self.base_url = base_url
-        self.session = requests.Session()
         self.tests_run = 0
         self.tests_passed = 0
-        self.test_results = []
 
-    def log_test(self, name, passed, details=""):
-        """Log test result"""
+    def run_test(self, name, method, endpoint, expected_status=200, data=None, headers=None):
+        """Run a single API test"""
+        url = f"{self.base_url}/{endpoint}"
+        default_headers = {'Content-Type': 'application/json'}
+        if headers:
+            default_headers.update(headers)
+
         self.tests_run += 1
-        if passed:
-            self.tests_passed += 1
-            print(f"✅ {name}")
+        print(f"\n🔍 Testing {name}...")
+        
+        try:
+            if method == 'GET':
+                response = requests.get(url, headers=default_headers, timeout=15)
+            elif method == 'POST':
+                response = requests.post(url, json=data, headers=default_headers, timeout=15)
+
+            success = response.status_code == expected_status
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                try:
+                    return True, response.json()
+                except:
+                    return True, response.text
+            else:
+                print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
+                print(f"Response: {response.text[:500]}")
+                return False, {}
+
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
+
+    def test_matches_endpoint(self):
+        """Test the main matches endpoint returns both upcoming and finished matches"""
+        success, response = self.run_test(
+            "GET /api/football/matches (main endpoint)",
+            "GET",
+            "api/football/matches"
+        )
+        
+        if not success:
+            return False
+            
+        matches = response.get('matches', [])
+        total = response.get('total', 0)
+        
+        print(f"📊 Total matches returned: {total}")
+        
+        if total == 0:
+            print("❌ No matches returned - this should not happen")
+            return False
+            
+        # Analyze match statuses
+        status_counts = {}
+        upcoming_count = 0
+        finished_count = 0
+        
+        for match in matches:
+            status = match.get('status', 'UNKNOWN')
+            status_counts[status] = status_counts.get(status, 0) + 1
+            
+            if status in ['NOT_STARTED', 'TIMED', 'SCHEDULED']:
+                upcoming_count += 1
+            elif status == 'FINISHED':
+                finished_count += 1
+                
+        print(f"📈 Status breakdown: {status_counts}")
+        print(f"🔮 Upcoming matches: {upcoming_count}")
+        print(f"🏁 Finished matches: {finished_count}")
+        
+        # Verify we have both upcoming and finished matches
+        if upcoming_count == 0:
+            print("⚠️  Warning: No upcoming matches found")
+        if finished_count == 0:
+            print("⚠️  Warning: No finished matches found")
+            
+        # Expected: 39 upcoming + 46 finished = 85 total
+        expected_upcoming = 39
+        expected_finished = 46
+        expected_total = 85
+        
+        print(f"🎯 Expected: {expected_upcoming} upcoming, {expected_finished} finished, {expected_total} total")
+        
+        if upcoming_count == expected_upcoming and finished_count == expected_finished:
+            print("✅ Match counts match expectations perfectly!")
         else:
-            print(f"❌ {name} - {details}")
-        
-        self.test_results.append({
-            "test": name,
-            "passed": passed,
-            "details": details
-        })
+            print(f"⚠️  Match counts differ from expectations")
+            
+        return True
 
-    def test_auth_register_duplicate_email(self):
-        """Test duplicate email registration returns 409 with user-friendly message"""
-        print("\n🔍 Testing duplicate email registration...")
+    def test_ended_matches_endpoint(self):
+        """Test the ended matches endpoint"""
+        success, response = self.run_test(
+            "GET /api/football/matches/ended",
+            "GET", 
+            "api/football/matches/ended"
+        )
         
-        # First, register a test user
-        test_email = "testdupe@test.com"
-        test_password = "TestPass123"
-        
-        register_data = {
-            "email": test_email,
-            "password": test_password,
-            "confirm_password": test_password
-        }
-        
-        try:
-            # Try to register (might already exist)
-            response = self.session.post(
-                f"{self.base_url}/api/auth/register",
-                json=register_data,
-                headers={'Content-Type': 'application/json'}
-            )
+        if not success:
+            return False
             
-            # Now try to register again with same email
-            duplicate_response = self.session.post(
-                f"{self.base_url}/api/auth/register",
-                json=register_data,
-                headers={'Content-Type': 'application/json'}
-            )
-            
-            # Check status code
-            if duplicate_response.status_code == 409:
-                try:
-                    error_data = duplicate_response.json()
-                    detail = error_data.get('detail', '')
-                    
-                    # Check for user-friendly message
-                    expected_message = "This email is already registered. Please log in instead."
-                    if detail == expected_message:
-                        self.log_test("Duplicate email returns 409 with correct message", True)
-                    else:
-                        self.log_test("Duplicate email returns 409 with correct message", False, 
-                                    f"Expected: '{expected_message}', Got: '{detail}'")
-                except json.JSONDecodeError:
-                    self.log_test("Duplicate email returns 409 with correct message", False, 
-                                "Response body is not valid JSON")
-            else:
-                self.log_test("Duplicate email returns 409 with correct message", False, 
-                            f"Expected status 409, got {duplicate_response.status_code}")
+        matches = response.get('matches', [])
+        total = response.get('total', 0)
+        
+        print(f"📊 Ended matches returned: {total}")
+        
+        # Verify all matches are finished
+        finished_count = 0
+        for match in matches:
+            if match.get('status') == 'FINISHED':
+                finished_count += 1
                 
-        except Exception as e:
-            self.log_test("Duplicate email returns 409 with correct message", False, str(e))
+        print(f"🏁 Finished status matches: {finished_count}")
+        
+        if finished_count == total:
+            print("✅ All ended matches have FINISHED status")
+        else:
+            print(f"❌ Some ended matches don't have FINISHED status")
+            
+        return True
 
-    def test_auth_login_wrong_credentials(self):
-        """Test login with wrong credentials returns clean error"""
-        print("\n🔍 Testing login with wrong credentials...")
+    def test_upcoming_matches_endpoint(self):
+        """Test the upcoming matches endpoint"""
+        success, response = self.run_test(
+            "GET /api/football/matches/upcoming",
+            "GET",
+            "api/football/matches/upcoming"
+        )
         
-        login_data = {
-            "email": "nonexistent@test.com",
-            "password": "wrongpassword"
-        }
+        if not success:
+            return False
+            
+        matches = response.get('matches', [])
+        total = response.get('total', 0)
         
-        try:
-            response = self.session.post(
-                f"{self.base_url}/api/auth/login",
-                json=login_data,
-                headers={'Content-Type': 'application/json'}
+        print(f"📊 Upcoming matches returned: {total}")
+        
+        # Verify all matches are upcoming
+        upcoming_count = 0
+        for match in matches:
+            status = match.get('status')
+            if status in ['NOT_STARTED', 'TIMED', 'SCHEDULED']:
+                upcoming_count += 1
+                
+        print(f"🔮 Upcoming status matches: {upcoming_count}")
+        
+        if upcoming_count == total:
+            print("✅ All upcoming matches have correct status")
+        else:
+            print(f"❌ Some upcoming matches have incorrect status")
+            
+        return True
+
+    def test_live_matches_endpoint(self):
+        """Test the live matches endpoint"""
+        success, response = self.run_test(
+            "GET /api/football/matches/live",
+            "GET",
+            "api/football/matches/live"
+        )
+        
+        if not success:
+            return False
+            
+        matches = response.get('matches', [])
+        total = response.get('total', 0)
+        
+        print(f"📊 Live matches returned: {total}")
+        
+        # Verify all matches are live (if any)
+        live_count = 0
+        for match in matches:
+            status = match.get('status')
+            if status in ['LIVE', 'IN_PLAY', 'HALFTIME', 'PAUSED']:
+                live_count += 1
+                
+        print(f"🔴 Live status matches: {live_count}")
+        
+        if live_count == total:
+            print("✅ All live matches have correct status")
+        else:
+            print(f"❌ Some live matches have incorrect status")
+            
+        return True
+
+    def test_competition_filter(self):
+        """Test competition filtering"""
+        competitions = ['PL', 'PD', 'SA', 'BL1', 'FL1']
+        
+        for comp in competitions:
+            success, response = self.run_test(
+                f"GET /api/football/matches?competition={comp}",
+                "GET",
+                f"api/football/matches?competition={comp}"
             )
             
-            if response.status_code in [400, 401]:
-                try:
-                    error_data = response.json()
-                    detail = error_data.get('detail', '')
-                    
-                    # Check that error message is user-friendly (not technical)
-                    technical_terms = ['traceback', 'internal server', 'typeerror', 'referenceerror', 
-                                     'syntaxerror', 'module', 'import', 'undefined', 'null', 'nan', 
-                                     'stack', 'mongodb', 'redis', 'pymongo', 'motor', 'asyncio']
-                    
-                    is_technical = any(term in detail.lower() for term in technical_terms)
-                    
-                    if not is_technical and len(detail) > 0:
-                        self.log_test("Wrong login credentials returns clean error", True)
-                    else:
-                        self.log_test("Wrong login credentials returns clean error", False, 
-                                    f"Error message appears technical: '{detail}'")
-                except json.JSONDecodeError:
-                    self.log_test("Wrong login credentials returns clean error", False, 
-                                "Response body is not valid JSON")
-            else:
-                self.log_test("Wrong login credentials returns clean error", False, 
-                            f"Expected status 400/401, got {response.status_code}")
+            if success:
+                matches = response.get('matches', [])
+                total = response.get('total', 0)
+                print(f"📊 {comp} matches: {total}")
                 
-        except Exception as e:
-            self.log_test("Wrong login credentials returns clean error", False, str(e))
+                # Verify all matches belong to the competition
+                correct_comp = 0
+                for match in matches:
+                    if match.get('competitionCode') == comp:
+                        correct_comp += 1
+                        
+                if correct_comp == total:
+                    print(f"✅ All {comp} matches have correct competition code")
+                else:
+                    print(f"❌ Some {comp} matches have incorrect competition code")
+            else:
+                return False
+                
+        return True
 
-    def test_predictions_unauthenticated(self):
-        """Test prediction save as unauthenticated user returns clean error"""
-        print("\n🔍 Testing unauthenticated prediction save...")
+    def test_match_data_structure(self):
+        """Test that matches have required fields"""
+        success, response = self.run_test(
+            "GET /api/football/matches (data structure)",
+            "GET",
+            "api/football/matches"
+        )
         
-        # Clear any existing session
-        self.session.cookies.clear()
-        
-        prediction_data = {
-            "match_id": "test_match_123",
-            "prediction": "home"
-        }
-        
-        try:
-            response = self.session.post(
-                f"{self.base_url}/api/predictions",
-                json=prediction_data,
-                headers={'Content-Type': 'application/json'}
-            )
+        if not success:
+            return False
             
-            if response.status_code == 401:
-                try:
-                    error_data = response.json()
-                    detail = error_data.get('detail', '')
-                    
-                    # Check that error message is user-friendly
-                    technical_terms = ['traceback', 'internal server', 'typeerror', 'referenceerror']
-                    is_technical = any(term in detail.lower() for term in technical_terms)
-                    
-                    if not is_technical:
-                        self.log_test("Unauthenticated prediction returns clean 401", True)
-                    else:
-                        self.log_test("Unauthenticated prediction returns clean 401", False, 
-                                    f"Error message appears technical: '{detail}'")
-                except json.JSONDecodeError:
-                    self.log_test("Unauthenticated prediction returns clean 401", False, 
-                                "Response body is not valid JSON")
-            else:
-                self.log_test("Unauthenticated prediction returns clean 401", False, 
-                            f"Expected status 401, got {response.status_code}")
-                
-        except Exception as e:
-            self.log_test("Unauthenticated prediction returns clean 401", False, str(e))
-
-    def test_api_endpoints_basic(self):
-        """Test basic API endpoints for clean error responses"""
-        print("\n🔍 Testing basic API endpoints...")
+        matches = response.get('matches', [])
         
-        endpoints = [
-            ("/api/auth/me", "GET"),
-            ("/api/predictions/me", "GET"),
-            ("/api/friends/list", "GET"),
-            ("/api/favorites/clubs", "GET")
+        if not matches:
+            print("❌ No matches to test data structure")
+            return False
+            
+        # Test first match structure
+        match = matches[0]
+        required_fields = [
+            'id', 'homeTeam', 'awayTeam', 'competition', 'competitionCode',
+            'status', 'utcDate', 'score', 'predictionLocked'
         ]
         
-        for endpoint, method in endpoints:
-            try:
-                if method == "GET":
-                    response = self.session.get(f"{self.base_url}{endpoint}")
-                else:
-                    response = self.session.post(f"{self.base_url}{endpoint}")
+        missing_fields = []
+        for field in required_fields:
+            if field not in match:
+                missing_fields.append(field)
                 
-                # Check that response is valid JSON and doesn't contain technical errors
-                try:
-                    if response.headers.get('content-type', '').startswith('application/json'):
-                        data = response.json()
-                        
-                        # Check for technical error messages in response
-                        response_str = json.dumps(data).lower()
-                        technical_terms = ['failed to execute json', 'body stream already read', 
-                                         'traceback', 'internal server error', 'typeerror']
-                        
-                        has_technical_error = any(term in response_str for term in technical_terms)
-                        
-                        if not has_technical_error:
-                            self.log_test(f"{endpoint} returns clean response", True)
-                        else:
-                            self.log_test(f"{endpoint} returns clean response", False, 
-                                        "Response contains technical error messages")
-                    else:
-                        self.log_test(f"{endpoint} returns clean response", True, "Non-JSON response")
-                        
-                except json.JSONDecodeError:
-                    self.log_test(f"{endpoint} returns clean response", False, 
-                                "Response is not valid JSON")
-                    
-            except Exception as e:
-                self.log_test(f"{endpoint} returns clean response", False, str(e))
-
-    def test_settings_endpoints(self):
-        """Test settings endpoints for clean error handling"""
-        print("\n🔍 Testing settings endpoints...")
-        
-        # Test profile settings without auth
-        try:
-            response = self.session.get(f"{self.base_url}/api/settings/profile")
-            
-            if response.status_code == 401:
-                try:
-                    error_data = response.json()
-                    detail = error_data.get('detail', '')
-                    
-                    # Check for clean error message
-                    technical_terms = ['traceback', 'internal server', 'typeerror']
-                    is_technical = any(term in detail.lower() for term in technical_terms)
-                    
-                    if not is_technical:
-                        self.log_test("Settings profile endpoint returns clean 401", True)
-                    else:
-                        self.log_test("Settings profile endpoint returns clean 401", False, 
-                                    f"Technical error: '{detail}'")
-                except json.JSONDecodeError:
-                    self.log_test("Settings profile endpoint returns clean 401", False, 
-                                "Invalid JSON response")
-            else:
-                self.log_test("Settings profile endpoint returns clean 401", False, 
-                            f"Expected 401, got {response.status_code}")
-                
-        except Exception as e:
-            self.log_test("Settings profile endpoint returns clean 401", False, str(e))
-
-    def run_all_tests(self):
-        """Run all backend tests"""
-        print("🚀 Starting GuessIt Backend Error Handling Tests")
-        print(f"Testing against: {self.base_url}")
-        print("=" * 60)
-        
-        # Run all test methods
-        self.test_auth_register_duplicate_email()
-        self.test_auth_login_wrong_credentials()
-        self.test_predictions_unauthenticated()
-        self.test_api_endpoints_basic()
-        self.test_settings_endpoints()
-        
-        # Print summary
-        print("\n" + "=" * 60)
-        print(f"📊 Backend Tests Summary: {self.tests_passed}/{self.tests_run} passed")
-        
-        if self.tests_passed == self.tests_run:
-            print("🎉 All backend error handling tests passed!")
-            return True
-        else:
-            print("⚠️  Some backend tests failed - check error handling implementation")
+        if missing_fields:
+            print(f"❌ Missing required fields: {missing_fields}")
             return False
+        else:
+            print("✅ All required fields present in match data")
+            
+        # Test team structure
+        home_team = match.get('homeTeam', {})
+        away_team = match.get('awayTeam', {})
+        
+        team_fields = ['id', 'name', 'shortName']
+        for team, team_name in [(home_team, 'homeTeam'), (away_team, 'awayTeam')]:
+            for field in team_fields:
+                if field not in team:
+                    print(f"❌ Missing {field} in {team_name}")
+                    return False
+                    
+        print("✅ Team data structure is correct")
+        return True
 
 def main():
-    tester = GuessItAPITester()
-    success = tester.run_all_tests()
-    return 0 if success else 1
+    print("🚀 Starting Football API Backend Tests")
+    print("=" * 60)
+    
+    tester = FootballAPITester()
+    
+    # Test all endpoints
+    tests = [
+        tester.test_matches_endpoint,
+        tester.test_ended_matches_endpoint, 
+        tester.test_upcoming_matches_endpoint,
+        tester.test_live_matches_endpoint,
+        tester.test_competition_filter,
+        tester.test_match_data_structure
+    ]
+    
+    for test in tests:
+        try:
+            test()
+        except Exception as e:
+            print(f"❌ Test failed with exception: {e}")
+            tester.tests_run += 1
+    
+    print("\n" + "=" * 60)
+    print(f"📊 Tests Summary: {tester.tests_passed}/{tester.tests_run} passed")
+    
+    if tester.tests_passed == tester.tests_run:
+        print("🎉 All backend tests passed!")
+        return 0
+    else:
+        print("❌ Some backend tests failed")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())

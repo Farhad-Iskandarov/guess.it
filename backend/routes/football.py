@@ -214,17 +214,51 @@ async def list_matches(
     - date_from/date_to: YYYY-MM-DD
     - competition: Competition code (PL, CL, SA, etc.)
     - status: LIVE, FINISHED, etc.
+
+    When no dates specified, fetches two ranges to ensure upcoming matches
+    are captured even during international breaks (football-data.org 10-day limit):
+      Range 1: past 3 days → +6 days (recent results + this week)
+      Range 2: +7 days → +14 days (upcoming after break)
     """
-    # Default: yesterday + next 7 days if no dates provided
-    if not date_from and not date_to:
-        today = datetime.now(timezone.utc)
-        date_from = (today - timedelta(days=1)).strftime("%Y-%m-%d")
-        date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
-    
     comp = request.query_params.get('competition', competition)
-    matches = await get_matches(db, date_from, date_to, comp, status)
-    
-    return {"matches": matches, "total": len(matches)}
+
+    if date_from or date_to:
+        # Explicit dates — single fetch
+        matches = await get_matches(db, date_from, date_to, comp, status)
+        return {"matches": matches, "total": len(matches)}
+
+    # Default: fetch two non-overlapping ranges in parallel, merge & deduplicate
+    today = datetime.now(timezone.utc)
+    near_from = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+    near_to   = (today + timedelta(days=6)).strftime("%Y-%m-%d")
+    far_from  = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    far_to    = (today + timedelta(days=14)).strftime("%Y-%m-%d")
+
+    near_matches, far_matches = await asyncio.gather(
+        get_matches(db, near_from, near_to, comp, status),
+        get_matches(db, far_from, far_to, comp, status),
+    )
+
+    # Merge & deduplicate by match id
+    seen = set()
+    merged = []
+    for m in near_matches + far_matches:
+        if m["id"] not in seen:
+            seen.add(m["id"])
+            merged.append(m)
+
+    # Sort: live first, then upcoming (soonest first), then finished (most recent first)
+    def sort_key(m):
+        s = m.get("status", "")
+        if s == "LIVE":
+            return (0, m.get("utcDate", ""))
+        elif s in ("NOT_STARTED", "TIMED", "SCHEDULED"):
+            return (1, m.get("utcDate", ""))
+        else:
+            return (2, m.get("utcDate", ""))
+    merged.sort(key=sort_key)
+
+    return {"matches": merged, "total": len(merged)}
 
 
 @router.get("/banners")

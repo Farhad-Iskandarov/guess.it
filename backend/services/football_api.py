@@ -859,12 +859,24 @@ async def get_upcoming_matches(db, days: int = 7) -> list[dict]:
 
 async def get_competition_matches(db, competition_code: str) -> list[dict]:
     today = datetime.now(timezone.utc)
-    return await get_matches(
-        db,
-        date_from=(today - timedelta(days=3)).strftime("%Y-%m-%d"),
-        date_to=(today + timedelta(days=3)).strftime("%Y-%m-%d"),
-        competition=competition_code,
+    near_from = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+    near_to = (today + timedelta(days=6)).strftime("%Y-%m-%d")
+    far_from = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    far_to = (today + timedelta(days=14)).strftime("%Y-%m-%d")
+
+    near, far = await asyncio.gather(
+        get_matches(db, near_from, near_to, competition_code),
+        get_matches(db, far_from, far_to, competition_code),
     )
+
+    seen = set()
+    merged = []
+    for m in near + far:
+        if m["id"] not in seen:
+            seen.add(m["id"])
+            merged.append(m)
+    merged.sort(key=lambda m: m.get("utcDate", ""))
+    return merged
 
 
 async def _get_vote_counts(db, match_ids: list) -> dict:
