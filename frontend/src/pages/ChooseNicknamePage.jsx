@@ -106,12 +106,15 @@ export const ChooseNicknamePage = () => {
       });
       navigate('/');
     } catch (error) {
-      setError(error.message);
+      // Nickname errors from backend (like "taken") are user-safe
+      const msg = error.message || 'Could not set nickname. Please try again.';
+      const isTaken = msg.toLowerCase().includes('taken') || msg.toLowerCase().includes('already');
+      setError(isTaken ? msg : 'Could not set nickname. Please try again.');
       if (error.suggestions) {
         setSuggestions(error.suggestions);
       }
-      toast.error('Failed to set nickname', {
-        description: error.message,
+      toast.error('Could not set nickname', {
+        description: isTaken ? 'This nickname is already taken.' : 'Please try again.',
       });
     } finally {
       setIsLoading(false);

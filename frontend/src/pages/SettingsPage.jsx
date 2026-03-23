@@ -164,7 +164,7 @@ const PrivacyNotificationsSection = memo(({ isOpen, onToggle }) => {
         toast.success(newVal ? 'Online status visible to friends' : 'Online status hidden from friends');
       }
     } catch {
-      toast.error('Failed to update visibility');
+      toast.error('Could not update visibility. Please try again.');
     } finally {
       setLoadingVisibility(false);
     }
@@ -185,7 +185,7 @@ const PrivacyNotificationsSection = memo(({ isOpen, onToggle }) => {
         toast.success(newVal ? 'Notification sounds enabled' : 'Notification sounds muted');
       }
     } catch {
-      toast.error('Failed to update sound setting');
+      toast.error('Could not update sound setting. Please try again.');
     } finally {
       setLoadingSound(false);
     }
@@ -206,7 +206,7 @@ const PrivacyNotificationsSection = memo(({ isOpen, onToggle }) => {
         toast.success(newVal ? 'Read receipts enabled' : 'Read receipts disabled');
       }
     } catch {
-      toast.error('Failed to update read receipts');
+      toast.error('Could not update read receipts. Please try again.');
     } finally {
       setLoadingReadReceipts(false);
     }
@@ -227,7 +227,7 @@ const PrivacyNotificationsSection = memo(({ isOpen, onToggle }) => {
         toast.success(newVal ? 'Delivery status enabled' : 'Delivery status disabled');
       }
     } catch {
-      toast.error('Failed to update delivery status');
+      toast.error('Could not update delivery status. Please try again.');
     } finally {
       setLoadingDeliveryStatus(false);
     }
@@ -392,7 +392,7 @@ export const SettingsPage = () => {
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
-      toast.error('Failed to load settings');
+      toast.error('Could not load settings. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -442,11 +442,11 @@ export const SettingsPage = () => {
         body: formData
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to upload avatar');
+        throw new Error('Could not upload avatar. Please try again.');
       }
+
+      const data = await response.json().catch(() => null);
 
       // Clear file state and input
       setAvatarFile(null);
@@ -460,7 +460,8 @@ export const SettingsPage = () => {
       await fetchSettings();
       toast.success('Profile picture updated successfully');
     } catch (error) {
-      toast.error(error.message || 'Failed to upload avatar');
+      console.error('[Settings] Avatar upload failed:', error);
+      toast.error('Could not upload avatar. Please try again.');
     } finally {
       setUploadingAvatar(false);
     }
@@ -475,8 +476,8 @@ export const SettingsPage = () => {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to remove avatar');
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.detail || 'remove');
       }
 
       toast.success('Profile picture removed');
@@ -485,7 +486,8 @@ export const SettingsPage = () => {
       await refreshUser();
       await fetchSettings();
     } catch (error) {
-      toast.error(error.message);
+      console.error('[Settings] Avatar remove failed:', error);
+      toast.error('Could not remove avatar. Please try again.');
     } finally {
       setUploadingAvatar(false);
     }
@@ -536,10 +538,10 @@ export const SettingsPage = () => {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to change email');
+        throw new Error(data?.detail || 'email_change_failed');
       }
 
       toast.success('Email updated successfully');
@@ -547,7 +549,15 @@ export const SettingsPage = () => {
       await refreshUser();
       await fetchSettings();
     } catch (error) {
-      setEmailError(error.message);
+      console.error('[Settings] Email change failed:', error);
+      const msg = error.message;
+      if (msg.toLowerCase().includes('password') || msg.toLowerCase().includes('incorrect')) {
+        setEmailError('Current password is incorrect.');
+      } else if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('exists')) {
+        setEmailError('This email is already in use.');
+      } else {
+        setEmailError('Could not update email. Please try again.');
+      }
     } finally {
       setChangingEmail(false);
     }
@@ -596,10 +606,10 @@ export const SettingsPage = () => {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to change password');
+        throw new Error(data?.detail || 'password_change_failed');
       }
 
       toast.success('Password updated successfully');
@@ -607,7 +617,13 @@ export const SettingsPage = () => {
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
-      setPasswordErrors({ currentPassword: error.message });
+      console.error('[Settings] Password change failed:', error);
+      const msg = error.message;
+      if (msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('wrong') || msg.toLowerCase().includes('invalid')) {
+        setPasswordErrors({ currentPassword: 'Current password is incorrect.' });
+      } else {
+        setPasswordErrors({ currentPassword: 'Could not update password. Please try again.' });
+      }
     } finally {
       setChangingPassword(false);
     }
@@ -643,17 +659,23 @@ export const SettingsPage = () => {
         body: JSON.stringify({ new_nickname: newNickname })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to change nickname');
+        throw new Error(data?.detail || 'nickname_change_failed');
       }
 
       toast.success('Nickname updated! This was your one-time change.');
       await refreshUser();
       await fetchSettings();
     } catch (error) {
-      setNicknameError(error.message);
+      console.error('[Settings] Nickname change failed:', error);
+      const msg = error.message;
+      if (msg.toLowerCase().includes('taken') || msg.toLowerCase().includes('already')) {
+        setNicknameError('This nickname is already taken. Please choose another.');
+      } else {
+        setNicknameError('Could not update nickname. Please try again.');
+      }
     } finally {
       setChangingNickname(false);
     }

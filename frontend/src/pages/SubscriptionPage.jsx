@@ -239,12 +239,12 @@ const SubscriptionPage = () => {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to create checkout');
+      if (!res.ok) throw new Error('Could not start checkout. Please try again.');
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
       }
     } catch (err) {
-      alert(err.message);
+      alert('Could not complete the action. Please try again.');
     } finally {
       setSubscribing(null);
     }
@@ -262,7 +262,7 @@ const SubscriptionPage = () => {
         window.location.reload();
       }
     } catch (err) {
-      alert('Failed to cancel subscription');
+      alert('Could not cancel subscription. Please try again.');
     }
   };
 

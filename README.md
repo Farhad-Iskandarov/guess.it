@@ -400,3 +400,40 @@ tail -f /var/log/supervisor/reminder_worker.err.log
 ## Maturity Level
 
 **Semi-Production** — All critical race conditions fixed, atomic operations verified, Redis infrastructure in place, scheduler isolated. The remaining gap to full production is switching from single Uvicorn worker to Gunicorn with 4+ workers (a configuration change, not a code change).
+
+
+### Automatic Error Reporting System
+
+**Architecture**: Frontend error boundaries silently POST crash reports to `POST /api/error-logs/report` (fire-and-forget, no UI impact). Backend stores them in the `error_logs` MongoDB collection. Admin dashboard has a dedicated "Error Logs" tab for monitoring.
+
+**What's captured** (per crash):
+| Field | Description |
+|-------|------------|
+| `message` | Error message (truncated to 500 chars) |
+| `stack` | JS stack trace (truncated to 3000 chars) |
+| `component_stack` | React component tree that crashed |
+| `route` | URL path where error occurred |
+| `user_id` | Logged-in user ID (if available) |
+| `boundary_label` | Which error boundary caught it (Global, Admin, Profile, MatchDetail) |
+| `user_agent` | Browser/device info |
+| `screen` | Screen resolution |
+| `language` | Browser language |
+| `created_at` | Timestamp (UTC ISO) |
+
+**Spam prevention**:
+- Client-side: max 5 reports per minute (sliding window)
+- Server-side: max 5 reports per IP per 60 seconds (429 returned if exceeded)
+- No sensitive data transmitted (no passwords, tokens, or personal content)
+
+**Admin endpoints**:
+| Endpoint | Method | Description |
+|----------|--------|------------|
+| `/api/error-logs/report` | POST | Submit error report (public, rate-limited) |
+| `/api/error-logs` | GET | List logs with filters (admin-only) |
+| `/api/error-logs/stats` | GET | Aggregated stats + top recurring errors (admin-only) |
+| `/api/error-logs/{id}/resolve` | PATCH | Toggle resolved status (admin-only) |
+| `/api/error-logs/{id}` | DELETE | Delete a log entry (admin-only) |
+
+**Admin UI** (Error Logs tab):
+- **Overview**: Total/24h/7d/unresolved counts, top recurring errors, top routes with errors
+- **All Logs**: Searchable, filterable list with expandable details (stack trace, component stack, device info), resolve/delete actions, pagination

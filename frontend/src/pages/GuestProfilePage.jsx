@@ -47,12 +47,12 @@ export const GuestProfilePage = () => {
         const resp = await fetch(`${API_URL}/api/friends/profile/${userId}`, { credentials: 'include' });
         if (!resp.ok) {
           const data = await resp.json();
-          throw new Error(data.detail || 'Failed to load profile');
+          throw new Error(data.detail || 'load_failed');
         }
         const data = await resp.json();
         setProfile(data);
       } catch (e) {
-        setError(e.message);
+        setError('Could not load profile. Please try again.');
       } finally {
         setLoading(false);
       }

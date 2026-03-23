@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Backend API Test Suite for GuessIt Football Prediction Platform
-Tests all API endpoints using the public external URL
+Comprehensive Backend API Testing for GuessIt Error Handling
+Tests all error scenarios to ensure clean, user-friendly error messages
 """
 
 import requests
@@ -10,280 +10,268 @@ import json
 from datetime import datetime
 
 class GuessItAPITester:
-    def __init__(self, base_url="https://guess-it-copy-4.preview.emergentagent.com"):
+    def __init__(self, base_url="https://guess-it-preview.preview.emergentagent.com"):
         self.base_url = base_url
         self.session = requests.Session()
-        self.session.timeout = 10
         self.tests_run = 0
         self.tests_passed = 0
-        self.token = None
-        self.user_id = None
+        self.test_results = []
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, headers=None, auth_required=False):
-        """Run a single API test"""
-        url = f"{self.base_url}/api/{endpoint}" if not endpoint.startswith('http') else endpoint
-        test_headers = {'Content-Type': 'application/json'}
-        
-        if headers:
-            test_headers.update(headers)
-        
-        if auth_required and self.token:
-            test_headers['Authorization'] = f'Bearer {self.token}'
-
+    def log_test(self, name, passed, details=""):
+        """Log test result"""
         self.tests_run += 1
-        print(f"\n🔍 Testing {name}...")
-        print(f"    URL: {url}")
+        if passed:
+            self.tests_passed += 1
+            print(f"✅ {name}")
+        else:
+            print(f"❌ {name} - {details}")
+        
+        self.test_results.append({
+            "test": name,
+            "passed": passed,
+            "details": details
+        })
+
+    def test_auth_register_duplicate_email(self):
+        """Test duplicate email registration returns 409 with user-friendly message"""
+        print("\n🔍 Testing duplicate email registration...")
+        
+        # First, register a test user
+        test_email = "testdupe@test.com"
+        test_password = "TestPass123"
+        
+        register_data = {
+            "email": test_email,
+            "password": test_password,
+            "confirm_password": test_password
+        }
         
         try:
-            if method == 'GET':
-                response = self.session.get(url, headers=test_headers)
-            elif method == 'POST':
-                response = self.session.post(url, json=data, headers=test_headers)
-            elif method == 'PUT':
-                response = self.session.put(url, json=data, headers=test_headers)
-            elif method == 'DELETE':
-                response = self.session.delete(url, headers=test_headers)
-
-            success = response.status_code == expected_status
+            # Try to register (might already exist)
+            response = self.session.post(
+                f"{self.base_url}/api/auth/register",
+                json=register_data,
+                headers={'Content-Type': 'application/json'}
+            )
             
-            if success:
-                self.tests_passed += 1
-                print(f"    ✅ Passed - Status: {response.status_code}")
+            # Now try to register again with same email
+            duplicate_response = self.session.post(
+                f"{self.base_url}/api/auth/register",
+                json=register_data,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            # Check status code
+            if duplicate_response.status_code == 409:
                 try:
-                    response_data = response.json()
-                    if isinstance(response_data, dict) and len(str(response_data)) < 200:
-                        print(f"    📄 Response: {json.dumps(response_data, indent=2)}")
-                    return True, response_data
-                except:
-                    return True, response.text
+                    error_data = duplicate_response.json()
+                    detail = error_data.get('detail', '')
+                    
+                    # Check for user-friendly message
+                    expected_message = "This email is already registered. Please log in instead."
+                    if detail == expected_message:
+                        self.log_test("Duplicate email returns 409 with correct message", True)
+                    else:
+                        self.log_test("Duplicate email returns 409 with correct message", False, 
+                                    f"Expected: '{expected_message}', Got: '{detail}'")
+                except json.JSONDecodeError:
+                    self.log_test("Duplicate email returns 409 with correct message", False, 
+                                "Response body is not valid JSON")
             else:
-                print(f"    ❌ Failed - Expected {expected_status}, got {response.status_code}")
+                self.log_test("Duplicate email returns 409 with correct message", False, 
+                            f"Expected status 409, got {duplicate_response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Duplicate email returns 409 with correct message", False, str(e))
+
+    def test_auth_login_wrong_credentials(self):
+        """Test login with wrong credentials returns clean error"""
+        print("\n🔍 Testing login with wrong credentials...")
+        
+        login_data = {
+            "email": "nonexistent@test.com",
+            "password": "wrongpassword"
+        }
+        
+        try:
+            response = self.session.post(
+                f"{self.base_url}/api/auth/login",
+                json=login_data,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            if response.status_code in [400, 401]:
                 try:
                     error_data = response.json()
-                    print(f"    📄 Error: {json.dumps(error_data, indent=2)}")
-                except:
-                    print(f"    📄 Error: {response.text}")
-                return False, {}
-
-        except Exception as e:
-            print(f"    ❌ Failed - Error: {str(e)}")
-            return False, {}
-
-    def test_health_endpoints(self):
-        """Test basic health and info endpoints"""
-        print("\n" + "="*50)
-        print("🏥 TESTING HEALTH ENDPOINTS")
-        print("="*50)
-        
-        # Test health endpoint
-        success, data = self.run_test(
-            "Health Check",
-            "GET",
-            "health",
-            200
-        )
-        if not success:
-            return False
-            
-        # Verify health response structure
-        if not isinstance(data, dict) or data.get('status') != 'healthy':
-            print("    ⚠️  Warning: Health endpoint doesn't return expected format")
-            
-        # Test root API endpoint  
-        success, data = self.run_test(
-            "API Root",
-            "GET", 
-            "",
-            200
-        )
-        if not success:
-            return False
-            
-        # Verify root response
-        if not isinstance(data, dict) or 'GuessIt API is running' not in str(data.get('message', '')):
-            print("    ⚠️  Warning: API root doesn't return expected message")
-            
-        return True
-
-    def test_system_metrics(self):
-        """Test system metrics endpoint"""
-        print("\n" + "="*50)
-        print("📊 TESTING SYSTEM METRICS")
-        print("="*50)
-        
-        success, data = self.run_test(
-            "System Metrics",
-            "GET",
-            "system/metrics", 
-            200
-        )
-        if not success:
-            return False
-            
-        # Verify metrics structure
-        if isinstance(data, dict):
-            expected_keys = ['websocket_connections', 'redis', 'mongodb', 'architecture']
-            missing_keys = [key for key in expected_keys if key not in data]
-            if missing_keys:
-                print(f"    ⚠️  Warning: Missing expected keys: {missing_keys}")
+                    detail = error_data.get('detail', '')
+                    
+                    # Check that error message is user-friendly (not technical)
+                    technical_terms = ['traceback', 'internal server', 'typeerror', 'referenceerror', 
+                                     'syntaxerror', 'module', 'import', 'undefined', 'null', 'nan', 
+                                     'stack', 'mongodb', 'redis', 'pymongo', 'motor', 'asyncio']
+                    
+                    is_technical = any(term in detail.lower() for term in technical_terms)
+                    
+                    if not is_technical and len(detail) > 0:
+                        self.log_test("Wrong login credentials returns clean error", True)
+                    else:
+                        self.log_test("Wrong login credentials returns clean error", False, 
+                                    f"Error message appears technical: '{detail}'")
+                except json.JSONDecodeError:
+                    self.log_test("Wrong login credentials returns clean error", False, 
+                                "Response body is not valid JSON")
             else:
-                print("    ✅ All expected metric keys present")
+                self.log_test("Wrong login credentials returns clean error", False, 
+                            f"Expected status 400/401, got {response.status_code}")
                 
-        return True
+        except Exception as e:
+            self.log_test("Wrong login credentials returns clean error", False, str(e))
 
-    def test_auth_endpoints(self):
-        """Test authentication endpoints"""
-        print("\n" + "="*50)
-        print("🔐 TESTING AUTHENTICATION")
-        print("="*50)
+    def test_predictions_unauthenticated(self):
+        """Test prediction save as unauthenticated user returns clean error"""
+        print("\n🔍 Testing unauthenticated prediction save...")
         
-        # Test registration
-        test_email = f"test_{datetime.now().strftime('%H%M%S')}@test.com"
-        test_password = "TestPass123!"
+        # Clear any existing session
+        self.session.cookies.clear()
         
-        success, reg_data = self.run_test(
-            "User Registration",
-            "POST",
-            "auth/register",
-            200,
-            data={
-                "email": test_email,
-                "password": test_password,
-                "confirm_password": test_password
-            }
-        )
+        prediction_data = {
+            "match_id": "test_match_123",
+            "prediction": "home"
+        }
         
-        if not success:
-            print("    ❌ Registration failed - cannot continue with auth tests")
-            return False
+        try:
+            response = self.session.post(
+                f"{self.base_url}/api/predictions",
+                json=prediction_data,
+                headers={'Content-Type': 'application/json'}
+            )
             
-        # Check registration response structure
-        if isinstance(reg_data, dict):
-            if 'user' not in reg_data:
-                print("    ⚠️  Warning: Registration response missing user data")
-                return False
-            if 'requires_nickname' not in reg_data:
-                print("    ⚠️  Warning: Registration response missing requires_nickname flag")
+            if response.status_code == 401:
+                try:
+                    error_data = response.json()
+                    detail = error_data.get('detail', '')
+                    
+                    # Check that error message is user-friendly
+                    technical_terms = ['traceback', 'internal server', 'typeerror', 'referenceerror']
+                    is_technical = any(term in detail.lower() for term in technical_terms)
+                    
+                    if not is_technical:
+                        self.log_test("Unauthenticated prediction returns clean 401", True)
+                    else:
+                        self.log_test("Unauthenticated prediction returns clean 401", False, 
+                                    f"Error message appears technical: '{detail}'")
+                except json.JSONDecodeError:
+                    self.log_test("Unauthenticated prediction returns clean 401", False, 
+                                "Response body is not valid JSON")
+            else:
+                self.log_test("Unauthenticated prediction returns clean 401", False, 
+                            f"Expected status 401, got {response.status_code}")
                 
-        # Test login with registered user
-        success, login_data = self.run_test(
-            "User Login",
-            "POST", 
-            "auth/login",
-            200,
-            data={
-                "email": test_email,
-                "password": test_password
-            }
-        )
-        
-        if not success:
-            print("    ❌ Login failed after successful registration")
-            return False
-            
-        # Store user info for subsequent tests
-        if isinstance(login_data, dict) and 'user' in login_data:
-            self.user_id = login_data['user'].get('user_id')
-            
-        # Test /auth/me endpoint (should work with session cookie)
-        success, me_data = self.run_test(
-            "Get Current User",
-            "GET",
-            "auth/me", 
-            200
-        )
-        
-        if not success:
-            print("    ⚠️  Warning: /auth/me failed - session cookies may not be working")
-        
-        # Test nickname check
-        success, nick_data = self.run_test(
-            "Check Nickname Availability", 
-            "GET",
-            "auth/nickname/check?nickname=testuser123",
-            200
-        )
-        
-        if success and isinstance(nick_data, dict):
-            if 'available' not in nick_data:
-                print("    ⚠️  Warning: Nickname check missing 'available' field")
-                
-        print("    ✅ Authentication flow completed successfully")
-        return True
+        except Exception as e:
+            self.log_test("Unauthenticated prediction returns clean 401", False, str(e))
 
-    def test_invalid_endpoints(self):
-        """Test error handling for invalid endpoints"""
-        print("\n" + "="*50)
-        print("🚫 TESTING ERROR HANDLING")
-        print("="*50)
+    def test_api_endpoints_basic(self):
+        """Test basic API endpoints for clean error responses"""
+        print("\n🔍 Testing basic API endpoints...")
         
-        # Test 404 for non-existent endpoint
-        success, _ = self.run_test(
-            "Non-existent Endpoint",
-            "GET",
-            "invalid/endpoint/that/does/not/exist",
-            404
-        )
+        endpoints = [
+            ("/api/auth/me", "GET"),
+            ("/api/predictions/me", "GET"),
+            ("/api/friends/list", "GET"),
+            ("/api/favorites/clubs", "GET")
+        ]
         
-        # Test invalid login credentials
-        success, _ = self.run_test(
-            "Invalid Login Credentials",
-            "POST",
-            "auth/login", 
-            401,
-            data={
-                "email": "invalid@test.com",
-                "password": "wrongpassword"
-            }
-        )
+        for endpoint, method in endpoints:
+            try:
+                if method == "GET":
+                    response = self.session.get(f"{self.base_url}{endpoint}")
+                else:
+                    response = self.session.post(f"{self.base_url}{endpoint}")
+                
+                # Check that response is valid JSON and doesn't contain technical errors
+                try:
+                    if response.headers.get('content-type', '').startswith('application/json'):
+                        data = response.json()
+                        
+                        # Check for technical error messages in response
+                        response_str = json.dumps(data).lower()
+                        technical_terms = ['failed to execute json', 'body stream already read', 
+                                         'traceback', 'internal server error', 'typeerror']
+                        
+                        has_technical_error = any(term in response_str for term in technical_terms)
+                        
+                        if not has_technical_error:
+                            self.log_test(f"{endpoint} returns clean response", True)
+                        else:
+                            self.log_test(f"{endpoint} returns clean response", False, 
+                                        "Response contains technical error messages")
+                    else:
+                        self.log_test(f"{endpoint} returns clean response", True, "Non-JSON response")
+                        
+                except json.JSONDecodeError:
+                    self.log_test(f"{endpoint} returns clean response", False, 
+                                "Response is not valid JSON")
+                    
+            except Exception as e:
+                self.log_test(f"{endpoint} returns clean response", False, str(e))
+
+    def test_settings_endpoints(self):
+        """Test settings endpoints for clean error handling"""
+        print("\n🔍 Testing settings endpoints...")
         
-        return True
+        # Test profile settings without auth
+        try:
+            response = self.session.get(f"{self.base_url}/api/settings/profile")
+            
+            if response.status_code == 401:
+                try:
+                    error_data = response.json()
+                    detail = error_data.get('detail', '')
+                    
+                    # Check for clean error message
+                    technical_terms = ['traceback', 'internal server', 'typeerror']
+                    is_technical = any(term in detail.lower() for term in technical_terms)
+                    
+                    if not is_technical:
+                        self.log_test("Settings profile endpoint returns clean 401", True)
+                    else:
+                        self.log_test("Settings profile endpoint returns clean 401", False, 
+                                    f"Technical error: '{detail}'")
+                except json.JSONDecodeError:
+                    self.log_test("Settings profile endpoint returns clean 401", False, 
+                                "Invalid JSON response")
+            else:
+                self.log_test("Settings profile endpoint returns clean 401", False, 
+                            f"Expected 401, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Settings profile endpoint returns clean 401", False, str(e))
 
     def run_all_tests(self):
-        """Run complete test suite"""
-        print("🚀 Starting GuessIt Backend API Tests")
-        print(f"📡 Testing against: {self.base_url}")
-        print("⏱️  Started at:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        """Run all backend tests"""
+        print("🚀 Starting GuessIt Backend Error Handling Tests")
+        print(f"Testing against: {self.base_url}")
+        print("=" * 60)
         
-        # Run test categories
-        try:
-            if not self.test_health_endpoints():
-                print("❌ Health endpoint tests failed - stopping")
-                return False
-                
-            if not self.test_system_metrics():
-                print("⚠️  System metrics test failed but continuing")
-                
-            if not self.test_auth_endpoints():
-                print("❌ Authentication tests failed - stopping")  
-                return False
-                
-            if not self.test_invalid_endpoints():
-                print("⚠️  Error handling tests failed but continuing")
-                
-        except Exception as e:
-            print(f"❌ Test suite crashed: {e}")
-            return False
-            
-        # Print final results
-        print("\n" + "="*60)
-        print("📊 FINAL TEST RESULTS")
-        print("="*60)
-        print(f"✅ Tests passed: {self.tests_passed}/{self.tests_run}")
-        print(f"📈 Success rate: {(self.tests_passed/self.tests_run*100):.1f}%")
+        # Run all test methods
+        self.test_auth_register_duplicate_email()
+        self.test_auth_login_wrong_credentials()
+        self.test_predictions_unauthenticated()
+        self.test_api_endpoints_basic()
+        self.test_settings_endpoints()
+        
+        # Print summary
+        print("\n" + "=" * 60)
+        print(f"📊 Backend Tests Summary: {self.tests_passed}/{self.tests_run} passed")
         
         if self.tests_passed == self.tests_run:
-            print("🎉 All tests passed!")
+            print("🎉 All backend error handling tests passed!")
             return True
-        elif self.tests_passed >= self.tests_run * 0.8:
-            print("⚠️  Most tests passed - some issues to investigate")
-            return True  
         else:
-            print("❌ Significant test failures detected")
+            print("⚠️  Some backend tests failed - check error handling implementation")
             return False
 
 def main():
-    """Main test runner"""
     tester = GuessItAPITester()
     success = tester.run_all_tests()
     return 0 if success else 1

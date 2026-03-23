@@ -1,3 +1,5 @@
+import { createApiError } from '@/utils/errorHandler';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 // ============ In-Memory Prediction Cache ============
@@ -20,7 +22,6 @@ function invalidateCache(key) {
   if (key) {
     delete predictionCache[key];
   } else {
-    // Invalidate all prediction caches
     Object.keys(predictionCache).forEach(k => delete predictionCache[k]);
   }
 }
@@ -37,11 +38,9 @@ export const savePrediction = async (matchId, prediction) => {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to save prediction');
+    throw await createApiError(response, 'Could not save your prediction. Please try again.', 'savePrediction');
   }
 
-  // Invalidate caches on mutation
   invalidateCache();
   return await response.json();
 };
@@ -62,12 +61,7 @@ export const getMyPredictions = async () => {
     if (response.status === 401) {
       return { predictions: [], total: 0 };
     }
-    let detail = 'Failed to fetch predictions';
-    try {
-      const error = await response.json();
-      detail = error.detail || detail;
-    } catch { /* response may not be JSON */ }
-    throw new Error(detail);
+    throw await createApiError(response, 'Could not load predictions. Please try again.', 'getMyPredictions');
   }
 
   const data = await response.json();
@@ -91,12 +85,7 @@ export const getMyDetailedPredictions = async () => {
     if (response.status === 401) {
       return { predictions: [], total: 0, summary: {} };
     }
-    let detail = 'Failed to fetch predictions';
-    try {
-      const error = await response.json();
-      detail = error.detail || detail;
-    } catch { /* response may not be JSON */ }
-    throw new Error(detail);
+    throw await createApiError(response, 'Could not load predictions. Please try again.', 'getMyDetailedPredictions');
   }
 
   const data = await response.json();
@@ -117,8 +106,7 @@ export const getPredictionForMatch = async (matchId) => {
   }
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to fetch prediction');
+    throw await createApiError(response, 'Could not load prediction. Please try again.', 'getPredictionForMatch');
   }
 
   return await response.json();
@@ -134,11 +122,9 @@ export const deletePrediction = async (matchId) => {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to delete prediction');
+    throw await createApiError(response, 'Could not remove your prediction. Please try again.', 'deletePrediction');
   }
 
-  // Invalidate caches on mutation
   invalidateCache();
   return await response.json();
 };
@@ -161,8 +147,7 @@ export const saveExactScorePrediction = async (matchId, homeScore, awayScore) =>
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to save exact score prediction');
+    throw await createApiError(response, 'Could not save exact score. Please try again.', 'saveExactScorePrediction');
   }
 
   invalidateCache();
@@ -182,8 +167,7 @@ export const getExactScorePrediction = async (matchId) => {
   }
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to fetch exact score prediction');
+    throw await createApiError(response, 'Could not load exact score prediction. Please try again.', 'getExactScorePrediction');
   }
 
   return await response.json();
@@ -199,8 +183,7 @@ export const deleteExactScorePrediction = async (matchId) => {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to delete exact score prediction');
+    throw await createApiError(response, 'Could not remove exact score prediction. Please try again.', 'deleteExactScorePrediction');
   }
 
   invalidateCache();
@@ -223,8 +206,7 @@ export const updateExactScorePrediction = async (matchId, homeScore, awayScore) 
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to update exact score prediction');
+    throw await createApiError(response, 'Could not update exact score. Please try again.', 'updateExactScorePrediction');
   }
 
   invalidateCache();
@@ -247,8 +229,7 @@ export const getMyExactScorePredictions = async () => {
     if (response.status === 401) {
       return { exact_score_predictions: [], total: 0 };
     }
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to fetch exact score predictions');
+    throw await createApiError(response, 'Could not load exact score predictions. Please try again.', 'getMyExactScorePredictions');
   }
 
   const data = await response.json();

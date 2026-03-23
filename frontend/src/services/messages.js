@@ -2,6 +2,7 @@
  * Messages API Service
  * Real-time messaging between friends with delivery/read status
  */
+import { createApiError } from '@/utils/errorHandler';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -11,7 +12,9 @@ export const getConversations = async () => {
   const response = await fetch(`${API_URL}/api/messages/conversations`, {
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to fetch conversations');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load conversations. Please try again.', 'getConversations');
+  }
   return await response.json();
 };
 
@@ -19,7 +22,9 @@ export const getChatHistory = async (friendId, { limit = 50, before } = {}) => {
   let url = `${API_URL}/api/messages/history/${friendId}?limit=${limit}`;
   if (before) url += `&before=${encodeURIComponent(before)}`;
   const response = await fetch(url, { credentials: 'include' });
-  if (!response.ok) throw new Error('Failed to fetch chat history');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load chat history. Please try again.', 'getChatHistory');
+  }
   return await response.json();
 };
 
@@ -34,9 +39,10 @@ export const sendMessage = async (receiverId, message, messageType = 'text', mat
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || 'Failed to send message');
-  return data;
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not send message. Please try again.', 'sendMessage');
+  }
+  return await response.json();
 };
 
 export const markMessagesRead = async (friendId) => {
@@ -44,7 +50,9 @@ export const markMessagesRead = async (friendId) => {
     method: 'POST',
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to mark messages read');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not update message status.', 'markMessagesRead');
+  }
   return await response.json();
 };
 
@@ -53,7 +61,9 @@ export const markMessagesDelivered = async (friendId) => {
     method: 'POST',
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to mark messages delivered');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not update delivery status.', 'markMessagesDelivered');
+  }
   return await response.json();
 };
 
@@ -61,7 +71,9 @@ export const getUnreadCount = async () => {
   const response = await fetch(`${API_URL}/api/messages/unread-count`, {
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to fetch unread count');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load unread count.', 'getUnreadCount');
+  }
   return await response.json();
 };
 
@@ -71,7 +83,9 @@ export const getFavoriteMatches = async () => {
   const response = await fetch(`${API_URL}/api/favorites/matches`, {
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to fetch favorite matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load saved matches. Please try again.', 'getFavoriteMatches');
+  }
   return await response.json();
 };
 
@@ -82,7 +96,9 @@ export const addFavoriteMatch = async (matchData) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(matchData)
   });
-  if (!response.ok) throw new Error('Failed to add favorite match');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not save match. Please try again.', 'addFavoriteMatch');
+  }
   return await response.json();
 };
 
@@ -91,7 +107,9 @@ export const removeFavoriteMatch = async (matchId) => {
     method: 'DELETE',
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to remove favorite match');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not remove saved match. Please try again.', 'removeFavoriteMatch');
+  }
   return await response.json();
 };
 
@@ -102,7 +120,9 @@ export const getNotifications = async (limit = 30, offset = 0) => {
     `${API_URL}/api/notifications?limit=${limit}&offset=${offset}`,
     { credentials: 'include' }
   );
-  if (!response.ok) throw new Error('Failed to fetch notifications');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load notifications. Please try again.', 'getNotifications');
+  }
   return await response.json();
 };
 
@@ -110,7 +130,9 @@ export const getNotificationUnreadCount = async () => {
   const response = await fetch(`${API_URL}/api/notifications/unread-count`, {
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to fetch notification count');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load notification count.', 'getNotificationUnreadCount');
+  }
   return await response.json();
 };
 
@@ -119,7 +141,9 @@ export const markNotificationRead = async (notificationId) => {
     method: 'POST',
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to mark notification read');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not update notification.', 'markNotificationRead');
+  }
   return await response.json();
 };
 
@@ -128,7 +152,9 @@ export const markAllNotificationsRead = async () => {
     method: 'POST',
     credentials: 'include'
   });
-  if (!response.ok) throw new Error('Failed to mark all read');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not mark notifications as read.', 'markAllNotificationsRead');
+  }
   return await response.json();
 };
 

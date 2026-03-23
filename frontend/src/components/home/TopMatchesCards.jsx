@@ -378,7 +378,8 @@ export const TopMatchesCards = ({ matches, savedPredictions = {}, onPredictionSa
         if (onPredictionSaved) onPredictionSaved(matchId, null);
         toast.success('Vote removed', { description: 'Your prediction has been cleared.', duration: 2000 });
       } catch (error) {
-        toast.error('Failed to remove vote', { description: error.message, duration: 3000 });
+        console.error('[Prediction] Remove failed:', error);
+        toast.error('Could not remove vote', { description: 'Please try again.', duration: 3000 });
       } finally {
         setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
       }
@@ -427,7 +428,8 @@ export const TopMatchesCards = ({ matches, savedPredictions = {}, onPredictionSa
         if (onPredictionSaved) onPredictionSaved(matchId, selection);
         toast.success(result.is_new ? 'Prediction saved!' : 'Prediction updated!', { duration: 2000 });
       } catch (error) {
-        toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+        console.error('[Prediction] Save failed:', error);
+        toast.error('Could not save prediction', { description: 'Please try again.', duration: 3000 });
       } finally {
         setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
       }

@@ -1,3 +1,5 @@
+import { createApiError } from '@/utils/errorHandler';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 // ============ In-Memory Cache ============
@@ -45,7 +47,9 @@ export const fetchMatches = async (params = {}, { skipCache = false, signal } = 
 
   const url = `${API_URL}/api/football/matches?${searchParams.toString()}`;
   const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error('Failed to fetch matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load matches. Please try again.', 'fetchMatches');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;
@@ -60,7 +64,9 @@ export const fetchTodayMatches = async ({ signal } = {}) => {
   if (cached) return cached;
 
   const response = await fetch(`${API_URL}/api/football/matches/today`, { signal });
-  if (!response.ok) throw new Error('Failed to fetch today matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load today\'s matches. Please try again.', 'fetchTodayMatches');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;
@@ -75,7 +81,9 @@ export const fetchLiveMatches = async ({ signal } = {}) => {
   if (cached) return cached;
 
   const response = await fetch(`${API_URL}/api/football/matches/live`, { signal });
-  if (!response.ok) throw new Error('Failed to fetch live matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load live matches. Please try again.', 'fetchLiveMatches');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;
@@ -90,7 +98,9 @@ export const fetchUpcomingMatches = async (days = 7, { signal } = {}) => {
   if (cached) return cached;
 
   const response = await fetch(`${API_URL}/api/football/matches/upcoming?days=${days}`, { signal });
-  if (!response.ok) throw new Error('Failed to fetch upcoming matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load upcoming matches. Please try again.', 'fetchUpcomingMatches');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;
@@ -105,7 +115,9 @@ export const fetchCompetitionMatches = async (code, { signal } = {}) => {
   if (cached) return cached;
 
   const response = await fetch(`${API_URL}/api/football/matches/competition/${code}`, { signal });
-  if (!response.ok) throw new Error('Failed to fetch competition matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load competition matches. Please try again.', 'fetchCompetitionMatches');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;
@@ -120,7 +132,9 @@ export const fetchCompetitions = async ({ signal } = {}) => {
   if (cached) return cached;
 
   const response = await fetch(`${API_URL}/api/football/competitions`, { signal });
-  if (!response.ok) throw new Error('Failed to fetch competitions');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load competitions. Please try again.', 'fetchCompetitions');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;
@@ -131,7 +145,9 @@ export const fetchCompetitions = async ({ signal } = {}) => {
  */
 export const searchMatches = async (query, { signal } = {}) => {
   const response = await fetch(`${API_URL}/api/football/search?q=${encodeURIComponent(query)}`, { signal });
-  if (!response.ok) throw new Error('Failed to search matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not search matches. Please try again.', 'searchMatches');
+  }
   return response.json();
 };
 
@@ -154,7 +170,9 @@ export const fetchEndedMatches = async ({ signal } = {}) => {
   if (cached) return cached;
 
   const response = await fetch(`${API_URL}/api/football/matches/ended`, { signal });
-  if (!response.ok) throw new Error('Failed to fetch ended matches');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not load ended matches. Please try again.', 'fetchEndedMatches');
+  }
   const data = await response.json();
   setCache(cacheKey, data);
   return data;

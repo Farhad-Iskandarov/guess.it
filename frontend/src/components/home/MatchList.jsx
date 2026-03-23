@@ -594,7 +594,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
         duration: 3000
       });
     } catch (error) {
-      toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+      toast.error('Could not save prediction', { description: 'Please try again.', duration: 3000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -610,7 +610,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
       if (onExactScoreSaved) onExactScoreSaved(match.id);
       toast.success('Exact score prediction removed', { duration: 2000 });
     } catch (error) {
-      toast.error('Failed to remove prediction', { description: error.message, duration: 3000 });
+      toast.error('Could not remove prediction', { description: 'Please try again.', duration: 3000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -678,11 +678,10 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
           });
         }, 1500);
       } else {
-        const error = await response.json();
-        toast.error('Failed to invite', { description: error.detail || 'Please try again' });
+        toast.error('Could not send invitation', { description: 'Please try again.' });
       }
     } catch {
-      toast.error('Failed to send invitation');
+      toast.error('Could not send invitation', { description: 'Please try again.' });
     } finally {
       setInvitingFriend(null);
     }
@@ -1276,7 +1275,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         setCurrentSelections((prev) => { const n = { ...prev }; delete n[matchId]; return n; });
         toast.success('Prediction removed', { duration: 2000 });
       } catch (error) {
-        toast.error('Failed to remove prediction', { description: error.message, duration: 3000 });
+        console.error('[Prediction] Remove failed:', error);
+        toast.error('Could not remove prediction', { description: 'Please try again.', duration: 3000 });
       } finally {
         setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
       }
@@ -1305,7 +1305,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     } catch (error) {
       // Revert optimistic update on failure
       if (onPredictionSaved) onPredictionSaved(matchId, previousPrediction || null);
-      toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+      console.error('[Prediction] Save failed:', error);
+      toast.error('Could not save prediction', { description: 'Please try again.', duration: 3000 });
     } finally {
       setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
     }
@@ -1358,7 +1359,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         toast.info('Selection cleared', { duration: 2000 });
       }
     } catch (error) {
-      toast.error('Failed to remove prediction', { description: error.message, duration: 3000 });
+      console.error('[Prediction] Remove failed:', error);
+      toast.error('Could not remove prediction', { description: 'Please try again.', duration: 3000 });
     } finally {
       setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
     }
@@ -1432,7 +1434,8 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         // Revert optimistic update on failure
         if (onPredictionSaved) onPredictionSaved(matchId, previousPrediction || null);
         setCurrentSelections((prev) => ({ ...prev, [matchId]: selection }));
-        toast.error('Failed to save prediction', { description: error.message, duration: 3000 });
+        console.error('[Prediction] Save failed:', error);
+        toast.error('Could not save prediction', { description: 'Please try again.', duration: 3000 });
       } finally {
         setLoadingMatches((prev) => ({ ...prev, [matchId]: false }));
       }

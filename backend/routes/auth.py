@@ -148,8 +148,8 @@ async def register_email(
     existing_user = await get_user_by_email(db, user_data.email)
     if existing_user:
         raise HTTPException(
-            status_code=400,
-            detail="An account with this email already exists"
+            status_code=409,
+            detail="This email is already registered. Please log in instead."
         )
     
     # Create user

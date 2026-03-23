@@ -2,6 +2,7 @@
  * Friends API Service
  * Real-time friendship system
  */
+import { createApiError } from '@/utils/errorHandler';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -31,7 +32,7 @@ export const searchUsers = async (query) => {
   );
   
   if (!response.ok) {
-    throw new Error('Failed to search users');
+    throw await createApiError(response, 'Could not search users. Please try again.', 'searchUsers');
   }
   
   return await response.json();
@@ -48,12 +49,11 @@ export const sendFriendRequest = async (nickname) => {
     body: JSON.stringify({ nickname })
   });
   
-  const data = await response.json();
-  
   if (!response.ok) {
-    throw new Error(data.detail || 'Failed to send friend request');
+    throw await createApiError(response, 'Could not send friend request. Please try again.', 'sendFriendRequest');
   }
   
+  const data = await response.json();
   invalidateCache();
   return data;
 };
@@ -72,7 +72,7 @@ export const getPendingRequests = async (forceRefresh = false) => {
   });
   
   if (!response.ok) {
-    throw new Error('Failed to fetch pending requests');
+    throw await createApiError(response, 'Could not load pending requests. Please try again.', 'getPendingRequests');
   }
   
   const data = await response.json();
@@ -90,7 +90,7 @@ export const getPendingCount = async () => {
   });
   
   if (!response.ok) {
-    throw new Error('Failed to fetch pending count');
+    throw await createApiError(response, 'Could not load request count. Please try again.', 'getPendingCount');
   }
   
   return await response.json();
@@ -105,12 +105,11 @@ export const acceptFriendRequest = async (requestId) => {
     credentials: 'include'
   });
   
-  const data = await response.json();
-  
   if (!response.ok) {
-    throw new Error(data.detail || 'Failed to accept request');
+    throw await createApiError(response, 'Could not accept request. Please try again.', 'acceptFriendRequest');
   }
   
+  const data = await response.json();
   invalidateCache();
   return data;
 };
@@ -124,12 +123,11 @@ export const declineFriendRequest = async (requestId) => {
     credentials: 'include'
   });
   
-  const data = await response.json();
-  
   if (!response.ok) {
-    throw new Error(data.detail || 'Failed to decline request');
+    throw await createApiError(response, 'Could not decline request. Please try again.', 'declineFriendRequest');
   }
   
+  const data = await response.json();
   invalidateCache();
   return data;
 };
@@ -143,12 +141,11 @@ export const cancelFriendRequest = async (requestId) => {
     credentials: 'include'
   });
   
-  const data = await response.json();
-  
   if (!response.ok) {
-    throw new Error(data.detail || 'Failed to cancel request');
+    throw await createApiError(response, 'Could not cancel request. Please try again.', 'cancelFriendRequest');
   }
   
+  const data = await response.json();
   invalidateCache();
   return data;
 };
@@ -167,7 +164,7 @@ export const getFriendsList = async (forceRefresh = false) => {
   });
   
   if (!response.ok) {
-    throw new Error('Failed to fetch friends list');
+    throw await createApiError(response, 'Could not load friends list. Please try again.', 'getFriendsList');
   }
   
   const data = await response.json();
@@ -185,12 +182,11 @@ export const removeFriend = async (friendUserId) => {
     credentials: 'include'
   });
   
-  const data = await response.json();
-  
   if (!response.ok) {
-    throw new Error(data.detail || 'Failed to remove friend');
+    throw await createApiError(response, 'Could not remove friend. Please try again.', 'removeFriend');
   }
   
+  const data = await response.json();
   invalidateCache();
   return data;
 };
@@ -244,7 +240,6 @@ export const connectFriendWS = (userId, onMessage) => {
       console.log('[FriendWS] Closed:', event.code, event.reason);
       wsConnection = null;
       
-      // Reconnect after delay (unless intentionally closed)
       if (event.code !== 1000 && event.code !== 4001 && event.code !== 4003) {
         wsReconnectTimeout = setTimeout(() => {
           console.log('[FriendWS] Reconnecting...');

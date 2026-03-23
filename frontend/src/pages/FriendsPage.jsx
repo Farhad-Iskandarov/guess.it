@@ -372,7 +372,7 @@ export const FriendsPage = () => {
       );
       fetchPendingRequests(true);
     } catch (error) {
-      toast.error(error.message);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setLoadingAction(null);
     }
@@ -390,7 +390,7 @@ export const FriendsPage = () => {
       decrementPendingCount();
       fetchPendingRequests(true);
     } catch (error) {
-      toast.error(error.message);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setLoadingAction(null);
     }
@@ -405,7 +405,7 @@ export const FriendsPage = () => {
       decrementPendingCount();
       fetchPendingRequests(true);
     } catch (error) {
-      toast.error(error.message);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setLoadingAction(null);
     }
@@ -419,7 +419,7 @@ export const FriendsPage = () => {
       toast.success('Friend request cancelled');
       fetchPendingRequests(true);
     } catch (error) {
-      toast.error(error.message);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setLoadingAction(null);
     }
@@ -433,7 +433,7 @@ export const FriendsPage = () => {
       toast.success(`Removed ${friend.nickname} from friends`);
       removeFriendLocal(friend.user_id);
     } catch (error) {
-      toast.error(error.message);
+      toast.error('Something went wrong. Please try again.');
     } finally {
       setLoadingAction(null);
     }

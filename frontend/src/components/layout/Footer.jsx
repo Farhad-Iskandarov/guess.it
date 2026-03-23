@@ -98,7 +98,7 @@ export const Footer = () => {
         setTimeout(() => setSubStatus('idle'), 4000);
       } else {
         setSubStatus('error');
-        setSubMsg(data.detail || 'Failed to subscribe');
+        setSubMsg(data.detail || 'Could not subscribe. Please try again.');
         setTimeout(() => setSubStatus('idle'), 3000);
       }
     } catch {

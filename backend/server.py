@@ -30,6 +30,7 @@ from routes.admin import router as admin_router
 from routes.public import router as public_router
 from routes.subscriptions import router as subscriptions_router, seed_subscription_plans
 from routes.weekly import router as weekly_router
+from routes.error_logs import router as error_logs_router
 from services.reminder_engine import start_reminder_engine, stop_reminder_engine
 
 ROOT_DIR = Path(__file__).parent
@@ -346,6 +347,7 @@ api_router.include_router(admin_router)
 api_router.include_router(public_router)
 api_router.include_router(subscriptions_router)
 api_router.include_router(weekly_router)
+api_router.include_router(error_logs_router)
 
 # Include the router in the main app
 app.include_router(api_router)

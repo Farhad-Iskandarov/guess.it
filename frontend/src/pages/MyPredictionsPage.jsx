@@ -812,7 +812,7 @@ export const MyPredictionsPage = () => {
         navigate('/login');
         return;
       }
-      setError(err.message);
+      setError('Could not load predictions. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -854,7 +854,7 @@ export const MyPredictionsPage = () => {
         duration: 2000,
       });
     } catch (err) {
-      toast.error('Failed to update prediction', { description: err.message, duration: 3000 });
+      toast.error('Could not update prediction', { description: 'Please try again.', duration: 3000 });
       throw err;
     }
   }, []);
@@ -872,7 +872,7 @@ export const MyPredictionsPage = () => {
         duration: 2000,
       });
     } catch (err) {
-      toast.error('Failed to remove prediction', { description: err.message, duration: 3000 });
+      toast.error('Could not remove prediction', { description: 'Please try again.', duration: 3000 });
       throw err;
     }
   }, []);
@@ -896,7 +896,7 @@ export const MyPredictionsPage = () => {
         duration: 2000,
       });
     } catch (err) {
-      toast.error('Failed to update exact score', { description: err.message, duration: 3000 });
+      toast.error('Could not update exact score', { description: 'Please try again.', duration: 3000 });
       throw err;
     }
   }, []);
@@ -929,7 +929,7 @@ export const MyPredictionsPage = () => {
         duration: 2000,
       });
     } catch (err) {
-      toast.error('Failed to remove exact score', { description: err.message, duration: 3000 });
+      toast.error('Could not remove exact score', { description: 'Please try again.', duration: 3000 });
       throw err;
     }
   }, [predictions]);

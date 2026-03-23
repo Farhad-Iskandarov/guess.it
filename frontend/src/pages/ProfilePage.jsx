@@ -608,7 +608,7 @@ export const ProfilePage = () => {
         credentials: 'include',
         signal: AbortSignal.timeout(12000),
       });
-      if (!res.ok) throw new Error(res.status === 401 ? 'auth' : 'Failed to load profile');
+      if (!res.ok) throw new Error(res.status === 401 ? 'auth' : 'load_failed');
       const data = await res.json();
 
       const p = data.predictions || {};
@@ -638,7 +638,7 @@ export const ProfilePage = () => {
         return;
       }
       console.error('Profile fetch failed:', err);
-      setError('Failed to load profile. Please try again.');
+      setError('Could not load profile. Please try again.');
       setIsLoading(false);
     }
   }, [refreshUser, fetchFriends, navigate]);
@@ -677,7 +677,7 @@ export const ProfilePage = () => {
       setFavorites(prev => prev.filter(f => f.team_id !== teamId));
       toast.success('Removed from favorites');
     } catch (error) {
-      toast.error('Failed to remove favorite');
+      toast.error('Could not remove favorite. Please try again.');
     } finally {
       setRemovingFavorite(null);
     }
@@ -729,7 +729,7 @@ export const ProfilePage = () => {
             <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center mb-5">
               <AlertCircle className="w-8 h-8 text-destructive" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground mb-2">Failed to load profile</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Could not load profile</h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-sm">{error}</p>
             <Button
               onClick={fetchData}

@@ -1,3 +1,5 @@
+import { createApiError } from '@/utils/errorHandler';
+
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 let favoritesCache = null;
@@ -18,7 +20,7 @@ export const getFavoriteClubs = async () => {
   });
   if (!response.ok) {
     if (response.status === 401) return { favorites: [] };
-    throw new Error('Failed to fetch favorites');
+    throw await createApiError(response, 'Could not load favorites. Please try again.', 'getFavoriteClubs');
   }
   const data = await response.json();
   favoritesCache = data;
@@ -33,7 +35,9 @@ export const addFavoriteClub = async (teamId, teamName, teamCrest) => {
     credentials: 'include',
     body: JSON.stringify({ team_id: teamId, team_name: teamName, team_crest: teamCrest }),
   });
-  if (!response.ok) throw new Error('Failed to add favorite');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not add to favorites. Please try again.', 'addFavoriteClub');
+  }
   invalidateCache();
   return await response.json();
 };
@@ -43,7 +47,9 @@ export const removeFavoriteClub = async (teamId) => {
     method: 'DELETE',
     credentials: 'include',
   });
-  if (!response.ok) throw new Error('Failed to remove favorite');
+  if (!response.ok) {
+    throw await createApiError(response, 'Could not remove from favorites. Please try again.', 'removeFavoriteClub');
+  }
   invalidateCache();
   return await response.json();
 };

@@ -112,10 +112,17 @@ export const RegisterPage = () => {
       });
       navigate('/choose-nickname');
     } catch (error) {
-      toast.error('Registration failed', {
-        description: error.message,
-      });
-      setErrors({ form: error.message });
+      if (error.code === 'EMAIL_EXISTS') {
+        setErrors({ email: error.message, emailExists: true });
+        toast.error('Email already registered', {
+          description: 'This email is already in use. Try logging in instead.',
+        });
+      } else {
+        toast.error('Registration failed', {
+          description: error.message,
+        });
+        setErrors({ form: error.message });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -189,7 +196,17 @@ export const RegisterPage = () => {
                     />
                   </div>
                   {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email}</p>
+                    <p className="text-sm text-destructive">
+                      {errors.email}
+                      {errors.emailExists && (
+                        <>
+                          {' '}
+                          <Link to="/login" className="text-primary hover:underline font-medium">
+                            Go to Login
+                          </Link>
+                        </>
+                      )}
+                    </p>
                   )}
                 </div>
 

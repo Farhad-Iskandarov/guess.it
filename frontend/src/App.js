@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { FriendsProvider } from "@/lib/FriendsContext";
 import { MessagesProvider } from "@/lib/MessagesContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RegisterPage } from "@/pages/RegisterPage";
@@ -212,14 +213,14 @@ function AppRouter() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/choose-nickname" element={<ChooseNicknamePage />} />
       <Route path="/my-predictions" element={<ProtectedRoute><MyPredictionsPage /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ErrorBoundary variant="section" label="Profile" testId="profile-error-fallback"><ProfilePage /></ErrorBoundary></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/friends" element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><GuestProfilePage /></ProtectedRoute>} />
       <Route path="/itguess/admin/login" element={<AdminLoginPage />} />
-      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
-      <Route path="/admin/*" element={<AdminRoute><AdminPage /></AdminRoute>} />
+      <Route path="/admin" element={<AdminRoute><ErrorBoundary variant="section" label="Admin" testId="admin-error-fallback"><AdminPage /></ErrorBoundary></AdminRoute>} />
+      <Route path="/admin/*" element={<AdminRoute><ErrorBoundary variant="section" label="Admin" testId="admin-error-fallback"><AdminPage /></ErrorBoundary></AdminRoute>} />
       <Route path="/how-it-works" element={<PublicLayout><HowItWorksPage /></PublicLayout>} />
       <Route path="/leaderboard" element={<PublicLayout><LeaderboardPage /></PublicLayout>} />
       <Route path="/about" element={<PublicLayout><AboutPage /></PublicLayout>} />
@@ -228,7 +229,7 @@ function AppRouter() {
       <Route path="/contact" element={<PublicLayout><ContactPage /></PublicLayout>} />
       <Route path="/subscribe" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
       <Route path="/subscribe/success" element={<ProtectedRoute><SubscriptionSuccess /></ProtectedRoute>} />
-      <Route path="/match/:matchId" element={<PublicLayout><MatchDetailPage /></PublicLayout>} />
+      <Route path="/match/:matchId" element={<PublicLayout><ErrorBoundary variant="section" label="MatchDetail" testId="match-detail-error-fallback"><MatchDetailPage /></ErrorBoundary></PublicLayout>} />
       <Route path="/saved-matches" element={<ProtectedRoute><SavedMatchesPage /></ProtectedRoute>} />
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -267,16 +268,18 @@ function AppShell() {
 // ============ Root App ============
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <FriendsProvider>
-          <MessagesProvider>
-            <AppShell />
-            <Toaster position="bottom-right" theme="dark" richColors />
-          </MessagesProvider>
-        </FriendsProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <FriendsProvider>
+            <MessagesProvider>
+              <AppShell />
+              <Toaster position="bottom-right" theme="dark" richColors />
+            </MessagesProvider>
+          </FriendsProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

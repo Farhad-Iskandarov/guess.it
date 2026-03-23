@@ -132,6 +132,7 @@ const TABS = [
   { id: 'favorites', label: 'Favorites', icon: Star },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'error-logs', label: 'Error Logs', icon: AlertCircle },
 ];
 
 /* ============ DASHBOARD TAB ============ */
@@ -152,7 +153,7 @@ const DashboardTab = () => {
   }, []);
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
-  if (!stats) return <p className="text-center text-muted-foreground py-10">Failed to load dashboard</p>;
+  if (!stats) return <p className="text-center text-muted-foreground py-10">Could not load dashboard. Please try again.</p>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300" data-testid="admin-dashboard">
@@ -2552,7 +2553,7 @@ const AnalyticsTab = () => {
   }, []);
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
-  if (!data) return <p className="text-center text-muted-foreground py-10">Failed to load analytics</p>;
+  if (!data) return <p className="text-center text-muted-foreground py-10">Could not load analytics. Please try again.</p>;
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300" data-testid="admin-analytics">
@@ -2623,7 +2624,7 @@ const SubscriptionsTab = () => {
     try {
       await api(`/subscriptions/${subId}`, { method: 'DELETE' });
       fetchSubs();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
   };
 
   return (
@@ -2719,7 +2720,7 @@ const SubPlansTab = () => {
       });
       setEditingPlan(null);
       fetchData();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
     finally { setSaving(false); }
   };
 
@@ -2731,7 +2732,7 @@ const SubPlansTab = () => {
         body: JSON.stringify({ is_active: !plan.is_active })
       });
       fetchData();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
   };
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
@@ -2875,7 +2876,7 @@ const ContactMessagesTab = () => {
     try {
       await api(`/contact-messages/${msgId}/flag`, { method: 'PUT' });
       fetchMsgs();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
   };
 
   const handleDelete = async (msgId) => {
@@ -2883,7 +2884,7 @@ const ContactMessagesTab = () => {
     try {
       await api(`/contact-messages/${msgId}`, { method: 'DELETE' });
       fetchMsgs();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
   };
 
   return (
@@ -2965,7 +2966,7 @@ const ContactSettingsTab = () => {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
     finally { setSaving(false); }
   };
 
@@ -3065,7 +3066,7 @@ const NewsTab = () => {
           return copy;
         });
       }
-    } catch (err) { alert('Image upload failed: ' + err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Image upload failed. Please try again.'); }
     finally { setUploadingIdx(null); }
   };
 
@@ -3125,7 +3126,7 @@ const NewsTab = () => {
       await api(url, { method, body: fd });
       resetForm();
       fetchNews();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
     finally { setSaving(false); }
   };
 
@@ -3134,14 +3135,14 @@ const NewsTab = () => {
     try {
       await api(`/news/${articleId}`, { method: 'DELETE' });
       fetchNews();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
   };
 
   const togglePublish = async (articleId) => {
     try {
       await api(`/news/${articleId}/toggle`, { method: 'PUT' });
       fetchNews();
-    } catch (err) { alert(err.message); }
+    } catch (err) { console.error('[Admin]', err); alert('Something went wrong. Please try again.'); }
   };
 
   return (
@@ -3212,7 +3213,7 @@ const NewsTab = () => {
                           className="max-h-48 rounded-lg object-contain" 
                         />
                       ) : (
-                        <span className="text-sm text-muted-foreground">Image failed to upload</span>
+                        <span className="text-sm text-muted-foreground">Image could not be uploaded</span>
                       )}
                     </div>
                   )}
@@ -3283,6 +3284,385 @@ const NewsTab = () => {
     </div>
   );
 };
+
+
+/* ============ ERROR LOGS TAB ============ */
+const ErrorLogsTab = () => {
+  const [logs, setLogs] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsTotal, setAlertsTotal] = useState(0);
+  const [alertsPage, setAlertsPage] = useState(1);
+  const [alertsPages, setAlertsPages] = useState(1);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('overview'); // overview | list | alerts
+  const [filters, setFilters] = useState({ search: '', route: '', resolved: '' });
+  const [expandedId, setExpandedId] = useState(null);
+
+  const api = useCallback(async (path, opts = {}) => {
+    const res = await fetch(`${API_URL}/api${path}`, { credentials: 'include', ...opts });
+    if (!res.ok) throw new Error(`${res.status}`);
+    return res.json();
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await api('/error-logs/stats');
+      setStats(data);
+    } catch { /* ignore */ }
+  }, [api]);
+
+  const fetchLogs = useCallback(async (p = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: p, limit: 15 });
+      if (filters.search) params.set('search', filters.search);
+      if (filters.route) params.set('route_filter', filters.route);
+      if (filters.resolved === 'true') params.set('resolved', 'true');
+      if (filters.resolved === 'false') params.set('resolved', 'false');
+      const data = await api(`/error-logs?${params}`);
+      setLogs(data.logs || []);
+      setTotalPages(data.pages || 1);
+      setTotal(data.total || 0);
+      setPage(p);
+    } catch { setLogs([]); }
+    finally { setLoading(false); }
+  }, [api, filters]);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { if (view === 'list') fetchLogs(1); }, [view, fetchLogs]);
+
+  const fetchAlerts = useCallback(async (p = 1) => {
+    try {
+      const data = await api(`/error-logs/alerts?page=${p}&limit=15`);
+      setAlerts(data.alerts || []);
+      setAlertsTotal(data.total || 0);
+      setAlertsPages(data.pages || 1);
+      setAlertsPage(p);
+    } catch { setAlerts([]); }
+  }, [api]);
+
+  useEffect(() => { if (view === 'alerts') fetchAlerts(1); }, [view, fetchAlerts]);
+
+  const handleAcknowledge = async (alertId) => {
+    try {
+      await api(`/error-logs/alerts/${alertId}/acknowledge`, { method: 'PATCH' });
+      fetchAlerts(alertsPage);
+    } catch { /* ignore */ }
+  };
+
+  const handleResolve = async (errorId) => {
+    try {
+      await api(`/error-logs/${errorId}/resolve`, { method: 'PATCH' });
+      fetchLogs(page);
+      fetchStats();
+    } catch { /* ignore */ }
+  };
+
+  const handleDelete = async (errorId) => {
+    if (!window.confirm('Delete this error log?')) return;
+    try {
+      await api(`/error-logs/${errorId}`, { method: 'DELETE' });
+      fetchLogs(page);
+      fetchStats();
+    } catch { /* ignore */ }
+  };
+
+  const formatDate = (iso) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return iso; }
+  };
+
+  return (
+    <div className="space-y-5" data-testid="error-logs-tab">
+      {/* View toggle */}
+      <div className="flex items-center gap-2">
+        {['overview', 'list', 'alerts'].map(v => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            data-testid={`error-logs-view-${v}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${view === v ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            {v === 'overview' ? 'Overview' : v === 'list' ? 'All Logs' : 'Spike Alerts'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Overview ── */}
+      {view === 'overview' && (
+        <div className="space-y-5">
+          {/* Stat cards */}
+          {stats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Total Errors', value: stats.total, color: 'text-foreground' },
+                { label: 'Last 24h', value: stats.last_24h, color: stats.last_24h > 0 ? 'text-red-400' : 'text-emerald-400' },
+                { label: 'Last 7 days', value: stats.last_7d, color: 'text-foreground' },
+                { label: 'Unresolved', value: stats.unresolved, color: stats.unresolved > 0 ? 'text-amber-400' : 'text-emerald-400' },
+              ].map(s => (
+                <div key={s.label} className="p-3 rounded-xl bg-card border border-border">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</p>
+                  <p className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Top recurring errors */}
+          {stats?.top_errors?.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Top Recurring Errors (7d)</h3>
+              <div className="space-y-1">
+                {stats.top_errors.map((e, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-card border border-border text-xs">
+                    <span className="font-bold text-red-400 tabular-nums w-8 text-right">{e.count}x</span>
+                    <span className="text-foreground truncate flex-1" title={e.message}>{e.message}</span>
+                    <span className="text-muted-foreground shrink-0">{formatDate(e.last_seen)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top routes */}
+          {stats?.top_routes?.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Top Routes with Errors (7d)</h3>
+              <div className="flex flex-wrap gap-2">
+                {stats.top_routes.map((r, i) => (
+                  <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/50 text-xs text-muted-foreground">
+                    <code className="text-foreground">{r.route || '/'}</code>
+                    <span className="font-bold text-red-400">{r.count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!stats && <p className="text-center text-muted-foreground text-sm py-8">Loading stats...</p>}
+          {stats && stats.total === 0 && (
+            <div className="text-center py-12">
+              <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No errors recorded yet. Looking good!</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── List view ── */}
+      {view === 'list' && (
+        <div className="space-y-3">
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              placeholder="Search error message..."
+              value={filters.search}
+              onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && fetchLogs(1)}
+              data-testid="error-logs-search"
+              className="px-3 py-1.5 rounded-lg bg-secondary/30 border border-border text-xs text-foreground placeholder:text-muted-foreground w-48 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <input
+              type="text"
+              placeholder="Filter by route..."
+              value={filters.route}
+              onChange={e => setFilters(f => ({ ...f, route: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && fetchLogs(1)}
+              data-testid="error-logs-route-filter"
+              className="px-3 py-1.5 rounded-lg bg-secondary/30 border border-border text-xs text-foreground placeholder:text-muted-foreground w-36 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <select
+              value={filters.resolved}
+              onChange={e => setFilters(f => ({ ...f, resolved: e.target.value }))}
+              data-testid="error-logs-resolved-filter"
+              className="px-3 py-1.5 rounded-lg bg-secondary/30 border border-border text-xs text-foreground w-32 focus:outline-none"
+            >
+              <option value="">All status</option>
+              <option value="false">Unresolved</option>
+              <option value="true">Resolved</option>
+            </select>
+            <button
+              onClick={() => fetchLogs(1)}
+              data-testid="error-logs-apply-filter"
+              className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+            >
+              Apply
+            </button>
+          </div>
+
+          {/* Results count */}
+          <p className="text-[10px] text-muted-foreground">{total} error{total !== 1 ? 's' : ''} found</p>
+
+          {/* Loading */}
+          {loading && <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
+
+          {/* Log rows */}
+          {!loading && logs.length === 0 && (
+            <p className="text-center text-muted-foreground text-sm py-8">No error logs match your filters.</p>
+          )}
+          {!loading && logs.map(log => (
+            <div
+              key={log.error_id}
+              className={`rounded-xl border ${log.resolved ? 'border-border/50 opacity-60' : 'border-border'} bg-card overflow-hidden`}
+              data-testid={`error-log-${log.error_id}`}
+            >
+              {/* Header row */}
+              <div
+                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-secondary/20 transition-colors"
+                onClick={() => setExpandedId(expandedId === log.error_id ? null : log.error_id)}
+              >
+                <AlertCircle className={`w-3.5 h-3.5 shrink-0 ${log.resolved ? 'text-emerald-400' : 'text-red-400'}`} />
+                <span className="text-xs text-foreground truncate flex-1" title={log.message}>{log.message}</span>
+                <code className="text-[10px] text-muted-foreground shrink-0 hidden sm:block">{log.route}</code>
+                <span className="text-[10px] text-muted-foreground shrink-0">{formatDate(log.created_at)}</span>
+                <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${expandedId === log.error_id ? 'rotate-180' : ''}`} />
+              </div>
+
+              {/* Expanded detail */}
+              {expandedId === log.error_id && (
+                <div className="px-3 pb-3 space-y-2 border-t border-border/50">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-2 text-[10px]">
+                    <div><span className="text-muted-foreground">Boundary:</span> <span className="text-foreground">{log.boundary_label}</span></div>
+                    <div><span className="text-muted-foreground">User:</span> <span className="text-foreground">{log.user_id || 'Anonymous'}</span></div>
+                    <div><span className="text-muted-foreground">Screen:</span> <span className="text-foreground">{log.screen || '—'}</span></div>
+                    <div><span className="text-muted-foreground">Language:</span> <span className="text-foreground">{log.language || '—'}</span></div>
+                  </div>
+                  {log.user_agent && (
+                    <p className="text-[10px] text-muted-foreground truncate" title={log.user_agent}>UA: {log.user_agent}</p>
+                  )}
+                  {log.stack && (
+                    <details className="text-[10px]">
+                      <summary className="text-muted-foreground cursor-pointer hover:text-foreground">Stack trace</summary>
+                      <pre className="mt-1 p-2 rounded bg-secondary/30 text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-40">{log.stack}</pre>
+                    </details>
+                  )}
+                  {log.component_stack && (
+                    <details className="text-[10px]">
+                      <summary className="text-muted-foreground cursor-pointer hover:text-foreground">Component stack</summary>
+                      <pre className="mt-1 p-2 rounded bg-secondary/30 text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-40">{log.component_stack}</pre>
+                    </details>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => handleResolve(log.error_id)}
+                      data-testid={`error-log-resolve-${log.error_id}`}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors ${log.resolved ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'}`}
+                    >
+                      {log.resolved ? 'Unresolve' : 'Mark Resolved'}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(log.error_id)}
+                      data-testid={`error-log-delete-${log.error_id}`}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center gap-2 pt-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => fetchLogs(page - 1)}
+                className="px-3 py-1 rounded-lg text-xs bg-secondary/30 text-muted-foreground disabled:opacity-30 hover:bg-secondary/50 transition-colors"
+              >
+                Prev
+              </button>
+              <span className="px-3 py-1 text-xs text-muted-foreground">{page} / {totalPages}</span>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => fetchLogs(page + 1)}
+                className="px-3 py-1 rounded-lg text-xs bg-secondary/30 text-muted-foreground disabled:opacity-30 hover:bg-secondary/50 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Spike Alerts view ── */}
+      {view === 'alerts' && (
+        <div className="space-y-3" data-testid="error-logs-alerts-view">
+          <p className="text-[10px] text-muted-foreground">
+            {alertsTotal} alert{alertsTotal !== 1 ? 's' : ''} total. Alerts trigger when {'>'}=10 errors in 5min or same error repeats 5+ times. 15min cooldown per pattern.
+          </p>
+
+          {alerts.length === 0 && (
+            <div className="text-center py-12">
+              <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No spike alerts yet. All clear!</p>
+            </div>
+          )}
+
+          {alerts.map(alert => (
+            <div
+              key={alert.alert_id}
+              className={`rounded-xl border bg-card overflow-hidden ${alert.acknowledged ? 'border-border/50 opacity-60' : 'border-amber-500/30'}`}
+              data-testid={`spike-alert-${alert.alert_id}`}
+            >
+              <div className="px-3 py-2.5">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${alert.acknowledged ? 'bg-muted-foreground' : 'bg-amber-400 animate-pulse'}`} />
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${alert.alert_type === 'volume_spike' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                    {alert.alert_type === 'volume_spike' ? 'Volume Spike' : 'Repeat Spike'}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground ml-auto">{formatDate(alert.created_at)}</span>
+                </div>
+                <p className="text-xs text-foreground font-medium mb-2">{alert.title}</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] mb-2">
+                  {alert.details?.total_errors != null && (
+                    <div><span className="text-muted-foreground">Total errors:</span> <span className="text-red-400 font-bold">{alert.details.total_errors}</span></div>
+                  )}
+                  {alert.details?.occurrences != null && (
+                    <div><span className="text-muted-foreground">Occurrences:</span> <span className="text-red-400 font-bold">{alert.details.occurrences}</span></div>
+                  )}
+                  {alert.details?.window_minutes && (
+                    <div><span className="text-muted-foreground">Window:</span> <span className="text-foreground">{alert.details.window_minutes}min</span></div>
+                  )}
+                  {alert.details?.affected_routes?.length > 0 && (
+                    <div className="col-span-2"><span className="text-muted-foreground">Routes:</span> <span className="text-foreground">{alert.details.affected_routes.join(', ')}</span></div>
+                  )}
+                  {alert.details?.error_message && (
+                    <div className="col-span-2"><span className="text-muted-foreground">Error:</span> <span className="text-foreground truncate">{alert.details.error_message}</span></div>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleAcknowledge(alert.alert_id)}
+                  data-testid={`spike-alert-ack-${alert.alert_id}`}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors ${alert.acknowledged ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'}`}
+                >
+                  {alert.acknowledged ? 'Unacknowledge' : 'Acknowledge'}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {alertsPages > 1 && (
+            <div className="flex justify-center gap-2 pt-2">
+              <button disabled={alertsPage <= 1} onClick={() => fetchAlerts(alertsPage - 1)} className="px-3 py-1 rounded-lg text-xs bg-secondary/30 text-muted-foreground disabled:opacity-30 hover:bg-secondary/50 transition-colors">Prev</button>
+              <span className="px-3 py-1 text-xs text-muted-foreground">{alertsPage} / {alertsPages}</span>
+              <button disabled={alertsPage >= alertsPages} onClick={() => fetchAlerts(alertsPage + 1)} className="px-3 py-1 rounded-lg text-xs bg-secondary/30 text-muted-foreground disabled:opacity-30 hover:bg-secondary/50 transition-colors">Next</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 /* ============ MAIN ADMIN PAGE ============ */
 export const AdminPage = () => {
@@ -3364,6 +3744,7 @@ export const AdminPage = () => {
             {activeTab === 'favorites' && <FavoritesTab />}
             {activeTab === 'notifications' && <NotificationsTab />}
             {activeTab === 'analytics' && <AnalyticsTab />}
+            {activeTab === 'error-logs' && <ErrorLogsTab />}
           </div>
         </main>
       </div>

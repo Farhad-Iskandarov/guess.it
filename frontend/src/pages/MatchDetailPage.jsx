@@ -88,7 +88,7 @@ const ExactScoreSection = ({ matchId, homeTeam, awayTeam, existingPrediction, is
         toast.success('Exact score locked!');
         if (onSaved) onSaved({ home_score: h, away_score: a });
       }
-    } catch { toast.error('Failed to save exact score'); }
+    } catch { toast.error('Could not save exact score. Please try again.'); }
     finally { setSubmitting(false); }
   };
 
@@ -180,7 +180,7 @@ const InviteFriendsSection = ({ matchId, match }) => {
         })
       });
       if (res.ok) toast.success(`Sent to ${friend.nickname}!`);
-    } catch { toast.error('Failed to send'); }
+    } catch { toast.error('Could not send message. Please try again.'); }
     finally { setSending(null); }
   };
 
@@ -391,7 +391,7 @@ export const MatchDetailPage = () => {
         loadMatch();
       } catch {
         setUserVote(prev);
-        toast.error('Failed to remove prediction');
+        toast.error('Could not remove prediction. Please try again.');
       } finally { setIsSubmitting(false); }
       return;
     }
@@ -409,7 +409,7 @@ export const MatchDetailPage = () => {
       loadMatch();
     } catch {
       setUserVote(prev);
-      toast.error('Failed to save prediction');
+      toast.error('Could not save prediction. Please try again.');
     } finally { setIsSubmitting(false); }
   };
 

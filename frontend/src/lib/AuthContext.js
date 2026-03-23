@@ -48,10 +48,25 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password, confirm_password: confirmPassword }),
     });
 
-    const data = await response.json();
+    // Check for duplicate email BEFORE parsing body — prevents "body stream already read" issues
+    if (response.status === 409) {
+      const error = new Error('This email is already registered. Please log in instead.');
+      error.code = 'EMAIL_EXISTS';
+      throw error;
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new Error('Registration failed. Please try again.');
+      }
+      throw new Error('Something went wrong. Please try again.');
+    }
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Registration failed');
+      throw new Error(data?.detail || 'Registration failed. Please try again.');
     }
 
     setUser(data.user);
@@ -105,10 +120,18 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ session_id: sessionId }),
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new Error('Google authentication failed. Please try again.');
+      }
+      throw new Error('Something went wrong. Please try again.');
+    }
 
     if (!response.ok) {
-      throw new Error(data.detail || 'Google authentication failed');
+      throw new Error('Google authentication failed. Please try again.');
     }
 
     setUser(data.user);
@@ -134,17 +157,25 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ nickname }),
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      if (!response.ok) {
+        throw new Error('Could not set nickname. Please try again.');
+      }
+      throw new Error('Something went wrong. Please try again.');
+    }
 
     if (!response.ok) {
       // Extract error message and suggestions
-      const errorDetail = data.detail;
+      const errorDetail = data?.detail;
       if (typeof errorDetail === 'object') {
-        const error = new Error(errorDetail.message || 'Failed to set nickname');
+        const error = new Error(errorDetail.message || 'Could not set nickname. Please try again.');
         error.suggestions = errorDetail.suggestions;
         throw error;
       }
-      throw new Error(errorDetail || 'Failed to set nickname');
+      throw new Error(errorDetail || 'Could not set nickname. Please try again.');
     }
 
     setUser(data.user);

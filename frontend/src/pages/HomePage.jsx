@@ -350,7 +350,7 @@ export const HomePage = () => {
         console.error('Failed to fetch matches after retries:', error);
         if (!isStale()) {
           if (!stale || !stale.matches || stale.matches.length === 0) {
-            setMatchError('Failed to load matches. Please try again.');
+            setMatchError('Could not load matches. Please try again.');
             setMatches([]);
           }
           setIsLoadingMatches(false);
@@ -478,7 +478,7 @@ export const HomePage = () => {
         toast.success('Removed from favorites', { duration: 2000 });
       }
     } catch (error) {
-      toast.error('Failed to update favorites', { description: error.message, duration: 3000 });
+      toast.error('Could not update favorites', { description: 'Please try again.', duration: 3000 });
       throw error;
     }
   }, []);
@@ -546,7 +546,7 @@ export const HomePage = () => {
         toast.success('Bookmark removed', { duration: 2000 });
       }
     } catch (error) {
-      toast.error('Failed to update bookmark', { description: error.message, duration: 3000 });
+      toast.error('Could not update bookmark', { description: 'Please try again.', duration: 3000 });
     }
   }, []);
 
