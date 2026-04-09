@@ -3,18 +3,26 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 /**
  * Hook for WebSocket-based live match updates.
  * Connects to the backend WebSocket and receives real-time match data.
+ * Calls onReconnect when the connection is re-established after a drop.
  */
-export function useLiveMatches(onMatchUpdate) {
+export function useLiveMatches(onMatchUpdate, onReconnect) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const pingTimerRef = useRef(null);
   const onMatchUpdateRef = useRef(onMatchUpdate);
+  const onReconnectRef = useRef(onReconnect);
+  const wasConnectedRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
 
-  // Keep callback ref up to date
+  // Keep callback refs up to date
   useEffect(() => {
     onMatchUpdateRef.current = onMatchUpdate;
   }, [onMatchUpdate]);
+
+  useEffect(() => {
+    onReconnectRef.current = onReconnect;
+  }, [onReconnect]);
 
   const connect = useCallback(() => {
     // Build WebSocket URL from the backend URL
@@ -36,6 +44,14 @@ export function useLiveMatches(onMatchUpdate) {
 
       ws.onopen = () => {
         setIsConnected(true);
+        reconnectAttemptRef.current = 0;
+        
+        // If this is a reconnection (was previously connected), trigger refresh
+        if (wasConnectedRef.current && onReconnectRef.current) {
+          onReconnectRef.current();
+        }
+        wasConnectedRef.current = true;
+        
         // Send ping every 25 seconds to keep connection alive
         pingTimerRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -62,20 +78,23 @@ export function useLiveMatches(onMatchUpdate) {
         if (pingTimerRef.current) {
           clearInterval(pingTimerRef.current);
         }
-        // Reconnect after 5 seconds
+        // Exponential backoff: 2s, 4s, 8s... capped at 30s
+        const delay = Math.min(2000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+        reconnectAttemptRef.current++;
         reconnectTimerRef.current = setTimeout(() => {
           connect();
-        }, 5000);
+        }, delay);
       };
 
       ws.onerror = () => {
         ws.close();
       };
     } catch (e) {
-      // Reconnect after 5 seconds
+      const delay = Math.min(2000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+      reconnectAttemptRef.current++;
       reconnectTimerRef.current = setTimeout(() => {
         connect();
-      }, 5000);
+      }, delay);
     }
   }, []);
 

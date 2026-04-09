@@ -184,9 +184,27 @@ const UserDropdownMenu = memo(({ user, onLogout }) => {
 });
 UserDropdownMenu.displayName = 'UserDropdownMenu';
 
+// =========== Highlight matched text ===========
+const HighlightText = memo(({ text, query }) => {
+  if (!query || query.length < 2) return <>{text}</>;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const idx = lowerText.indexOf(lowerQuery);
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-primary/25 text-foreground rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+});
+HighlightText.displayName = 'HighlightText';
+
 // =========== Search Result Card (compact) ===========
-const SearchResultCard = memo(({ match, onClick }) => {
+const SearchResultCard = memo(({ match, onClick, query }) => {
   const isLive = match.status === 'LIVE';
+  const isFinished = match.status === 'FINISHED';
 
   return (
     <button
@@ -196,11 +214,17 @@ const SearchResultCard = memo(({ match, onClick }) => {
     >
       {/* Competition + Status */}
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{match.competition}</span>
+        <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+          <HighlightText text={match.competition || ''} query={query} />
+        </span>
         {isLive ? (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-red-500/20 text-red-400 border border-red-500/30">
             <Radio className="w-2.5 h-2.5 animate-pulse" />
             Live
+          </span>
+        ) : isFinished ? (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-muted text-muted-foreground border border-border/40">
+            FT
           </span>
         ) : (
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-primary/10 text-primary border border-primary/20">
@@ -216,13 +240,15 @@ const SearchResultCard = memo(({ match, onClick }) => {
           {match.homeTeam.crest && (
             <img src={match.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain flex-shrink-0" />
           )}
-          <span className="text-xs font-medium text-foreground truncate">{match.homeTeam.name}</span>
+          <span className="text-xs font-medium text-foreground truncate">
+            <HighlightText text={match.homeTeam.name} query={query} />
+          </span>
         </div>
 
         {/* Time / Score */}
         <div className="flex flex-col items-center flex-shrink-0 px-2">
-          {isLive && match.score.home !== null ? (
-            <span className="text-xs font-bold text-foreground tabular-nums">
+          {(isLive || isFinished) && match.score?.home !== null ? (
+            <span className={`text-xs font-bold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
               {match.score.home} - {match.score.away}
             </span>
           ) : (
@@ -232,7 +258,9 @@ const SearchResultCard = memo(({ match, onClick }) => {
 
         {/* Away team */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span className="text-xs font-medium text-foreground truncate text-right">{match.awayTeam.name}</span>
+          <span className="text-xs font-medium text-foreground truncate text-right">
+            <HighlightText text={match.awayTeam.name} query={query} />
+          </span>
           {match.awayTeam.crest && (
             <img src={match.awayTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain flex-shrink-0" />
           )}
@@ -243,15 +271,15 @@ const SearchResultCard = memo(({ match, onClick }) => {
       <div className="flex items-center gap-1 mt-1.5">
         <div className="flex-1 flex items-center justify-center gap-1 py-0.5 rounded bg-secondary/60 border border-border/30">
           <span className="text-[9px] text-muted-foreground">1</span>
-          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes.home.count}</span>
+          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes?.home?.count ?? 0}</span>
         </div>
         <div className="flex-1 flex items-center justify-center gap-1 py-0.5 rounded bg-secondary/60 border border-border/30">
           <span className="text-[9px] text-muted-foreground">X</span>
-          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes.draw.count}</span>
+          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes?.draw?.count ?? 0}</span>
         </div>
         <div className="flex-1 flex items-center justify-center gap-1 py-0.5 rounded bg-secondary/60 border border-border/30">
           <span className="text-[9px] text-muted-foreground">2</span>
-          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes.away.count}</span>
+          <span className="text-[10px] font-semibold text-primary tabular-nums">{match.votes?.away?.count ?? 0}</span>
         </div>
       </div>
     </button>
@@ -447,7 +475,7 @@ const GlobalSearch = ({ onMatchSelect }) => {
                 {results.length} match{results.length !== 1 ? 'es' : ''} found
               </div>
               {results.map((match) => (
-                <SearchResultCard key={match.id} match={match} onClick={handleResultClick} />
+                <SearchResultCard key={match.id} match={match} onClick={handleResultClick} query={query} />
               ))}
             </div>
           )}

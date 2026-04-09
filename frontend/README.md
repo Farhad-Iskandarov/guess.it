@@ -1,31 +1,36 @@
-# Getting Started with Create React App
+# GuessIt - Football Prediction App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Overview
+GuessIt is a modern football prediction app that lets users predict match outcomes and track their prediction accuracy.
 
-## Available Scripts
+## Main Page Layout (Updated)
+Matches are **grouped by league** with league section headers:
 
-In the project directory, you can run:
+- **League Header**: [League Logo] League Name / Country Name → ">" arrow (navigate to league matches)
+- **No filter tabs** (removed: Top Matches, Popular, Top Live, Soon, Ended, Favorite)
+- **No league pills** (removed: All Matches, Live, UCL, etc.)
+- **Bell icon** (replaces bookmark) for match notifications
 
-### `npm start`
+## Match Card Design (Updated)
+The main page uses a clean, compact card layout matching the designer's reference:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **Top Row**: `Fri,10Apr` (date) | `20:45` (time) | `Starts in 3h` (countdown) + bell icon — separated from content by a thin line
+- **Teams Row**: [Large Crest] TEAM NAME (bold, uppercase) | **VS** | TEAM NAME [Large Crest]
+- **Prediction Bars**: Three bars **side by side** (3 columns) — bar on top, green label below: `1: 45%` | `X: 30%` | `2: 25%`
+- **PREDICT MATCH Button**: Full width, dark green background, green border, pill-shaped — opens Advanced Options modal (Exact Score, Smart Advice, Invite Friend, Friends Activity)
+- **No league name** displayed on the card
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Banner Section
+Horizontal scrollable carousel of image-based highlight cards:
+- Portrait orientation (3:4 aspect ratio)
+- Full image backgrounds with football action shots
+- Score overlay with team crests and scorer details
+- Snap scrolling, no auto-slide
 
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Tech Stack
+- **Frontend**: React 19, Tailwind CSS, Craco, Radix UI
+- **Backend**: FastAPI, Motor (MongoDB), Redis
+- **APIs**: football-data.org v4, Stripe
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 

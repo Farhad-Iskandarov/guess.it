@@ -1,5 +1,5 @@
 import { useState, useCallback, memo, useEffect, useRef, useMemo } from 'react';
-import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart, Bookmark } from 'lucide-react';
+import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart, Bell, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction } from '@/services/predictions';
@@ -15,6 +15,25 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
+
+// Static competition → country mapping
+const COMPETITION_COUNTRIES = {
+  'Premier League': 'England',
+  'Bundesliga': 'Germany',
+  'Serie A': 'Italy',
+  'Primera Division': 'Spain',
+  'La Liga': 'Spain',
+  'Ligue 1': 'France',
+  'UEFA Champions League': 'Europe',
+  'UEFA Europa League': 'Europe',
+  'UEFA Conference League': 'Europe',
+  'Eredivisie': 'Netherlands',
+  'Primeira Liga': 'Portugal',
+  'Liga Portugal': 'Portugal',
+  'Saudi Pro League': 'Saudi Arabia',
+  'Jupiler Pro League': 'Belgium',
+  'Super Lig': 'Turkey',
+};
 
 // ============ Status Badge ============
 const StatusBadge = memo(({ status, statusDetail, matchMinute }) => {
@@ -108,14 +127,15 @@ const PredictionLockedBanner = memo(({ lockReason }) => (
 ));
 PredictionLockedBanner.displayName = 'PredictionLockedBanner';
 
-// ============ Team Crest Image ============
-const TeamCrest = memo(({ team }) => {
+// ============ Team Crest Image (larger for new design) ============
+const TeamCrest = memo(({ team, large }) => {
+  const size = large ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-6 h-6 md:w-7 md:h-7';
   if (team.crest) {
     return (
       <img
         src={team.crest}
         alt={team.name}
-        className="w-6 h-6 md:w-7 md:h-7 rounded-full object-contain bg-secondary flex-shrink-0"
+        className={`${size} rounded-full object-contain bg-secondary flex-shrink-0`}
         onError={(e) => {
           e.target.style.display = 'none';
           e.target.nextSibling.style.display = 'flex';
@@ -180,99 +200,139 @@ const FavoriteHeart = memo(({ teamId, teamName, teamCrest, isFavorite, onToggle,
 });
 FavoriteHeart.displayName = 'FavoriteHeart';
 
-// ============ Bookmark Match Button ============
-const BookmarkMatch = memo(({ match, isBookmarked, onToggle, isAuthenticated }) => {
+// ============ Bell Notification Button (replaces Bookmark) ============
+const BellNotification = memo(({ match, isBookmarked, onToggle, isAuthenticated }) => {
   const [animating, setAnimating] = useState(false);
-  const [optimisticBookmark, setOptimisticBookmark] = useState(null);
+  const [optimistic, setOptimistic] = useState(null);
 
-  // Reset optimistic state when prop changes
-  useEffect(() => {
-    setOptimisticBookmark(null);
-  }, [isBookmarked]);
+  useEffect(() => { setOptimistic(null); }, [isBookmarked]);
 
-  if (!isAuthenticated) return null;
-
-  const displayBookmark = optimisticBookmark !== null ? optimisticBookmark : isBookmarked;
+  const display = optimistic !== null ? optimistic : isBookmarked;
 
   const handleClick = (e) => {
     e.stopPropagation();
-    const newState = !displayBookmark;
-    
-    // Immediate visual feedback
-    setOptimisticBookmark(newState);
+    if (!isAuthenticated) return;
+    const newState = !display;
+    setOptimistic(newState);
     setAnimating(true);
     setTimeout(() => setAnimating(false), 200);
-    
-    // Fire and forget - API call in background
-    onToggle(match, newState).catch(() => {
-      // Revert on error
-      setOptimisticBookmark(!newState);
-    });
+    onToggle(match, newState).catch(() => setOptimistic(!newState));
   };
 
   return (
     <button
       onClick={handleClick}
       className="flex-shrink-0 p-1 rounded-md hover:bg-muted/50 active:scale-90 transition-all duration-100"
-      data-testid={`bookmark-match-${match.id}`}
-      aria-label={displayBookmark ? 'Remove from favorite matches' : 'Add to favorite matches'}
+      data-testid={`bell-match-${match.id}`}
+      aria-label={display ? 'Remove notification' : 'Set notification'}
     >
-      <Bookmark
+      <Bell
         className={`w-4 h-4 transition-all duration-100 ${
-          displayBookmark
-            ? 'text-amber-500 fill-amber-500'
-            : 'text-muted-foreground/40 hover:text-amber-400'
+          display
+            ? 'text-amber-400 fill-amber-400'
+            : 'text-muted-foreground/50 hover:text-amber-400'
         } ${animating ? 'scale-125' : 'scale-100'}`}
       />
     </button>
   );
 });
-BookmarkMatch.displayName = 'BookmarkMatch';
+BellNotification.displayName = 'BellNotification';
 
-// ============ Vote Button ============
-const VoteButton = memo(({ type, votes, percentage, isSelected, onClick, disabled, locked }) => {
-  const labels = { home: '1', draw: 'X', away: '2' };
-  const isLocked = disabled || locked;
-
-  const handleClick = () => {
-    if (!isLocked) {
-      onClick(type);
-    }
-  };
+// ============ League Header ============
+const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry }) => {
+  const country = competitionCountry || COMPETITION_COUNTRIES[competition] || '';
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={isLocked}
-      data-selected={isSelected ? 'true' : 'false'}
-      data-testid={`vote-btn-${type}`}
-      className={`flex flex-col items-center justify-center match-vote-btn px-1.5 sm:px-2 md:px-3 py-1.5 sm:py-2 rounded-lg border ${
-        isLocked
-          ? 'opacity-40 cursor-not-allowed bg-muted border-border/30'
-          : isSelected
-            ? 'bg-primary/30 border-primary border-2 shadow-glow ring-2 ring-primary/30'
-            : 'bg-vote-inactive border-transparent hover:bg-vote-inactive-hover hover:border-border cursor-pointer active:scale-95'
-      }`}
-      style={{ transition: 'background-color 0.1s ease, border-color 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease' }}
-    >
-      <div className="flex items-center gap-0.5 sm:gap-1 mb-0.5">
-        <span className={`text-xs sm:text-sm md:text-base font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-          {labels[type]}
-        </span>
-        {isSelected && !isLocked && (
-          <span className="flex items-center justify-center w-3 h-3 sm:w-4 sm:h-4 rounded bg-primary/20">
-            <TrendingUp className="w-2 h-2 sm:w-3 sm:h-3 text-primary" />
-          </span>
+    <div className="flex items-center gap-3 py-3 px-1" data-testid={`league-header-${competition}`}>
+      {/* League Logo */}
+      <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-secondary/80 flex items-center justify-center overflow-hidden">
+        {competitionEmblem ? (
+          <img
+            src={competitionEmblem}
+            alt={competition}
+            className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+        ) : (
+          <span className="text-lg font-bold text-muted-foreground">{competition.charAt(0)}</span>
         )}
       </div>
-      <span className="text-xs sm:text-sm md:text-base font-bold text-foreground">{votes.toLocaleString()}</span>
-      <span className={`text-[10px] sm:text-xs md:text-sm ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-        {percentage}%
-      </span>
-    </button>
+      {/* League name + country */}
+      <div className="flex-1 min-w-0">
+        <h3 className="text-base sm:text-lg font-bold text-foreground truncate">{competition}</h3>
+        {country && <p className="text-xs sm:text-sm text-muted-foreground">{country}</p>}
+      </div>
+      {/* Arrow */}
+      <ChevronRight className="w-6 h-6 text-muted-foreground flex-shrink-0" />
+    </div>
   );
 });
-VoteButton.displayName = 'VoteButton';
+LeagueHeader.displayName = 'LeagueHeader';
+
+// ============ Prediction Bars (3 columns side-by-side, bar on top, label below) ============
+const PredictionBars = memo(({ votes, selectedType, onSelect, disabled, locked }) => {
+  const isLocked = disabled || locked;
+  const items = [
+    { type: 'home', label: '1', pct: votes.home.percentage },
+    { type: 'draw', label: 'X', pct: votes.draw.percentage },
+    { type: 'away', label: '2', pct: votes.away.percentage },
+  ];
+
+  return (
+    <div className="flex items-end gap-3 sm:gap-4">
+      {items.map(({ type, label, pct }) => {
+        const isSelected = selectedType === type;
+        return (
+          <button
+            key={type}
+            onClick={() => !isLocked && onSelect(type)}
+            disabled={isLocked}
+            data-testid={`vote-btn-${type}`}
+            className={`flex-1 flex flex-col items-center gap-1.5 transition-all ${
+              isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
+          >
+            {/* Bar */}
+            <div className={`w-full h-1.5 rounded-full overflow-hidden ${
+              isSelected ? 'bg-primary/30' : 'bg-muted/80'
+            }`}>
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isSelected ? 'bg-primary' : 'bg-muted-foreground/50'
+                }`}
+                style={{ width: `${Math.max(pct, 4)}%` }}
+              />
+            </div>
+            {/* Label: "1: 45%" */}
+            <span className={`text-xs sm:text-sm font-semibold tabular-nums ${
+              isSelected ? 'text-primary' : 'text-emerald-500/80'
+            }`}>
+              {label}: {pct}%
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+});
+PredictionBars.displayName = 'PredictionBars';
+
+// ============ Predict Match Button (opens Advanced modal — same as old Advance button) ============
+const PredictMatchButton = memo(({ onClick, disabled }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    data-testid="guess-it-btn"
+    className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm sm:text-base font-bold uppercase tracking-widest transition-all duration-200 ${
+      disabled
+        ? 'bg-muted/20 border-2 border-border/30 text-muted-foreground/40 cursor-not-allowed'
+        : 'bg-[#1a3a2a] border-2 border-emerald-600/50 text-white hover:bg-[#1f4533] hover:border-emerald-500/70 active:scale-[0.98]'
+    }`}
+  >
+    PREDICT MATCH
+  </button>
+));
+PredictMatchButton.displayName = 'PredictMatchButton';
 
 // ============ Countdown Timer (for meta bar) ============
 const MetaCountdown = memo(({ utcDate, matchStatus, hasPrediction }) => {
@@ -522,7 +582,7 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
 AdvanceButton.displayName = 'AdvanceButton';
 
 // ============ Advanced Options Modal ============
-import { Target, Lightbulb, UserPlus, Users, ChevronRight, X as XIcon, Search } from 'lucide-react';
+import { Target, Lightbulb, UserPlus, Users, X as XIcon, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { saveExactScorePrediction, getExactScorePrediction, getMyExactScorePredictions, deleteExactScorePrediction } from '@/services/predictions';
 import { useFriends } from '@/lib/FriendsContext';
@@ -992,12 +1052,13 @@ const AuthRequiredModal = memo(({ isOpen, onClose, onLogin, onRegister }) => (
 ));
 AuthRequiredModal.displayName = 'AuthRequiredModal';
 
-// ============ Match Row (Memoized - renders BOTH layouts, CSS controls visibility) ============
+// ============ Match Row (Clean compact card — matches reference design exactly) ============
 const MatchRow = memo(({
   match,
   currentSelection,
   savedPrediction,
   onSelectPrediction,
+  onGuessIt,
   onAdvance,
   isLoading,
   prevScores,
@@ -1008,214 +1069,121 @@ const MatchRow = memo(({
   onToggleFavoriteMatch,
   hasExactScore,
 }) => {
-  const navigate = useNavigate();
-  const displayedSelection = savedPrediction || null;
+  const displayedSelection = savedPrediction || currentSelection || null;
   const isLocked = match.predictionLocked;
+  const isLive = match.status === 'LIVE' || match.status === 'IN_PLAY';
+  const isFinished = match.status === 'FINISHED';
 
-  const getMostPicked = () => {
-    const v = match.votes;
-    if (match.totalVotes === 0) return null;
-    if (v.home.percentage >= v.draw.percentage && v.home.percentage >= v.away.percentage) return 'home';
-    if (v.draw.percentage >= v.home.percentage && v.draw.percentage >= v.away.percentage) return 'draw';
-    return 'away';
+  // Format date for top row: "Fri,10Apr"
+  const getDateStr = () => {
+    if (!match.utcDate) return '';
+    try {
+      const dt = new Date(match.utcDate);
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[dt.getDay()]},${String(dt.getDate()).padStart(2, '0')}${months[dt.getMonth()]}`;
+    } catch { return ''; }
   };
 
-  const mostPicked = getMostPicked();
-  const mostPickedLabel = !mostPicked ? '-' :
-    mostPicked === 'home' ? match.homeTeam.shortName || 'Home' : mostPicked === 'away' ? match.awayTeam.shortName || 'Away' : 'Draw';
-
-  const hasSavedPrediction = !!savedPrediction;
-  const hasAnyPrediction = hasSavedPrediction || hasExactScore;
+  // Format time: "20:45"
+  const getTimeStr = () => {
+    if (!match.utcDate) return '';
+    try {
+      return new Date(match.utcDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch { return ''; }
+  };
 
   return (
     <div
-      className={`match-row-card rounded-xl border overflow-hidden ${
-        match.status === 'LIVE'
-          ? 'live-match-card'
-          : hasExactScore
-            ? 'bg-amber-500/[0.06] border-amber-500/25 hover:border-amber-500/40'
-            : hasSavedPrediction
-              ? 'bg-emerald-500/[0.06] border-emerald-500/25 hover:border-emerald-500/40'
-              : 'bg-card/50 hover:bg-card border-border/50 hover:border-border'
+      className={`rounded-xl border overflow-hidden transition-colors duration-200 ${
+        isLive ? 'bg-card border-red-500/30' : 'bg-card border-border/50 hover:border-border'
       }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
-      style={{ contain: 'layout style', transition: 'background-color 0.2s ease, border-color 0.2s ease' }}
     >
-      {/* Match Meta - shared between both views */}
-      <div className="match-row-meta flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-muted-foreground flex-wrap">
-        <StatusBadge status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
-        {match.status === 'NOT_STARTED' && (
-          <span className="match-row-datetime whitespace-nowrap">{formatLocalDateTime(match.utcDate)}</span>
-        )}
-        <span className="text-border hidden sm:inline">|</span>
-        <span className="truncate">{match.competition}</span>
-        <MetaCountdown utcDate={match.utcDate} matchStatus={match.status} hasPrediction={hasAnyPrediction} />
-        <BookmarkMatch
-          match={match}
-          isBookmarked={favoriteMatchIds?.has(match.id)}
-          onToggle={onToggleFavoriteMatch}
-          isAuthenticated={isAuthenticated}
+      <div className="p-4 sm:p-5 space-y-4">
+
+        {/* === TOP ROW: Date | Time | Countdown + Bell === */}
+        <div className="flex items-center justify-between text-sm text-muted-foreground pb-3 border-b border-border/40">
+          <span className="font-medium">
+            {isLive ? (
+              <StatusBadge status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
+            ) : isFinished ? (
+              <StatusBadge status={match.status} statusDetail={match.statusDetail} />
+            ) : (
+              getDateStr()
+            )}
+          </span>
+          <span className="font-semibold text-foreground">
+            {isLive || isFinished ? '' : getTimeStr()}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <MetaCountdown utcDate={match.utcDate} matchStatus={match.status} hasPrediction={!!savedPrediction || hasExactScore} />
+            <BellNotification
+              match={match}
+              isBookmarked={favoriteMatchIds?.has(match.id)}
+              onToggle={onToggleFavoriteMatch}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
+        </div>
+
+        {/* === TEAMS ROW: Crest Name  VS  Name Crest === */}
+        <div className="flex items-center justify-between gap-2 py-1">
+          {/* Home team */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            <TeamCrest team={match.homeTeam} large />
+            <span className="text-sm sm:text-base font-bold text-foreground uppercase leading-tight">
+              {match.homeTeam.shortName || match.homeTeam.name}
+            </span>
+          </div>
+
+          {/* Score or VS */}
+          <div className="flex-shrink-0 px-2 sm:px-4">
+            {(isLive || isFinished) && match.score?.home !== null ? (
+              <div className="flex items-center gap-1.5">
+                <span className={`text-xl sm:text-2xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
+                  {match.score.home}
+                </span>
+                <span className="text-base text-muted-foreground font-medium">-</span>
+                <span className={`text-xl sm:text-2xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
+                  {match.score.away}
+                </span>
+              </div>
+            ) : (
+              <span className="text-base sm:text-lg font-bold text-muted-foreground uppercase tracking-widest">VS</span>
+            )}
+          </div>
+
+          {/* Away team */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 justify-end">
+            <span className="text-sm sm:text-base font-bold text-foreground uppercase leading-tight text-right">
+              {match.awayTeam.shortName || match.awayTeam.name}
+            </span>
+            <TeamCrest team={match.awayTeam} large />
+          </div>
+        </div>
+
+        {/* === PREDICTION BARS (3 columns side by side) === */}
+        <PredictionBars
+          votes={match.votes}
+          selectedType={displayedSelection}
+          onSelect={(type) => onSelectPrediction(match.id, type)}
+          disabled={isLoading || hasExactScore}
+          locked={isLocked}
         />
-      </div>
 
-      {/* Locked Banner */}
-      {isLocked && (
-        <div className="mb-2">
-          <div
-            className={`flex items-center gap-1.5 py-1.5 rounded-lg text-xs font-medium ${
-              match.status === 'LIVE'
-                ? 'live-locked-banner px-3 w-fit'
-                : 'bg-destructive/10 border border-destructive/20 text-destructive px-3'
-            }`}
-            data-testid="prediction-locked"
-          >
-            <Lock className="w-3 h-3" />
-            <span>{match.lockReason || 'Prediction closed'}</span>
-          </div>
-        </div>
-      )}
-
-      {/* ======= LIST VIEW LAYOUT ======= */}
-      <div className="match-row-list-layout">
-        <div className="flex items-center gap-3 md:gap-4">
-          {/* Left: Team names — clickable to open match detail */}
-          <div
-            className="flex flex-col gap-0 min-w-0 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={() => navigate(`/match/${match.id}`)}
-            data-testid={`match-card-link-${match.id}`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-home">1</span>
-              <TeamCrest team={match.homeTeam} />
-              <span className="text-sm md:text-base font-medium text-foreground truncate">
-                {match.homeTeam.name}
-              </span>
-              <FavoriteHeart
-                teamId={match.homeTeam.id}
-                teamName={match.homeTeam.name}
-                teamCrest={match.homeTeam.crest}
-                isFavorite={favoriteTeamIds?.has(match.homeTeam.id)}
-                onToggle={onToggleFavorite}
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
-            {match.status === 'NOT_STARTED' && (
-              <div className="flex items-center justify-center py-0.5">
-                <span className="text-[11px] font-bold text-muted-foreground/60 uppercase tracking-widest" data-testid="vs-label">vs</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0" data-testid="team-number-away">2</span>
-              <TeamCrest team={match.awayTeam} />
-              <span className="text-sm md:text-base font-medium text-foreground truncate">
-                {match.awayTeam.name}
-              </span>
-              <FavoriteHeart
-                teamId={match.awayTeam.id}
-                teamName={match.awayTeam.name}
-                teamCrest={match.awayTeam.crest}
-                isFavorite={favoriteTeamIds?.has(match.awayTeam.id)}
-                onToggle={onToggleFavorite}
-                isAuthenticated={isAuthenticated}
-              />
-            </div>
-          </div>
-          {/* Center: Score (only when match has started) */}
-          {match.status !== 'NOT_STARTED' && (
-            <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
-          )}
-          {/* Right: Vote buttons + Advance button */}
-          <div className="flex items-center gap-1 md:gap-2">
-            <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
-            <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
-            <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
-          </div>
-          <div className="flex items-center gap-1 md:gap-2">
-            <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
-          </div>
-        </div>
-      </div>
-
-      {/* ======= GRID VIEW LAYOUT ======= */}
-      <div className="match-row-grid-layout">
-        <div className="space-y-2.5">
-          {/* Teams + Score row */}
-          <div className="flex items-center">
-            <div
-              className="flex flex-col gap-0 min-w-0 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => navigate(`/match/${match.id}`)}
-              data-testid={`match-grid-link-${match.id}`}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-home">1</span>
-                <TeamCrest team={match.homeTeam} />
-                <span className="text-xs font-medium text-foreground truncate">{match.homeTeam.name}</span>
-                <FavoriteHeart
-                  teamId={match.homeTeam.id}
-                  teamName={match.homeTeam.name}
-                  teamCrest={match.homeTeam.crest}
-                  isFavorite={favoriteTeamIds?.has(match.homeTeam.id)}
-                  onToggle={onToggleFavorite}
-                  isAuthenticated={isAuthenticated}
-                />
-              </div>
-              {match.status === 'NOT_STARTED' && (
-                <div className="flex items-center justify-center py-0.5">
-                  <span className="text-[11px] font-bold text-muted-foreground/60 uppercase tracking-widest" data-testid="vs-label">vs</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid="team-number-away">2</span>
-                <TeamCrest team={match.awayTeam} />
-                <span className="text-xs font-medium text-foreground truncate">{match.awayTeam.name}</span>
-                <FavoriteHeart
-                  teamId={match.awayTeam.id}
-                  teamName={match.awayTeam.name}
-                  teamCrest={match.awayTeam.crest}
-                  isFavorite={favoriteTeamIds?.has(match.awayTeam.id)}
-                  onToggle={onToggleFavorite}
-                  isAuthenticated={isAuthenticated}
-                />
-              </div>
-            </div>
-            {match.status !== 'NOT_STARTED' && (
-              <ScoreDisplay score={match.score} status={match.status} prevScore={prevScores?.[match.id]} matchMinute={match.matchMinute} />
-            )}
-          </div>
-          {/* Vote + Advance button — stacked on mobile */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
-            <div className="flex items-center gap-1 flex-1">
-              <VoteButton type="home" votes={match.votes.home.count} percentage={match.votes.home.percentage} isSelected={displayedSelection === 'home'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
-              <VoteButton type="draw" votes={match.votes.draw.count} percentage={match.votes.draw.percentage} isSelected={displayedSelection === 'draw'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
-              <VoteButton type="away" votes={match.votes.away.count} percentage={match.votes.away.percentage} isSelected={displayedSelection === 'away'} onClick={(type) => onSelectPrediction(match.id, type)} disabled={isLoading || hasExactScore} locked={isLocked} />
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <AdvanceButton onClick={() => onAdvance(match.id)} disabled={isLoading || isLocked} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer Stats - shared */}
-      <div className="match-row-footer flex items-center gap-2 sm:gap-3 pt-2 sm:pt-2.5 border-t border-border/30 flex-wrap text-[10px] sm:text-xs">
-        <span className="text-muted-foreground">
-          Total votes: <span className="text-foreground font-medium">{match.totalVotes.toLocaleString()}</span>
-        </span>
-        <span className="text-muted-foreground">
-          Most picked: <span className="text-primary font-medium">{mostPickedLabel}</span>
-        </span>
-        {hasSavedPrediction && (
-          <span className="text-primary font-medium flex items-center gap-1">
-            <Check className="w-3 h-3" />
-            Pick: {savedPrediction === 'home' ? '1' : savedPrediction === 'draw' ? 'X' : '2'}
-          </span>
+        {/* === PREDICT MATCH BUTTON (opens Advanced modal) === */}
+        {!isLocked && (
+          <PredictMatchButton
+            onClick={() => onAdvance(match.id)}
+            disabled={isLocked}
+          />
         )}
-        {hasExactScore && (
-          <span className="text-amber-500 font-medium flex items-center gap-1">
-            <Check className="w-3 h-3" />
-            Exact Score
-          </span>
+
+        {/* Locked banner */}
+        {isLocked && (
+          <PredictionLockedBanner lockReason={match.lockReason} />
         )}
       </div>
     </div>
@@ -1262,6 +1230,17 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     setPrevScores(oldMap);
     prevMatchesRef.current = matches;
   }, [matches]);
+
+  // Just select locally (no save to server) — used by prediction bars
+  const handleLocalSelect = useCallback((matchId, prediction) => {
+    const currentSaved = savedPredictions[matchId];
+    // If tapping the same option that's already saved → deselect
+    if (currentSaved === prediction) {
+      setCurrentSelections((prev) => ({ ...prev, [matchId]: null }));
+      return;
+    }
+    setCurrentSelections((prev) => ({ ...prev, [matchId]: prediction }));
+  }, [savedPredictions]);
 
   const handleSelectPrediction = useCallback(async (matchId, prediction) => {
     const currentSaved = savedPredictions[matchId];
@@ -1460,51 +1439,56 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     setPendingPrediction(null);
   }, []);
 
-  // Filter only for live filter - memoized for performance
-  const displayMatches = useMemo(
-    () => activeLeague === 'live' ? matches.filter((m) => m.status === 'LIVE') : matches,
-    [matches, activeLeague]
-  );
+  // Group matches by competition for league sections
+  const groupedMatches = useMemo(() => {
+    const groups = {};
+    const allMatches = matches || [];
+    
+    allMatches.forEach((match) => {
+      const comp = match.competition || 'Other';
+      if (!groups[comp]) {
+        groups[comp] = {
+          competition: comp,
+          competitionEmblem: match.competitionEmblem || '',
+          competitionCountry: match.competitionCountry || '',
+          matches: [],
+        };
+      }
+      groups[comp].matches.push(match);
+    });
 
-  // Separate live matches for the dedicated section (only when showing "all" or specific league, not "live" filter) - memoized
-  const liveMatches = useMemo(
-    () => activeLeague !== 'live' ? displayMatches.filter((m) => m.status === 'LIVE') : [],
-    [displayMatches, activeLeague]
-  );
-  const nonLiveMatches = useMemo(
-    () => activeLeague !== 'live' ? displayMatches.filter((m) => m.status !== 'LIVE') : displayMatches,
-    [displayMatches, activeLeague]
-  );
+    // Sort groups: leagues with live matches first, then alphabetically
+    return Object.values(groups).sort((a, b) => {
+      const aHasLive = a.matches.some(m => m.status === 'LIVE');
+      const bHasLive = b.matches.some(m => m.status === 'LIVE');
+      if (aHasLive && !bHasLive) return -1;
+      if (!aHasLive && bHasLive) return 1;
+      return a.competition.localeCompare(b.competition);
+    });
+  }, [matches]);
 
   return (
     <>
-      <div className="mt-4 sm:mt-6">
-        {/* Live Matches Section */}
-        {liveMatches.length > 0 && (
-          <div className="mb-6 sm:mb-8" data-testid="live-matches-section">
-            <div className="flex items-center gap-2 mb-3 sm:mb-4">
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                </span>
-                <h3 className="text-base sm:text-lg font-semibold text-foreground" data-testid="live-section-title">Live Matches</h3>
-              </div>
-              <span className="text-xs text-muted-foreground">({liveMatches.length})</span>
-            </div>
-            <div
-              ref={containerRef1}
-              className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
-              data-testid="live-match-list-container"
-              data-view-mode={viewMode}
-            >
-              {liveMatches.map((match) => (
+      <div className="mt-4 sm:mt-6 space-y-6" data-testid="match-list-container">
+        {groupedMatches.map((group) => (
+          <div key={group.competition} data-testid={`league-section-${group.competition}`}>
+            {/* League Header */}
+            <LeagueHeader
+              competition={group.competition}
+              competitionEmblem={group.competitionEmblem}
+              competitionCountry={group.competitionCountry}
+            />
+
+            {/* Matches under this league */}
+            <div className="space-y-3 mt-1">
+              {group.matches.map((match) => (
                 <MatchRow
                   key={match.id}
                   match={match}
                   currentSelection={currentSelections[match.id]}
                   savedPrediction={savedPredictions[match.id]}
-                  onSelectPrediction={handleSelectPrediction}
+                  onSelectPrediction={handleLocalSelect}
+                  onGuessIt={handleGuessIt}
                   onAdvance={handleAdvance}
                   isLoading={loadingMatches[match.id]}
                   prevScores={prevScores}
@@ -1518,40 +1502,11 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               ))}
             </div>
           </div>
-        )}
+        ))}
 
-        {/* All Matches Section */}
-        <h3 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">
-          {activeLeague === 'live' ? 'Live Matches' : 'All Matches'}
-        </h3>
-        <div
-          ref={containerRef2}
-          className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}
-          data-testid="match-list-container"
-          data-view-mode={viewMode}
-        >
-          {nonLiveMatches.map((match) => (
-            <MatchRow
-              key={match.id}
-              match={match}
-              currentSelection={currentSelections[match.id]}
-              savedPrediction={savedPredictions[match.id]}
-              onSelectPrediction={handleSelectPrediction}
-              onAdvance={handleAdvance}
-              isLoading={loadingMatches[match.id]}
-              prevScores={prevScores}
-              favoriteTeamIds={favoriteTeamIds}
-              onToggleFavorite={onToggleFavorite}
-              isAuthenticated={isAuthenticated}
-              favoriteMatchIds={favoriteMatchIds}
-              onToggleFavoriteMatch={onToggleFavoriteMatch}
-              hasExactScore={exactScoreMatchIds.has(match.id)}
-            />
-          ))}
-        </div>
-        {nonLiveMatches.length === 0 && liveMatches.length === 0 && (
+        {groupedMatches.length === 0 && (
           <div className="text-center py-8 text-muted-foreground" data-testid="no-matches-in-list">
-            No matches to display for this filter.
+            No matches to display.
           </div>
         )}
       </div>

@@ -253,31 +253,49 @@ export const mockUser = {
 export const mockBannerSlides = [
   {
     id: 1,
-    headline: "Predict Football",
-    highlightedText: "Matches!",
-    subtitle: "Join football fans in predicting match outcomes and events.",
-    ctaText: "Get Started",
-    image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800&q=80",
-    badge: "Guessd.app"
+    image: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&h=800&fit=crop&q=80",
+    score: "0-2",
+    homeCrest: "https://crests.football-data.org/58.png",
+    awayCrest: "https://crests.football-data.org/57.png",
+    details: ["47' L. Trossard", "77' T. Partey"],
+    badge: null,
   },
   {
     id: 2,
-    headline: "Win Bragging",
-    highlightedText: "Rights!",
-    subtitle: "Compete with friends and show off your prediction skills.",
-    ctaText: "Join Now",
-    image: "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?w=800&q=80",
-    badge: "Free to Play"
+    image: "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?w=600&h=800&fit=crop&q=80",
+    score: "1-2",
+    homeCrest: "https://crests.football-data.org/77.png",
+    awayCrest: "https://crests.football-data.org/81.png",
+    details: ["11' Borja V.", "34' R. Araujo", "89' F. de Jong"],
+    badge: null,
   },
   {
     id: 3,
-    headline: "Track Your",
-    highlightedText: "Stats!",
-    subtitle: "See your prediction accuracy and climb the leaderboards.",
-    ctaText: "View Stats",
-    image: "https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800&q=80",
-    badge: "Leaderboards"
-  }
+    image: "https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=600&h=800&fit=crop&q=80",
+    score: "3-1",
+    homeCrest: "https://crests.football-data.org/5.png",
+    awayCrest: "https://crests.football-data.org/524.png",
+    details: ["12' Vinicius Jr.", "55' Bellingham", "78' Rodrygo"],
+    badge: null,
+  },
+  {
+    id: 4,
+    image: "https://images.unsplash.com/photo-1551384732-fb4f003640e4?w=600&h=800&fit=crop&q=80",
+    score: "2-0",
+    homeCrest: "https://crests.football-data.org/64.png",
+    awayCrest: "https://crests.football-data.org/73.png",
+    details: ["23' Salah", "67' Diaz"],
+    badge: null,
+  },
+  {
+    id: 5,
+    image: "https://images.unsplash.com/photo-1600985366045-c20ec2d3298a?w=600&h=800&fit=crop&q=80",
+    score: "1-1",
+    homeCrest: "https://crests.football-data.org/108.png",
+    awayCrest: "https://crests.football-data.org/113.png",
+    details: ["32' Lautaro", "88' Leao"],
+    badge: null,
+  },
 ];
 
 // Team logo mapping using country flags or team colors

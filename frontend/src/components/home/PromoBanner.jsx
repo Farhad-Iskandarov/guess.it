@@ -1,215 +1,146 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRef, useCallback, memo } from 'react';
 
-// Memoized slide content to prevent unnecessary re-renders
-const SlideContent = memo(({ slide }) => (
-  <div className="max-w-md">
-    {/* Badge */}
-    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#22c55e]/20 border border-[#22c55e]/30 mb-4">
-      <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
-      <span className="text-sm font-medium text-[#22c55e]">{slide.badge}</span>
+/**
+ * Horizontal scrollable image-card carousel for the banner section.
+ * Each card is image-based with a minimal score/label overlay at the bottom.
+ * - Swipe on mobile, drag or scroll on desktop
+ * - Snap scrolling
+ * - Partial next card visible to hint scrollability
+ * - No auto-slide
+ */
+
+const HighlightCard = memo(({ card }) => (
+  <div
+    className="highlight-card flex-shrink-0 relative overflow-hidden rounded-2xl select-none"
+    style={{
+      width: 'clamp(155px, calc(40vw - 20px), 260px)',
+      aspectRatio: '3/4',
+      scrollSnapAlign: 'start',
+    }}
+    data-testid={`banner-card-${card.id}`}
+  >
+    {/* Full image background */}
+    <img
+      src={card.image}
+      alt={card.label || ''}
+      className="absolute inset-0 w-full h-full object-cover"
+      loading="lazy"
+      draggable={false}
+    />
+
+    {/* Bottom gradient overlay */}
+    <div
+      className="absolute inset-0"
+      style={{
+        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 35%, transparent 60%)',
+      }}
+    />
+
+    {/* Bottom content overlay */}
+    <div className="absolute bottom-0 left-0 right-0 p-2.5 sm:p-3.5 flex flex-col gap-1">
+      {/* Score row with team crests */}
+      {card.score && (
+        <div className="flex items-center justify-center gap-1.5">
+          {card.homeCrest && (
+            <img src={card.homeCrest} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-contain bg-white/10 p-0.5" />
+          )}
+          <span className="text-white text-base sm:text-xl font-extrabold tracking-wider tabular-nums">
+            {card.score}
+          </span>
+          {card.awayCrest && (
+            <img src={card.awayCrest} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-full object-contain bg-white/10 p-0.5" />
+          )}
+        </div>
+      )}
+
+      {/* Scorer names or short label */}
+      {card.details && (
+        <div className="flex flex-col items-center gap-0">
+          {card.details.map((line, i) => (
+            <span key={i} className="text-[9px] sm:text-[11px] text-gray-300 font-medium truncate max-w-full text-center leading-tight">
+              {line}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Fallback: just a label if no score */}
+      {!card.score && card.label && (
+        <span className="text-white text-xs sm:text-sm font-bold text-center">
+          {card.label}
+        </span>
+      )}
     </div>
 
-    {/* Headline - Fixed colors that don't change with theme */}
-    <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-3 leading-tight">
-      <span className="text-white">{slide.headline} </span>
-      <span className="text-[#facc15]">{slide.highlightedText}</span>
-    </h1>
-
-    {/* Subtitle - Fixed color */}
-    <p className="text-gray-300 text-base md:text-lg mb-6 leading-relaxed">
-      {slide.subtitle}
-    </p>
-
-    {/* CTA Button - Fixed yellow color */}
-    <Button 
-      className="bg-[#facc15] hover:bg-[#fbbf24] text-[#1a1a1a] font-semibold px-8 py-3 h-auto rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-    >
-      {slide.ctaText}
-    </Button>
+    {/* Optional top-right badge */}
+    {card.badge && (
+      <div className="absolute top-2 right-2 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center border border-white/10">
+        <span className="text-[8px] sm:text-[9px] text-yellow-400 font-bold">{card.badge}</span>
+      </div>
+    )}
   </div>
 ));
-
-SlideContent.displayName = 'SlideContent';
-
-// Memoized navigation button
-const NavButton = memo(({ direction, onClick }) => (
-  <button
-    onClick={onClick}
-    className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-black/40 hover:bg-black/60 active:bg-black/70 text-white z-20"
-    style={{
-      [direction === 'prev' ? 'left' : 'right']: '0.5rem',
-      transition: 'background-color 0.2s ease',
-    }}
-    aria-label={`${direction === 'prev' ? 'Previous' : 'Next'} slide`}
-    data-testid={`banner-${direction}`}
-  >
-    {direction === 'prev' ? (
-      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-    ) : (
-      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-    )}
-  </button>
-));
-
-NavButton.displayName = 'NavButton';
-
-// Memoized dot indicator
-const DotIndicator = memo(({ index, isActive, onClick }) => (
-  <button
-    onClick={() => onClick(index)}
-    className={`h-2 rounded-full ${
-      isActive
-        ? 'w-6 bg-[#facc15] dot-active'
-        : 'w-2 bg-white/30 hover:bg-white/50'
-    }`}
-    style={{ transition: 'width 0.3s ease, background-color 0.3s ease' }}
-    aria-label={`Go to slide ${index + 1}`}
-  />
-));
-
-DotIndicator.displayName = 'DotIndicator';
+HighlightCard.displayName = 'HighlightCard';
 
 export const PromoBanner = ({ slides }) => {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const scrollRef = useRef(null);
 
-  // Auto-advance slides
-  useEffect(() => {
-    if (!isAutoPlaying) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [isAutoPlaying, slides.length]);
+  // Drag-to-scroll for desktop
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const scrollLeft = useRef(0);
 
-  const goToSlide = useCallback((index) => {
-    setCurrentSlide(index);
-    setIsAutoPlaying(false);
-    setTimeout(() => setIsAutoPlaying(true), 10000);
+  const onMouseDown = useCallback((e) => {
+    isDragging.current = true;
+    startX.current = e.pageX - scrollRef.current.offsetLeft;
+    scrollLeft.current = scrollRef.current.scrollLeft;
+    scrollRef.current.style.cursor = 'grabbing';
+    scrollRef.current.style.scrollSnapType = 'none';
   }, []);
 
-  const nextSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev + 1) % slides.length);
-    setIsAutoPlaying(false);
-    setTimeout(() => setIsAutoPlaying(true), 10000);
-  }, [slides.length]);
-
-  const prevSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
-    setIsAutoPlaying(false);
-    setTimeout(() => setIsAutoPlaying(true), 10000);
-  }, [slides.length]);
-
-  // Touch / Swipe / Mouse drag support for carousel
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
-
-  const handleTouchStart = useCallback((e) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
+  const onMouseMove = useCallback((e) => {
+    if (!isDragging.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX.current) * 1.2;
+    scrollRef.current.scrollLeft = scrollLeft.current - walk;
   }, []);
 
-  const handleTouchEnd = useCallback((e) => {
-    if (touchStartX.current === null) return;
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
-    const deltaX = endX - touchStartX.current;
-    const deltaY = endY - touchStartY.current;
-    // Trigger swipe if horizontal > 40px and larger than vertical
-    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      if (deltaX < 0) nextSlide();
-      else prevSlide();
-    }
-    touchStartX.current = null;
-    touchStartY.current = null;
-  }, [nextSlide, prevSlide]);
-
-  const handleMouseDown = useCallback((e) => {
-    touchStartX.current = e.clientX;
-    touchStartY.current = e.clientY;
+  const onMouseUpOrLeave = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    scrollRef.current.style.cursor = 'grab';
+    scrollRef.current.style.scrollSnapType = 'x mandatory';
   }, []);
-
-  const handleMouseUp = useCallback((e) => {
-    if (touchStartX.current === null) return;
-    const deltaX = e.clientX - touchStartX.current;
-    const deltaY = e.clientY - touchStartY.current;
-    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      if (deltaX < 0) nextSlide();
-      else prevSlide();
-    }
-    touchStartX.current = null;
-    touchStartY.current = null;
-  }, [nextSlide, prevSlide]);
 
   return (
-    <div
-      className="relative w-full overflow-hidden rounded-xl select-none"
-      data-theme-independent="true"
-      data-testid="promo-banner"
-      style={{ cursor: 'grab', touchAction: 'pan-y' }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-    >
-      {/* Fixed-height container for all slides */}
-      <div className="promo-banner-slides" style={{ position: 'relative', width: '100%', height: '100%' }}>
-        {slides.map((slide, index) => (
-          <div
-            key={slide.id}
-            className="promo-banner-slide"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              opacity: index === currentSlide ? 1 : 0,
-              transition: 'opacity 0.7s ease-in-out',
-              pointerEvents: index === currentSlide ? 'auto' : 'none',
-              zIndex: index === currentSlide ? 1 : 0,
-            }}
-          >
-            {/* Background image - fixed size, object-fit cover */}
-            <img
-              src={slide.image}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 w-full h-full object-cover"
-              loading={index === 0 ? 'eager' : 'lazy'}
-              draggable={false}
-            />
-            {/* Dark gradient overlay */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(to right, rgba(20, 20, 20, 0.95) 0%, rgba(20, 20, 20, 0.7) 50%, rgba(20, 20, 20, 0.3) 100%)',
-              }}
-            />
-            {/* Content */}
-            <div className="absolute inset-0 flex items-center z-10">
-              <div className="container mx-auto px-4 sm:px-8 md:pl-[4.5rem] md:pr-10">
-                <SlideContent slide={slide} />
-              </div>
-            </div>
-          </div>
+    <div className="relative w-full" data-testid="promo-banner">
+      <div
+        ref={scrollRef}
+        className="flex gap-3 overflow-x-auto pb-2 px-1"
+        style={{
+          scrollSnapType: 'x mandatory',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          cursor: 'grab',
+        }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUpOrLeave}
+        onMouseLeave={onMouseUpOrLeave}
+      >
+        {slides.map((card) => (
+          <HighlightCard key={card.id} card={card} />
         ))}
       </div>
 
-      {/* Navigation Arrows */}
-      <NavButton direction="prev" onClick={prevSlide} />
-      <NavButton direction="next" onClick={nextSlide} />
-
-      {/* Carousel Dots */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
-        {slides.map((_, index) => (
-          <DotIndicator
-            key={index}
-            index={index}
-            isActive={index === currentSlide}
-            onClick={goToSlide}
-          />
-        ))}
-      </div>
+      {/* Hide scrollbar */}
+      <style>{`
+        [data-testid="promo-banner"] div::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   );
 };

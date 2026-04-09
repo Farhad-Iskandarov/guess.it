@@ -1,0 +1,201 @@
+{
+  "total_tests": 9,
+  "passed_tests": 9,
+  "failed_tests": 0,
+  "success_rate": 100.0,
+  "test_results": [
+    {
+      "test_name": "Health Check Endpoint",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:13.665920",
+      "details": {
+        "status_code": 200,
+        "response": {
+          "status": "healthy",
+          "timestamp": "2026-04-09T23:03:13.649349+00:00"
+        }
+      }
+    },
+    {
+      "test_name": "Root API Endpoint",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:13.831864",
+      "details": {
+        "status_code": 200,
+        "response": {
+          "message": "GuessIt API is running"
+        }
+      }
+    },
+    {
+      "test_name": "System Metrics Endpoint",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:13.959580",
+      "details": {
+        "status_code": 200,
+        "mongodb_status": "connected",
+        "redis_status": "disconnected",
+        "websocket_connections": {
+          "matches": 4,
+          "chat": 2,
+          "notifications": 2,
+          "total": 8
+        },
+        "architecture": {
+          "api_workers": "single (uvicorn + hot-reload)",
+          "reminder_worker": "separate process",
+          "redis_pubsub": false
+        }
+      }
+    },
+    {
+      "test_name": "Football Matches Endpoint",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:14.100330",
+      "details": {
+        "status_code": 200,
+        "total_matches": 111,
+        "sample_matches": [
+          {
+            "id": 542659,
+            "home_team": "Paris FC",
+            "away_team": "AS Monaco FC",
+            "competition": "Ligue 1",
+            "status": "NOT_STARTED",
+            "utcDate": "2026-04-10T17:00:00Z"
+          },
+          {
+            "id": 540665,
+            "home_team": "FC Augsburg",
+            "away_team": "TSG 1899 Hoffenheim",
+            "competition": "Bundesliga",
+            "status": "NOT_STARTED",
+            "utcDate": "2026-04-10T18:30:00Z"
+          },
+          {
+            "id": 537127,
+            "home_team": "AS Roma",
+            "away_team": "AC Pisa 1909",
+            "competition": "Serie A",
+            "status": "NOT_STARTED",
+            "utcDate": "2026-04-10T18:45:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "test_name": "Search API - Champions Query",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:14.272760",
+      "details": {
+        "status_code": 200,
+        "total_matches": 8,
+        "champions_matches_found": 8,
+        "sample_champions_matches": [
+          {
+            "id": 556722,
+            "home_team": "Liverpool FC",
+            "away_team": "Paris Saint-Germain FC",
+            "competition": "UEFA Champions League"
+          },
+          {
+            "id": 556724,
+            "home_team": "Club Atl\u00e9tico de Madrid",
+            "away_team": "FC Barcelona",
+            "competition": "UEFA Champions League"
+          },
+          {
+            "id": 556725,
+            "home_team": "Arsenal FC",
+            "away_team": "Sporting Clube de Portugal",
+            "competition": "UEFA Champions League"
+          }
+        ]
+      }
+    },
+    {
+      "test_name": "Search API - Barcelona Query",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:14.460356",
+      "details": {
+        "status_code": 200,
+        "total_matches": 5,
+        "barcelona_matches_found": 5,
+        "sample_barcelona_matches": [
+          {
+            "id": 544512,
+            "home_team": "FC Barcelona",
+            "away_team": "RCD Espanyol de Barcelona",
+            "competition": "Primera Division"
+          },
+          {
+            "id": 556724,
+            "home_team": "Club Atl\u00e9tico de Madrid",
+            "away_team": "FC Barcelona",
+            "competition": "UEFA Champions League"
+          },
+          {
+            "id": 544532,
+            "home_team": "FC Barcelona",
+            "away_team": "RC Celta de Vigo",
+            "competition": "Primera Division"
+          }
+        ]
+      }
+    },
+    {
+      "test_name": "Search API - Case Insensitive",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:14.598409",
+      "details": {
+        "status_code": 200,
+        "total_matches": 20,
+        "serie_matches_found": 20,
+        "sample_serie_matches": [
+          {
+            "id": 537127,
+            "home_team": "AS Roma",
+            "away_team": "AC Pisa 1909",
+            "competition": "Serie A"
+          },
+          {
+            "id": 537133,
+            "home_team": "Torino FC",
+            "away_team": "Hellas Verona FC",
+            "competition": "Serie A"
+          },
+          {
+            "id": 537129,
+            "home_team": "Cagliari Calcio",
+            "away_team": "US Cremonese",
+            "competition": "Serie A"
+          }
+        ]
+      }
+    },
+    {
+      "test_name": "Search API - Short Query Rejection",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:14.703423",
+      "details": {
+        "status_code": 422,
+        "note": "Correctly rejected short query with 422 status"
+      }
+    },
+    {
+      "test_name": "WebSocket Connection",
+      "success": true,
+      "timestamp": "2026-04-09T23:03:14.931949",
+      "details": {
+        "ws_url": "wss://guessit-staging-1.preview.emergentagent.com/api/ws/matches",
+        "connection_established": true,
+        "messages_received": 1,
+        "sample_messages": [
+          {
+            "type": "pong"
+          }
+        ]
+      }
+    }
+  ]
+}

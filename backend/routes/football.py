@@ -414,35 +414,81 @@ async def search_matches(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     """
-    Search matches by team name.
-    - Case-insensitive
-    - Only LIVE and NOT_STARTED matches
-    - Max 10 results
+    Search matches by team name or competition name.
+    - Case-insensitive, partial match
+    - Searches full dataset (past 3 days → future 14 days)
+    - Results ranked: LIVE first, then upcoming, then finished
+    - Max 20 results
     """
     query = q.strip().lower()
 
-    # Use cached upcoming matches (7-day window)
+    # Fetch the full dataset (same ranges as the main /matches endpoint)
     today = datetime.now(timezone.utc)
-    date_from = today.strftime("%Y-%m-%d")
-    date_to = (today + timedelta(days=7)).strftime("%Y-%m-%d")
-    all_matches = await get_matches(db, date_from=date_from, date_to=date_to)
+    near_from = (today - timedelta(days=3)).strftime("%Y-%m-%d")
+    near_to = (today + timedelta(days=6)).strftime("%Y-%m-%d")
+    far_from = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    far_to = (today + timedelta(days=14)).strftime("%Y-%m-%d")
 
-    # Filter by team name and status
+    near_matches, far_matches = await asyncio.gather(
+        get_matches(db, near_from, near_to),
+        get_matches(db, far_from, far_to),
+    )
+
+    # Deduplicate
+    seen = set()
+    all_matches = []
+    for m in near_matches + far_matches:
+        if m["id"] not in seen:
+            seen.add(m["id"])
+            all_matches.append(m)
+
+    # Also check the MongoDB persistent cache for broader coverage
+    if len(all_matches) < 5:
+        try:
+            db_matches = await db.football_matches_cache.find(
+                {"$or": [
+                    {"homeTeam.name": {"$regex": query, "$options": "i"}},
+                    {"awayTeam.name": {"$regex": query, "$options": "i"}},
+                    {"homeTeam.shortName": {"$regex": query, "$options": "i"}},
+                    {"awayTeam.shortName": {"$regex": query, "$options": "i"}},
+                    {"competition": {"$regex": query, "$options": "i"}},
+                ]},
+                {"_id": 0}
+            ).to_list(20)
+            for m in db_matches:
+                if m.get("id") and m["id"] not in seen:
+                    seen.add(m["id"])
+                    all_matches.append(m)
+        except Exception:
+            pass
+
+    # Filter by team name or competition name (case-insensitive partial match)
     results = []
     for match in all_matches:
-        if match["status"] == "FINISHED":
-            continue
+        home_name = (match.get("homeTeam", {}).get("name") or "").lower()
+        away_name = (match.get("awayTeam", {}).get("name") or "").lower()
+        home_short = (match.get("homeTeam", {}).get("shortName") or "").lower()
+        away_short = (match.get("awayTeam", {}).get("shortName") or "").lower()
+        competition = (match.get("competition") or "").lower()
 
-        home_name = match["homeTeam"]["name"].lower()
-        away_name = match["awayTeam"]["name"].lower()
-        home_short = (match["homeTeam"].get("shortName") or "").lower()
-        away_short = (match["awayTeam"].get("shortName") or "").lower()
-
-        if query in home_name or query in away_name or query in home_short or query in away_short:
+        if (query in home_name or query in away_name or
+            query in home_short or query in away_short or
+            query in competition):
             results.append(match)
 
-        if len(results) >= 10:
-            break
+    # Sort: LIVE first, then upcoming (soonest), then finished (most recent)
+    def sort_key(m):
+        s = m.get("status", "")
+        if s == "LIVE":
+            return (0, m.get("utcDate", ""))
+        elif s in ("NOT_STARTED", "TIMED", "SCHEDULED"):
+            return (1, m.get("utcDate", ""))
+        else:
+            return (2, m.get("utcDate", ""))
+    results.sort(key=sort_key)
+
+    # Limit to 20 results
+    results = results[:20]
 
     return {"matches": results, "total": len(results), "query": q}
 

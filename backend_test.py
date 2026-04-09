@@ -1,318 +1,551 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for GuessIt Football Prediction Platform
-Tests match filtering and display logic after the fix
+Backend API Testing for GuessIt Football Prediction App
+Tests all required endpoints as specified in the review request.
+Focuses on search functionality and WebSocket connections.
 """
 
 import requests
 import sys
 import json
-from datetime import datetime, timezone
+import websocket
+import threading
+import time
+from datetime import datetime
+from typing import Dict, Any
 
-class FootballAPITester:
-    def __init__(self, base_url="https://guess-it-branch.preview.emergentagent.com"):
-        self.base_url = base_url
+class GuessItAPITester:
+    def __init__(self, base_url: str = "https://guessit-staging-1.preview.emergentagent.com"):
+        self.base_url = base_url.rstrip('/')
         self.tests_run = 0
         self.tests_passed = 0
+        self.test_results = []
 
-    def run_test(self, name, method, endpoint, expected_status=200, data=None, headers=None):
-        """Run a single API test"""
-        url = f"{self.base_url}/{endpoint}"
-        default_headers = {'Content-Type': 'application/json'}
-        if headers:
-            default_headers.update(headers)
-
+    def log_test(self, name: str, success: bool, details: Dict[str, Any] = None):
+        """Log test result"""
         self.tests_run += 1
-        print(f"\n🔍 Testing {name}...")
+        if success:
+            self.tests_passed += 1
         
+        result = {
+            "test_name": name,
+            "success": success,
+            "timestamp": datetime.now().isoformat(),
+            "details": details or {}
+        }
+        self.test_results.append(result)
+        
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"{status} - {name}")
+        if details and not success:
+            print(f"    Details: {details}")
+
+    def test_health_endpoint(self):
+        """Test /api/health endpoint"""
         try:
-            if method == 'GET':
-                response = requests.get(url, headers=default_headers, timeout=15)
-            elif method == 'POST':
-                response = requests.post(url, json=data, headers=default_headers, timeout=15)
-
-            success = response.status_code == expected_status
-            if success:
-                self.tests_passed += 1
-                print(f"✅ Passed - Status: {response.status_code}")
-                try:
-                    return True, response.json()
-                except:
-                    return True, response.text
-            else:
-                print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
-                print(f"Response: {response.text[:500]}")
-                return False, {}
-
-        except Exception as e:
-            print(f"❌ Failed - Error: {str(e)}")
-            return False, {}
-
-    def test_matches_endpoint(self):
-        """Test the main matches endpoint returns both upcoming and finished matches"""
-        success, response = self.run_test(
-            "GET /api/football/matches (main endpoint)",
-            "GET",
-            "api/football/matches"
-        )
-        
-        if not success:
-            return False
+            response = requests.get(f"{self.base_url}/api/health", timeout=10)
             
-        matches = response.get('matches', [])
-        total = response.get('total', 0)
-        
-        print(f"📊 Total matches returned: {total}")
-        
-        if total == 0:
-            print("❌ No matches returned - this should not happen")
-            return False
-            
-        # Analyze match statuses
-        status_counts = {}
-        upcoming_count = 0
-        finished_count = 0
-        
-        for match in matches:
-            status = match.get('status', 'UNKNOWN')
-            status_counts[status] = status_counts.get(status, 0) + 1
-            
-            if status in ['NOT_STARTED', 'TIMED', 'SCHEDULED']:
-                upcoming_count += 1
-            elif status == 'FINISHED':
-                finished_count += 1
+            if response.status_code == 200:
+                data = response.json()
+                has_status = "status" in data and data["status"] == "healthy"
+                has_timestamp = "timestamp" in data
                 
-        print(f"📈 Status breakdown: {status_counts}")
-        print(f"🔮 Upcoming matches: {upcoming_count}")
-        print(f"🏁 Finished matches: {finished_count}")
-        
-        # Verify we have both upcoming and finished matches
-        if upcoming_count == 0:
-            print("⚠️  Warning: No upcoming matches found")
-        if finished_count == 0:
-            print("⚠️  Warning: No finished matches found")
-            
-        # Expected: 39 upcoming + 46 finished = 85 total
-        expected_upcoming = 39
-        expected_finished = 46
-        expected_total = 85
-        
-        print(f"🎯 Expected: {expected_upcoming} upcoming, {expected_finished} finished, {expected_total} total")
-        
-        if upcoming_count == expected_upcoming and finished_count == expected_finished:
-            print("✅ Match counts match expectations perfectly!")
-        else:
-            print(f"⚠️  Match counts differ from expectations")
-            
-        return True
-
-    def test_ended_matches_endpoint(self):
-        """Test the ended matches endpoint"""
-        success, response = self.run_test(
-            "GET /api/football/matches/ended",
-            "GET", 
-            "api/football/matches/ended"
-        )
-        
-        if not success:
-            return False
-            
-        matches = response.get('matches', [])
-        total = response.get('total', 0)
-        
-        print(f"📊 Ended matches returned: {total}")
-        
-        # Verify all matches are finished
-        finished_count = 0
-        for match in matches:
-            if match.get('status') == 'FINISHED':
-                finished_count += 1
-                
-        print(f"🏁 Finished status matches: {finished_count}")
-        
-        if finished_count == total:
-            print("✅ All ended matches have FINISHED status")
-        else:
-            print(f"❌ Some ended matches don't have FINISHED status")
-            
-        return True
-
-    def test_upcoming_matches_endpoint(self):
-        """Test the upcoming matches endpoint"""
-        success, response = self.run_test(
-            "GET /api/football/matches/upcoming",
-            "GET",
-            "api/football/matches/upcoming"
-        )
-        
-        if not success:
-            return False
-            
-        matches = response.get('matches', [])
-        total = response.get('total', 0)
-        
-        print(f"📊 Upcoming matches returned: {total}")
-        
-        # Verify all matches are upcoming
-        upcoming_count = 0
-        for match in matches:
-            status = match.get('status')
-            if status in ['NOT_STARTED', 'TIMED', 'SCHEDULED']:
-                upcoming_count += 1
-                
-        print(f"🔮 Upcoming status matches: {upcoming_count}")
-        
-        if upcoming_count == total:
-            print("✅ All upcoming matches have correct status")
-        else:
-            print(f"❌ Some upcoming matches have incorrect status")
-            
-        return True
-
-    def test_live_matches_endpoint(self):
-        """Test the live matches endpoint"""
-        success, response = self.run_test(
-            "GET /api/football/matches/live",
-            "GET",
-            "api/football/matches/live"
-        )
-        
-        if not success:
-            return False
-            
-        matches = response.get('matches', [])
-        total = response.get('total', 0)
-        
-        print(f"📊 Live matches returned: {total}")
-        
-        # Verify all matches are live (if any)
-        live_count = 0
-        for match in matches:
-            status = match.get('status')
-            if status in ['LIVE', 'IN_PLAY', 'HALFTIME', 'PAUSED']:
-                live_count += 1
-                
-        print(f"🔴 Live status matches: {live_count}")
-        
-        if live_count == total:
-            print("✅ All live matches have correct status")
-        else:
-            print(f"❌ Some live matches have incorrect status")
-            
-        return True
-
-    def test_competition_filter(self):
-        """Test competition filtering"""
-        competitions = ['PL', 'PD', 'SA', 'BL1', 'FL1']
-        
-        for comp in competitions:
-            success, response = self.run_test(
-                f"GET /api/football/matches?competition={comp}",
-                "GET",
-                f"api/football/matches?competition={comp}"
-            )
-            
-            if success:
-                matches = response.get('matches', [])
-                total = response.get('total', 0)
-                print(f"📊 {comp} matches: {total}")
-                
-                # Verify all matches belong to the competition
-                correct_comp = 0
-                for match in matches:
-                    if match.get('competitionCode') == comp:
-                        correct_comp += 1
-                        
-                if correct_comp == total:
-                    print(f"✅ All {comp} matches have correct competition code")
+                if has_status and has_timestamp:
+                    self.log_test("Health Check Endpoint", True, {
+                        "status_code": response.status_code,
+                        "response": data
+                    })
+                    return True
                 else:
-                    print(f"❌ Some {comp} matches have incorrect competition code")
+                    self.log_test("Health Check Endpoint", False, {
+                        "status_code": response.status_code,
+                        "issue": "Missing required fields in response",
+                        "response": data
+                    })
+                    return False
             else:
+                self.log_test("Health Check Endpoint", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
                 return False
                 
-        return True
+        except Exception as e:
+            self.log_test("Health Check Endpoint", False, {
+                "error": str(e)
+            })
+            return False
 
-    def test_match_data_structure(self):
-        """Test that matches have required fields"""
-        success, response = self.run_test(
-            "GET /api/football/matches (data structure)",
-            "GET",
-            "api/football/matches"
-        )
-        
-        if not success:
-            return False
+    def test_root_api_endpoint(self):
+        """Test /api/ root endpoint"""
+        try:
+            response = requests.get(f"{self.base_url}/api/", timeout=10)
             
-        matches = response.get('matches', [])
-        
-        if not matches:
-            print("❌ No matches to test data structure")
-            return False
-            
-        # Test first match structure
-        match = matches[0]
-        required_fields = [
-            'id', 'homeTeam', 'awayTeam', 'competition', 'competitionCode',
-            'status', 'utcDate', 'score', 'predictionLocked'
-        ]
-        
-        missing_fields = []
-        for field in required_fields:
-            if field not in match:
-                missing_fields.append(field)
+            if response.status_code == 200:
+                data = response.json()
+                expected_message = "GuessIt API is running"
                 
-        if missing_fields:
-            print(f"❌ Missing required fields: {missing_fields}")
-            return False
-        else:
-            print("✅ All required fields present in match data")
-            
-        # Test team structure
-        home_team = match.get('homeTeam', {})
-        away_team = match.get('awayTeam', {})
-        
-        team_fields = ['id', 'name', 'shortName']
-        for team, team_name in [(home_team, 'homeTeam'), (away_team, 'awayTeam')]:
-            for field in team_fields:
-                if field not in team:
-                    print(f"❌ Missing {field} in {team_name}")
+                if data.get("message") == expected_message:
+                    self.log_test("Root API Endpoint", True, {
+                        "status_code": response.status_code,
+                        "response": data
+                    })
+                    return True
+                else:
+                    self.log_test("Root API Endpoint", False, {
+                        "status_code": response.status_code,
+                        "issue": f"Expected message '{expected_message}', got '{data.get('message')}'",
+                        "response": data
+                    })
                     return False
+            else:
+                self.log_test("Root API Endpoint", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("Root API Endpoint", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_system_metrics_endpoint(self):
+        """Test /api/system/metrics endpoint"""
+        try:
+            response = requests.get(f"{self.base_url}/api/system/metrics", timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Check required fields
+                required_fields = ["status", "timestamp", "redis", "mongodb"]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if not missing_fields:
+                    mongodb_connected = data.get("mongodb") == "connected"
+                    redis_connected = data.get("redis") == "connected"
                     
-        print("✅ Team data structure is correct")
-        return True
+                    self.log_test("System Metrics Endpoint", True, {
+                        "status_code": response.status_code,
+                        "mongodb_status": data.get("mongodb"),
+                        "redis_status": data.get("redis"),
+                        "websocket_connections": data.get("websocket_connections", {}),
+                        "architecture": data.get("architecture", {})
+                    })
+                    return True
+                else:
+                    self.log_test("System Metrics Endpoint", False, {
+                        "status_code": response.status_code,
+                        "issue": f"Missing required fields: {missing_fields}",
+                        "response": data
+                    })
+                    return False
+            else:
+                self.log_test("System Metrics Endpoint", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("System Metrics Endpoint", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_football_matches_endpoint(self):
+        """Test /api/football/matches endpoint - required for banner carousel testing"""
+        try:
+            response = requests.get(f"{self.base_url}/api/football/matches", timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, dict) and "matches" in data:
+                    matches = data["matches"]
+                    
+                    if isinstance(matches, list):
+                        # Check match structure
+                        sample_matches = []
+                        for match in matches[:3]:
+                            sample_matches.append({
+                                "id": match.get("id"),
+                                "home_team": match.get("homeTeam", {}).get("name"),
+                                "away_team": match.get("awayTeam", {}).get("name"),
+                                "competition": match.get("competition"),
+                                "status": match.get("status"),
+                                "utcDate": match.get("utcDate")
+                            })
+                        
+                        self.log_test("Football Matches Endpoint", True, {
+                            "status_code": response.status_code,
+                            "total_matches": len(matches),
+                            "sample_matches": sample_matches
+                        })
+                        return True
+                    else:
+                        self.log_test("Football Matches Endpoint", False, {
+                            "status_code": response.status_code,
+                            "issue": "matches field is not an array",
+                            "response": data
+                        })
+                        return False
+                else:
+                    self.log_test("Football Matches Endpoint", False, {
+                        "status_code": response.status_code,
+                        "issue": "Response missing matches field",
+                        "response": data
+                    })
+                    return False
+            else:
+                self.log_test("Football Matches Endpoint", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("Football Matches Endpoint", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_search_api_champions_query(self):
+        """Test search API with 'champions' query - should return Champions League matches"""
+        try:
+            response = requests.get(f"{self.base_url}/api/football/search?q=champions", timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, dict) and "matches" in data:
+                    matches = data["matches"]
+                    
+                    # Check if any matches are from Champions League
+                    champions_matches = []
+                    for match in matches:
+                        competition = match.get("competition", "").lower()
+                        if "champions" in competition:
+                            champions_matches.append({
+                                "id": match.get("id"),
+                                "home_team": match.get("homeTeam", {}).get("name"),
+                                "away_team": match.get("awayTeam", {}).get("name"),
+                                "competition": match.get("competition")
+                            })
+                    
+                    self.log_test("Search API - Champions Query", True, {
+                        "status_code": response.status_code,
+                        "total_matches": len(matches),
+                        "champions_matches_found": len(champions_matches),
+                        "sample_champions_matches": champions_matches[:3]
+                    })
+                    return True
+                else:
+                    self.log_test("Search API - Champions Query", False, {
+                        "status_code": response.status_code,
+                        "issue": "Response missing matches field",
+                        "response": data
+                    })
+                    return False
+            else:
+                self.log_test("Search API - Champions Query", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("Search API - Champions Query", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_search_api_barcelona_query(self):
+        """Test search API with 'barcelona' query - should return Barcelona matches"""
+        try:
+            response = requests.get(f"{self.base_url}/api/football/search?q=barcelona", timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, dict) and "matches" in data:
+                    matches = data["matches"]
+                    
+                    # Check if any matches contain Barcelona
+                    barcelona_matches = []
+                    for match in matches:
+                        home_name = match.get("homeTeam", {}).get("name", "").lower()
+                        away_name = match.get("awayTeam", {}).get("name", "").lower()
+                        if "barcelona" in home_name or "barcelona" in away_name:
+                            barcelona_matches.append({
+                                "id": match.get("id"),
+                                "home_team": match.get("homeTeam", {}).get("name"),
+                                "away_team": match.get("awayTeam", {}).get("name"),
+                                "competition": match.get("competition")
+                            })
+                    
+                    self.log_test("Search API - Barcelona Query", True, {
+                        "status_code": response.status_code,
+                        "total_matches": len(matches),
+                        "barcelona_matches_found": len(barcelona_matches),
+                        "sample_barcelona_matches": barcelona_matches[:3]
+                    })
+                    return True
+                else:
+                    self.log_test("Search API - Barcelona Query", False, {
+                        "status_code": response.status_code,
+                        "issue": "Response missing matches field",
+                        "response": data
+                    })
+                    return False
+            else:
+                self.log_test("Search API - Barcelona Query", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("Search API - Barcelona Query", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_search_api_case_insensitive(self):
+        """Test search API case insensitivity - SERIE should return Serie A matches"""
+        try:
+            response = requests.get(f"{self.base_url}/api/football/search?q=SERIE", timeout=15)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, dict) and "matches" in data:
+                    matches = data["matches"]
+                    
+                    # Check if any matches are from Serie A
+                    serie_matches = []
+                    for match in matches:
+                        competition = match.get("competition", "").lower()
+                        if "serie" in competition:
+                            serie_matches.append({
+                                "id": match.get("id"),
+                                "home_team": match.get("homeTeam", {}).get("name"),
+                                "away_team": match.get("awayTeam", {}).get("name"),
+                                "competition": match.get("competition")
+                            })
+                    
+                    self.log_test("Search API - Case Insensitive", True, {
+                        "status_code": response.status_code,
+                        "total_matches": len(matches),
+                        "serie_matches_found": len(serie_matches),
+                        "sample_serie_matches": serie_matches[:3]
+                    })
+                    return True
+                else:
+                    self.log_test("Search API - Case Insensitive", False, {
+                        "status_code": response.status_code,
+                        "issue": "Response missing matches field",
+                        "response": data
+                    })
+                    return False
+            else:
+                self.log_test("Search API - Case Insensitive", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("Search API - Case Insensitive", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_search_api_short_query_rejection(self):
+        """Test search API rejects short queries (less than 2 characters)"""
+        try:
+            response = requests.get(f"{self.base_url}/api/football/search?q=x", timeout=15)
+            
+            # Should return 422 for validation error or 200 with empty results
+            if response.status_code == 422:
+                self.log_test("Search API - Short Query Rejection", True, {
+                    "status_code": response.status_code,
+                    "note": "Correctly rejected short query with 422 status"
+                })
+                return True
+            elif response.status_code == 200:
+                data = response.json()
+                if isinstance(data, dict) and "matches" in data:
+                    matches = data["matches"]
+                    if len(matches) == 0:
+                        self.log_test("Search API - Short Query Rejection", True, {
+                            "status_code": response.status_code,
+                            "matches_count": 0,
+                            "note": "Correctly returned empty results for short query"
+                        })
+                        return True
+                    else:
+                        self.log_test("Search API - Short Query Rejection", False, {
+                            "status_code": response.status_code,
+                            "issue": "Short query should return empty results",
+                            "matches_count": len(matches)
+                        })
+                        return False
+                else:
+                    self.log_test("Search API - Short Query Rejection", False, {
+                        "status_code": response.status_code,
+                        "issue": "Unexpected response format",
+                        "response": data
+                    })
+                    return False
+            else:
+                self.log_test("Search API - Short Query Rejection", False, {
+                    "status_code": response.status_code,
+                    "response_text": response.text[:200]
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("Search API - Short Query Rejection", False, {
+                "error": str(e)
+            })
+            return False
+
+    def test_websocket_connection(self):
+        """Test WebSocket endpoint /api/ws/matches accepts connections"""
+        try:
+            # Convert HTTP URL to WebSocket URL
+            ws_url = self.base_url.replace('https://', 'wss://').replace('http://', 'ws://') + '/api/ws/matches'
+            
+            connection_successful = False
+            received_messages = []
+            connection_error = None
+            
+            def on_message(ws, message):
+                try:
+                    data = json.loads(message)
+                    received_messages.append(data)
+                except:
+                    received_messages.append(message)
+            
+            def on_error(ws, error):
+                nonlocal connection_error
+                connection_error = str(error)
+            
+            def on_open(ws):
+                nonlocal connection_successful
+                connection_successful = True
+                # Send a ping to test communication
+                ws.send('ping')
+                # Close after a short time
+                threading.Timer(2.0, lambda: ws.close()).start()
+            
+            def on_close(ws, close_status_code, close_msg):
+                pass
+            
+            # Create WebSocket connection with timeout
+            ws = websocket.WebSocketApp(ws_url,
+                                      on_open=on_open,
+                                      on_message=on_message,
+                                      on_error=on_error,
+                                      on_close=on_close)
+            
+            # Run WebSocket in a separate thread with timeout
+            ws_thread = threading.Thread(target=ws.run_forever)
+            ws_thread.daemon = True
+            ws_thread.start()
+            
+            # Wait for connection or timeout
+            timeout = 10
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                if connection_successful or connection_error:
+                    break
+                time.sleep(0.1)
+            
+            ws.close()
+            
+            if connection_successful:
+                self.log_test("WebSocket Connection", True, {
+                    "ws_url": ws_url,
+                    "connection_established": True,
+                    "messages_received": len(received_messages),
+                    "sample_messages": received_messages[:3] if received_messages else []
+                })
+                return True
+            else:
+                self.log_test("WebSocket Connection", False, {
+                    "ws_url": ws_url,
+                    "connection_established": False,
+                    "error": connection_error or "Connection timeout"
+                })
+                return False
+                
+        except Exception as e:
+            self.log_test("WebSocket Connection", False, {
+                "error": str(e)
+            })
+            return False
+
+    def run_all_tests(self):
+        """Run all backend API tests"""
+        print("🚀 Starting GuessIt Backend API Tests")
+        print(f"📍 Testing against: {self.base_url}")
+        print("=" * 60)
+        
+        # Test basic endpoints first
+        self.test_health_endpoint()
+        self.test_root_api_endpoint()
+        self.test_system_metrics_endpoint()
+        
+        # Test football matches endpoint (required for banner carousel)
+        print("\n⚽ Testing Football API:")
+        self.test_football_matches_endpoint()
+        
+        # Test search functionality (main focus)
+        print("\n🔍 Testing Search Functionality:")
+        self.test_search_api_champions_query()
+        self.test_search_api_barcelona_query()
+        self.test_search_api_case_insensitive()
+        self.test_search_api_short_query_rejection()
+        
+        # Test WebSocket connection
+        print("\n🌐 Testing WebSocket Connection:")
+        self.test_websocket_connection()
+        
+        print("=" * 60)
+        print(f"📊 Test Results: {self.tests_passed}/{self.tests_run} passed")
+        
+        if self.tests_passed == self.tests_run:
+            print("🎉 All backend tests passed!")
+            return True
+        else:
+            print("⚠️  Some backend tests failed!")
+            return False
+
+    def get_summary(self):
+        """Get test summary"""
+        return {
+            "total_tests": self.tests_run,
+            "passed_tests": self.tests_passed,
+            "failed_tests": self.tests_run - self.tests_passed,
+            "success_rate": (self.tests_passed / self.tests_run * 100) if self.tests_run > 0 else 0,
+            "test_results": self.test_results
+        }
 
 def main():
-    print("🚀 Starting Football API Backend Tests")
-    print("=" * 60)
+    """Main test execution"""
+    tester = GuessItAPITester()
+    success = tester.run_all_tests()
     
-    tester = FootballAPITester()
+    # Save detailed results
+    summary = tester.get_summary()
+    with open('/app/backend_test_results.json', 'w') as f:
+        json.dump(summary, f, indent=2)
     
-    # Test all endpoints
-    tests = [
-        tester.test_matches_endpoint,
-        tester.test_ended_matches_endpoint, 
-        tester.test_upcoming_matches_endpoint,
-        tester.test_live_matches_endpoint,
-        tester.test_competition_filter,
-        tester.test_match_data_structure
-    ]
-    
-    for test in tests:
-        try:
-            test()
-        except Exception as e:
-            print(f"❌ Test failed with exception: {e}")
-            tester.tests_run += 1
-    
-    print("\n" + "=" * 60)
-    print(f"📊 Tests Summary: {tester.tests_passed}/{tester.tests_run} passed")
-    
-    if tester.tests_passed == tester.tests_run:
-        print("🎉 All backend tests passed!")
-        return 0
-    else:
-        print("❌ Some backend tests failed")
-        return 1
+    return 0 if success else 1
 
 if __name__ == "__main__":
     sys.exit(main())

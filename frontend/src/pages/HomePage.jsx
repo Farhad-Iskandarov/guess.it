@@ -250,25 +250,77 @@ export const HomePage = () => {
     if (!data || !data.matches) return;
 
     const updatedMatches = data.matches;
-    setMatches(prev => {
-      const matchMap = new Map(prev.map(m => [m.id, m]));
+    
+    if (data.type === 'live_update') {
+      // Live update: merge live match data into current matches
+      setMatches(prev => {
+        const matchMap = new Map(prev.map(m => [m.id, m]));
 
-      updatedMatches.forEach(updated => {
-        const existing = matchMap.get(updated.id);
-        if (existing) {
-          // Preserve featured status from initial load
-          matchMap.set(updated.id, { ...updated, featured: existing.featured });
-        } else {
-          matchMap.set(updated.id, updated);
-        }
+        updatedMatches.forEach(updated => {
+          const existing = matchMap.get(updated.id);
+          if (existing) {
+            // Preserve featured status from initial load
+            matchMap.set(updated.id, { ...updated, featured: existing.featured });
+          } else {
+            // New live match — add it
+            matchMap.set(updated.id, updated);
+          }
+        });
+
+        return Array.from(matchMap.values());
       });
+    } else if (data.type === 'today_update') {
+      // Today update: merge today's matches (status changes, score updates, newly started)
+      setMatches(prev => {
+        const matchMap = new Map(prev.map(m => [m.id, m]));
 
-      return Array.from(matchMap.values());
-    });
+        updatedMatches.forEach(updated => {
+          const existing = matchMap.get(updated.id);
+          if (existing) {
+            // Update status, score, matchMinute, etc. while preserving featured
+            matchMap.set(updated.id, { ...updated, featured: existing.featured });
+          } else {
+            matchMap.set(updated.id, updated);
+          }
+        });
+
+        return Array.from(matchMap.values());
+      });
+    } else {
+      // Fallback: generic merge
+      setMatches(prev => {
+        const matchMap = new Map(prev.map(m => [m.id, m]));
+        updatedMatches.forEach(updated => {
+          const existing = matchMap.get(updated.id);
+          if (existing) {
+            matchMap.set(updated.id, { ...updated, featured: existing.featured });
+          } else {
+            matchMap.set(updated.id, updated);
+          }
+        });
+        return Array.from(matchMap.values());
+      });
+    }
   }, []);
 
-  // Connect to WebSocket for live updates
-  const { isConnected } = useLiveMatches(handleLiveUpdate);
+  // Connect to WebSocket for live updates (defined before loadMatches — reconnect handled via ref)
+  const loadMatchesRef = useRef(null);
+  const activeLeagueRef = useRef(activeLeague);
+  activeLeagueRef.current = activeLeague;
+
+  // Force refresh matches on WebSocket reconnection
+  const handleWsReconnect = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    if (loadMatchesRef.current) {
+      loadMatchesRef.current(activeLeagueRef.current, controller.signal);
+    }
+  }, []);
+
+  const { isConnected } = useLiveMatches(handleLiveUpdate, handleWsReconnect);
 
 
   // Fetch carousel banners
@@ -278,16 +330,16 @@ export const HomePage = () => {
         const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || ''}/api/football/banners`);
         if (response.ok) {
           const data = await response.json();
-          // Transform to match expected format
+          // Transform to match the new card format
           const formattedBanners = data.banners.map(b => ({
             id: b.banner_id,
-            badge: b.title,
-            headline: b.title,
-            highlightedText: '',
-            subtitle: b.subtitle || '',
-            ctaText: b.button_text || 'Get Started',
-            ctaLink: b.button_link || '/register',
-            image: b.image_url?.startsWith('/') ? `${process.env.REACT_APP_BACKEND_URL}${b.image_url}` : b.image_url
+            image: b.image_url?.startsWith('/') ? `${process.env.REACT_APP_BACKEND_URL}${b.image_url}` : b.image_url,
+            score: b.score || null,
+            homeCrest: b.home_crest || null,
+            awayCrest: b.away_crest || null,
+            details: b.details || null,
+            label: b.title || null,
+            badge: b.badge || null,
           }));
           setBannerSlides(formattedBanners.length > 0 ? formattedBanners : mockBannerSlides);
         } else {
@@ -378,6 +430,9 @@ export const HomePage = () => {
     }
   }, []);
 
+  // Keep loadMatchesRef in sync for WebSocket reconnect handler
+  loadMatchesRef.current = loadMatches;
+
   // Load matches on mount and when league changes — cancel previous request
   useEffect(() => {
     // Cancel any in-flight request
@@ -394,17 +449,18 @@ export const HomePage = () => {
     };
   }, [activeLeague, loadMatches]);
 
-  // Auto-refresh matches every 30 seconds (fallback for non-WebSocket)
+  // Auto-refresh matches periodically (fallback for reliability)
+  // Connected: every 120s (light refresh, WebSocket handles live)
+  // Disconnected: every 30s (more aggressive, compensate for no WebSocket)
   useEffect(() => {
     let refreshController = null;
+    const intervalMs = isConnected ? 120000 : 30000;
     const interval = setInterval(() => {
-      if (!isConnected) {
-        // Abort previous auto-refresh if still in-flight
-        if (refreshController) refreshController.abort();
-        refreshController = new AbortController();
-        loadMatches(activeLeague, refreshController.signal);
-      }
-    }, 30000);
+      // Abort previous auto-refresh if still in-flight
+      if (refreshController) refreshController.abort();
+      refreshController = new AbortController();
+      loadMatches(activeLeague, refreshController.signal);
+    }, intervalMs);
 
     return () => {
       clearInterval(interval);
@@ -656,71 +712,29 @@ export const HomePage = () => {
         {/* Promo Banner */}
         {bannerSlides.length > 0 && <PromoBanner slides={bannerSlides} />}
 
-        {/* Tabs */}
-        <TabsSection tabs={tabs} activeTab={activeTab} onTabChange={handleTabChange} />
-
-        {/* League Filters */}
-        <LeagueFilters
-          leagues={leagueFilters}
-          activeLeague={activeLeague}
-          onLeagueChange={handleLeagueChange}
-        />
-
-        {/* Connection Status + View Toggle */}
-        <div className="flex items-center justify-between mt-3 mb-2">
-          <div className="flex items-center gap-2">
-            {isConnected ? (
-              <div className="flex items-center gap-1.5 text-xs text-primary" data-testid="ws-connected">
-                <Wifi className="w-3 h-3" />
-                <span>Live updates active</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="ws-disconnected">
-                <WifiOff className="w-3 h-3" />
-                <span>Auto-refreshing every 30s</span>
-              </div>
-            )}
-          </div>
-
-          {/* View Toggle - hidden on mobile */}
-          <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg bg-secondary border border-border" data-testid="view-toggle">
-            <button
-              onClick={() => handleViewModeChange('grid')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
-                viewMode === 'grid'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-              data-testid="view-toggle-grid"
-              aria-label="Grid view"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Grid</span>
-            </button>
-            <button
-              onClick={() => handleViewModeChange('list')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
-                viewMode === 'list'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-              data-testid="view-toggle-list"
-              aria-label="List view"
-            >
-              <List className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">List</span>
-            </button>
-          </div>
+        {/* Connection Status */}
+        <div className="flex items-center mt-3 mb-1">
+          {isConnected ? (
+            <div className="flex items-center gap-1.5 text-xs text-primary" data-testid="ws-connected">
+              <Wifi className="w-3 h-3" />
+              <span>Live updates active</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="ws-disconnected">
+              <WifiOff className="w-3 h-3" />
+              <span>Auto-refreshing every 30s</span>
+            </div>
+          )}
         </div>
 
-        {/* Loading State - Skeleton (shown while fetching, including initial load) */}
-        {(isLoadingMatches || !initialFetchDone.current) && activeTab !== 'ended' && activeTab !== 'favorite' && (
-          <div key={`skeleton-${activeLeague}`} className="skeleton-container-fade-in" data-testid="match-loading-skeleton">
+        {/* Loading State */}
+        {(isLoadingMatches || !initialFetchDone.current) && (
+          <div data-testid="match-loading-skeleton">
             <MatchSkeletonGrid />
           </div>
         )}
 
-        {/* Error State - only shown after initial fetch has completed and actually failed */}
+        {/* Error State */}
         {!isLoadingMatches && initialFetchDone.current && matchError && matches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="matches-error">
             <p className="text-muted-foreground">{matchError}</p>
@@ -733,221 +747,23 @@ export const HomePage = () => {
           </div>
         )}
 
-        {/* No Matches - only shown after initial fetch has completed with empty results */}
-        {!isLoadingMatches && initialFetchDone.current && !matchError && matches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
+        {/* No Matches */}
+        {!isLoadingMatches && initialFetchDone.current && !matchError && matches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 content-fade-in" data-testid="no-matches">
             <p className="text-lg text-foreground font-medium">No matches found</p>
-            <p className="text-sm text-muted-foreground">
-              {activeLeague === 'live'
-                ? 'No live matches at the moment. Check back later!'
-                : 'No matches scheduled for this filter. Try a different league or date range.'}
-            </p>
+            <p className="text-sm text-muted-foreground">No matches scheduled. Check back later!</p>
           </div>
         )}
 
-        {/* Tab-specific empty states */}
-        {!isLoadingMatches && matches.length > 0 && tabFilteredMatches.length === 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid={`no-${activeTab}-matches`}>
-            {activeTab === 'top-live' && (
-              <>
-                <Radio className="w-12 h-12 text-red-500/30" />
-                <p className="text-lg text-foreground font-medium">No live matches right now</p>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                  There are no live matches at the moment. Check back during match hours!
-                </p>
-              </>
-            )}
-            {activeTab === 'popular' && (
-              <>
-                <TrendingUp className="w-12 h-12 text-primary/30" />
-                <p className="text-lg text-foreground font-medium">No popular matches yet</p>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                  Matches with user predictions will appear here. Start guessing to see popular matches!
-                </p>
-              </>
-            )}
-            {activeTab === 'soon' && (
-              <>
-                <Clock className="w-12 h-12 text-blue-500/30" />
-                <p className="text-lg text-foreground font-medium">No upcoming matches</p>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                  No upcoming matches scheduled. Check back later for new fixtures!
-                </p>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Favorite Tab Content */}
-        {activeTab === 'favorite' && isAuthenticated && (
-          <div key={`filter-fav-${filterKey}`} className={`match-list-animate-in content-fade-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
-            {(() => {
-              const favoriteMatches = matches.filter(m =>
-                favoriteTeamIds.has(m.homeTeam.id) || favoriteTeamIds.has(m.awayTeam.id)
-              );
-              if (favoriteTeamIds.size === 0 && favoriteMatchList.length === 0) {
-                return (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-empty">
-                    <Heart className="w-12 h-12 text-muted-foreground/30" />
-                    <p className="text-lg text-foreground font-medium">No favorites yet</p>
-                    <p className="text-sm text-muted-foreground text-center max-w-md">
-                      Tap the heart icon or bookmark icon on any match card to add favorites.
-                    </p>
-                  </div>
-                );
-              }
-              return (
-                <>
-                  {favoriteMatches.length > 0 && (
-                    <>
-                      <div className="flex items-center gap-2 mt-4 mb-3">
-                        <Heart className="w-4 h-4 text-red-500" />
-                        <h3 className="text-base font-semibold text-foreground">Favorite Clubs</h3>
-                        <span className="text-xs text-muted-foreground">({favoriteMatches.length} matches)</span>
-                      </div>
-                      <MatchList
-                        matches={favoriteMatches}
-                        savedPredictions={savedPredictions}
-                        onPredictionSaved={handlePredictionSaved}
-                        activeLeague={activeLeague}
-                        viewMode={viewMode}
-                        favoriteTeamIds={favoriteTeamIds}
-                        onToggleFavorite={handleToggleFavorite}
-                        favoriteMatchIds={favoriteMatchIds}
-                        onToggleFavoriteMatch={handleToggleFavoriteMatch}
-                      />
-                    </>
-                  )}
-                  {favoriteMatchList.length > 0 && (
-                    <>
-                      <div className="flex items-center gap-2 mt-6 mb-3">
-                        <Bookmark className="w-4 h-4 text-amber-500" />
-                        <h3 className="text-base font-semibold text-foreground">Bookmarked Matches</h3>
-                        <span className="text-xs text-muted-foreground">({favoriteMatchList.length})</span>
-                      </div>
-                      <div className={`match-list-container ${viewMode === 'grid' ? 'match-view-grid' : 'match-view-list'}`}>
-                        {favoriteMatchList.map(fav => (
-                          <div key={fav.match_id} className="match-row-card rounded-xl border border-border bg-card hover:border-primary/30 transition-all p-3 sm:p-4" data-testid={`bookmarked-match-${fav.match_id}`}>
-                            <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-sm text-muted-foreground mb-2">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${fav.status === 'LIVE' ? 'bg-red-500/20 text-red-400' : fav.status === 'FINISHED' ? 'bg-muted text-muted-foreground' : 'bg-blue-500/15 text-blue-400'}`}>
-                                {fav.status === 'LIVE' ? 'LIVE' : fav.status === 'FINISHED' ? 'FT' : fav.status || 'TBD'}
-                              </span>
-                              {fav.date_time && <span className="text-xs">{formatLocalDateTime(fav.utc_date || fav.date_time)}</span>}
-                              <span className="text-border hidden sm:inline">|</span>
-                              <span className="truncate">{fav.competition}</span>
-                              <div className="ml-auto">
-                                <button onClick={() => handleToggleFavoriteMatch({ id: fav.match_id }, false)} className="p-1 rounded-md hover:bg-muted/50 transition-colors" data-testid={`remove-bookmark-${fav.match_id}`}>
-                                  <Bookmark className="w-4 h-4 text-amber-500 fill-amber-500" />
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1 min-w-0 space-y-1.5">
-                                <div className="flex items-center gap-2">
-                                  {fav.home_crest && <img src={fav.home_crest} alt="" className="w-5 h-5 rounded-full object-contain bg-secondary" />}
-                                  <span className="text-sm font-medium truncate">{fav.home_team}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {fav.away_crest && <img src={fav.away_crest} alt="" className="w-5 h-5 rounded-full object-contain bg-secondary" />}
-                                  <span className="text-sm font-medium truncate">{fav.away_team}</span>
-                                </div>
-                              </div>
-                              {fav.score_home !== null && fav.score_home !== undefined && (
-                                <div className="text-lg font-bold tabular-nums flex-shrink-0">
-                                  <span>{fav.score_home}</span>
-                                  <span className="text-muted-foreground mx-1">-</span>
-                                  <span>{fav.score_away}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  {favoriteMatches.length === 0 && favoriteMatchList.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-16 gap-3 favorite-empty-state" data-testid="favorite-no-matches">
-                      <Heart className="w-12 h-12 text-red-500/30" />
-                      <p className="text-lg text-foreground font-medium">No matches for your favorites</p>
-                      <p className="text-sm text-muted-foreground text-center max-w-md">
-                        None of your favorite clubs have upcoming matches. Try bookmarking individual matches!
-                      </p>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        )}
-
-        {/* Ended Matches Tab Content */}
-        {activeTab === 'ended' && (
-          <div key={`filter-ended-${filterKey}`} className={`match-list-animate-in ended-matches-section view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`} data-testid="ended-matches-section">
-            {endedLoading ? (
-              <MatchSkeletonGrid />
-            ) : endedMatches.length > 0 ? (
-              <>
-                <div className="flex items-center gap-2 mt-4 mb-3">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-base font-semibold text-foreground">Recently Finished</h3>
-                  <span className="text-xs text-muted-foreground">({endedMatches.length} matches)</span>
-                </div>
-                <MatchList
-                  matches={endedMatches}
-                  savedPredictions={savedPredictions}
-                  onPredictionSaved={handlePredictionSaved}
-                  activeLeague="all"
-                  viewMode={viewMode}
-                  favoriteTeamIds={favoriteTeamIds}
-                  onToggleFavorite={handleToggleFavorite}
-                  favoriteMatchIds={favoriteMatchIds}
-                  onToggleFavoriteMatch={handleToggleFavoriteMatch}
-                />
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 gap-3" data-testid="no-ended-matches">
-                <Clock className="w-12 h-12 text-muted-foreground/30" />
-                <p className="text-lg text-foreground font-medium">No recently ended matches</p>
-                <p className="text-sm text-muted-foreground text-center max-w-md">
-                  Finished matches will appear here for 24 hours after the final whistle.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Match Content (non-favorite, non-ended tabs) */}
-        {!isLoadingMatches && tabFilteredMatches.length > 0 && activeTab !== 'favorite' && activeTab !== 'ended' && (
-          <div key={`filter-${activeLeague}`} className={`match-list-animate-in content-fade-in view-switch-wrapper ${viewTransitioning ? 'view-switch-out' : 'view-switch-in'}`}>
-            {/* Tab-specific headers */}
-            {activeTab === 'popular' && (
-              <div className="flex items-center gap-2 mt-4 mb-3" data-testid="popular-header">
-                <TrendingUp className="w-4 h-4 text-primary" />
-                <h3 className="text-base font-semibold text-foreground">Most Predicted</h3>
-                <span className="text-xs text-muted-foreground">(Top {tabFilteredMatches.length} by predictions)</span>
-              </div>
-            )}
-            {activeTab === 'top-live' && (
-              <div className="flex items-center gap-2 mt-4 mb-3" data-testid="top-live-header">
-                <Radio className="w-4 h-4 text-red-500" />
-                <h3 className="text-base font-semibold text-foreground">Top Live</h3>
-                <span className="text-xs text-muted-foreground">({tabFilteredMatches.length} live matches)</span>
-              </div>
-            )}
-            {activeTab === 'soon' && (
-              <div className="flex items-center gap-2 mt-4 mb-3" data-testid="soon-header">
-                <Clock className="w-4 h-4 text-blue-500" />
-                <h3 className="text-base font-semibold text-foreground">Coming Up</h3>
-                <span className="text-xs text-muted-foreground">({tabFilteredMatches.length} upcoming matches)</span>
-              </div>
-            )}
-            {/* Full Match List */}
+        {/* Match Content — grouped by league */}
+        {!isLoadingMatches && matches.length > 0 && (
+          <div className="match-list-animate-in content-fade-in">
             <MatchList
-              matches={tabFilteredMatches}
+              matches={matches}
               savedPredictions={savedPredictions}
               onPredictionSaved={handlePredictionSaved}
               activeLeague={activeLeague}
-              viewMode={viewMode}
+              viewMode="list"
               favoriteTeamIds={favoriteTeamIds}
               onToggleFavorite={handleToggleFavorite}
               favoriteMatchIds={favoriteMatchIds}
