@@ -1,34 +1,47 @@
 {
-  "summary": "Completed comprehensive testing of GuessIt football prediction app search functionality and WebSocket connections. All backend search APIs working correctly, frontend search UI functional with proper highlighting and results display. WebSocket live updates active and working.",
+  "summary": "Completed testing of 3 bug fixes: 1) Backend /api/predictions/me/detailed endpoint KeyError 'votes' fix - WORKING ✅, 2) Match card interactions and vote button display-only behavior - PARTIALLY WORKING ⚠️, 3) Quick Prediction shortcut and 'Predict Match' button rename - WORKING ✅",
   "backend_issues": {
     "critical_bugs": [],
     "flaky_endpoints": []
   },
   "frontend_issues": {
-    "ui_bugs": [],
-    "integration_issues": [],
+    "ui_bugs": [
+      {
+        "component": "VoteButton",
+        "issue": "Vote buttons still have cursor: pointer instead of cursor: default",
+        "selector": "[data-testid^='vote-btn-']",
+        "fix_priority": "MEDIUM",
+        "details": "Vote buttons should be display-only but still show pointer cursor. CSS class should include 'cursor-default' instead of 'cursor-pointer'"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "User session persistence",
+        "issue": "User session appears to be lost during navigation/testing",
+        "affected_selectors": ["Login button reappears"],
+        "details": "User successfully logs in but session seems to expire or get lost during page navigation"
+      }
+    ],
     "design_issues": []
   },
   "passed_tests": [
-    "Search API: GET /api/football/search?q=real returns matches with 'real' in team names",
-    "Search API: GET /api/football/search?q=champions returns matches from Champions League",
-    "Search API: GET /api/football/search?q=barcelona returns Barcelona matches",
-    "Search API: Case-insensitive - GET /api/football/search?q=SERIE returns Serie A matches",
-    "Search API: GET /api/football/search?q=x returns empty results (short query rejected)",
-    "WebSocket endpoint /api/ws/matches accepts connections successfully",
-    "Frontend search: Click search icon opens search input correctly",
-    "Frontend search: Type 'real' shows 6 results with highlighted text",
-    "Frontend search: Search results show status badges (Live/Upcoming/FT)",
-    "Homepage loads with matches visible in grid view (42 match cards found)",
-    "Homepage shows 'Live updates active' indicator with WebSocket connection",
-    "Match data includes proper status display and team information",
-    "Tab navigation works correctly (Top Matches, Popular, Top Live tabs)",
-    "System health endpoints working (health, root API, system metrics)"
+    "Backend /api/predictions/me/detailed endpoint returns 200 with predictions data (no KeyError: 'votes')",
+    "Predictions page loads without 'Something went wrong. Could not load predictions' error",
+    "Admin login works with correct credentials (farhad.isgandar@gmail.com)",
+    "'Predict Match' button appears (renamed from 'Advanced')",
+    "Advanced Options modal opens with Exact Score, Smart Advice, Invite Friend, Friends Activity tabs",
+    "Vote buttons (1, X, 2) do not change appearance on click",
+    "Backend health check and system metrics working",
+    "Football API endpoints working (competitions, matches, leaderboard)",
+    "Basic predictions API endpoints working"
   ],
-  "test_report_links": ["/app/backend_test.py", "/app/backend_test_results.json"],
-  "action_item_for_main_agent": "",
+  "test_report_links": ["/app/backend_test.py"],
+  "success_percentage": {
+    "backend": "100%",
+    "frontend": "85%"
+  },
   "updated_files": ["/app/backend_test.py"],
-  "success_percentage": "Backend: 100% (9/9 tests passed), Frontend: 95% (search working, minor DOM attachment issue during extended testing)",
+  "action_item_for_main_agent": "Fix vote button cursor styling - change from 'cursor-pointer' to 'cursor-default' in VoteButton component CSS classes. Investigate user session persistence issue during navigation.",
   "should_call_test_agent_after_fix": "false",
   "should_main_agent_test_itself": "true"
 }

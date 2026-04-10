@@ -76,18 +76,18 @@ agenthub/agents/youtube/db
 # Build caches
 .cache/
 
+memory/test_credentials.md
+
 # Mobile development
-android-sdk/ frontend/node_modules/.cache/default-development/1.pack
+android-sdk/frontend/node_modules/.cache/default-development/1.pack
 frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/1.pack
 frontend/node_modules/.cache/default-development/4.pack
+frontend/node_modules/.cache/default-development/8.pack
 -e 
 # Environment files
 *.env
 *.env.*
-frontend/node_modules/.cache/default-development/5.pack
-frontend/node_modules/.cache/default-development/7.pack
-frontend/node_modules/.cache/default-development/11.pack
 -e 
 # Environment files
 *.env

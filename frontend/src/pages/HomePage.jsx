@@ -106,7 +106,9 @@ export const HomePage = () => {
   });
   const [matchError, setMatchError] = useState(null);
   // Track whether initial fetch has completed — prevents error flash before first response
-  const initialFetchDone = useRef(false);
+  // If we have cached data, consider initial fetch as done to avoid skeleton flash
+  const hasCachedData = !!(getStaleCachedMatches('all')?.matches?.length > 0);
+  const initialFetchDone = useRef(hasCachedData);
   // Monotonically increasing fetch ID — only the latest fetch can modify state
   // This prevents race conditions between auto-refresh, filter switches, and retries
   const fetchIdRef = useRef(0);
@@ -727,8 +729,8 @@ export const HomePage = () => {
           )}
         </div>
 
-        {/* Loading State */}
-        {(isLoadingMatches || !initialFetchDone.current) && (
+        {/* Loading State — only show skeleton when no matches to display */}
+        {isLoadingMatches && matches.length === 0 && (
           <div data-testid="match-loading-skeleton">
             <MatchSkeletonGrid />
           </div>

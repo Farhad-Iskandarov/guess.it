@@ -1,31 +1,28 @@
 import { useState, useRef, useEffect } from 'react';
-import { TrendingUp, ChevronDown, Target, Users, Lightbulb, UserPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { TrendingUp, ChevronDown, Target, Users, Lightbulb, UserPlus, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatLocalDateTime } from '@/utils/formatTime';
 
-const VoteButton = ({ type, votes, percentage, isSelected, onClick, isWinning, disabled }) => {
+const VoteButton = ({ type, votes, percentage, isWinning }) => {
   const labels = { home: '1', draw: 'X', away: '2' };
-  const isActive = isSelected || isWinning;
 
   return (
-    <button
-      onClick={() => !disabled && onClick(type)}
-      disabled={disabled}
+    <div
       data-testid={`vote-btn-${type}`}
-      className={`flex flex-col items-center justify-center min-w-[80px] px-3 py-2 rounded-lg transition-all duration-200 border ${
-        disabled ? 'opacity-50 cursor-not-allowed' :
-        isActive
-          ? 'bg-vote-active-bg border-primary text-foreground shadow-glow'
-          : 'bg-vote-inactive border-transparent hover:bg-vote-inactive-hover hover:border-border'
+      className={`flex flex-col items-center justify-center min-w-[80px] px-3 py-2 rounded-lg border cursor-default select-none ${
+        isWinning
+          ? 'bg-vote-active-bg border-primary/30 text-foreground'
+          : 'bg-vote-inactive border-transparent text-foreground'
       }`}
     >
       {/* Label Row */}
       <div className="flex items-center gap-1.5 mb-1">
-        <span className={`text-lg font-bold ${isActive ? 'text-primary' : 'text-foreground'}`}>
+        <span className={`text-lg font-bold ${isWinning ? 'text-primary' : 'text-foreground'}`}>
           {labels[type]}
         </span>
-        {isActive && (
+        {isWinning && (
           <span className="px-1 py-0.5 text-[10px] font-medium bg-primary/20 text-primary rounded">
             <TrendingUp className="w-3 h-3 inline" />
           </span>
@@ -33,15 +30,61 @@ const VoteButton = ({ type, votes, percentage, isSelected, onClick, isWinning, d
       </div>
       
       {/* Vote Count */}
-      <span className={`text-lg font-bold ${isActive ? 'text-foreground' : 'text-foreground'}`}>
+      <span className="text-lg font-bold text-foreground">
         {votes.toLocaleString()}
       </span>
       
       {/* Percentage */}
-      <span className={`text-sm ${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+      <span className={`text-sm ${isWinning ? 'text-primary' : 'text-muted-foreground'}`}>
         {percentage}%
       </span>
-    </button>
+    </div>
+  );
+};
+
+// Quick Prediction Shortcut Component
+const QuickPrediction = ({ match, userVote, onVote }) => {
+  const labels = { home: '1', draw: 'X', away: '2' };
+  const options = [
+    { type: 'home', label: match.homeTeam?.name || 'Home', shortLabel: '1' },
+    { type: 'draw', label: 'Draw', shortLabel: 'X' },
+    { type: 'away', label: match.awayTeam?.name || 'Away', shortLabel: '2' },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Trophy className="w-4 h-4 text-primary" />
+        <span className="font-medium">Quick Prediction</span>
+      </div>
+      <div className="flex gap-2">
+        {options.map(opt => (
+          <button
+            key={opt.type}
+            onClick={() => onVote(match.id, opt.type)}
+            data-testid={`quick-predict-${opt.type}`}
+            className={`flex-1 flex flex-col items-center gap-1 px-2 py-3 rounded-lg border-2 transition-all duration-200 ${
+              userVote === opt.type
+                ? 'bg-primary/20 border-primary text-primary shadow-glow ring-1 ring-primary/30'
+                : 'bg-card border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5'
+            }`}
+          >
+            <span className={`text-xl font-bold ${userVote === opt.type ? 'text-primary' : 'text-foreground'}`}>
+              {opt.shortLabel}
+            </span>
+            <span className="text-[10px] truncate max-w-full px-1">{opt.label}</span>
+          </button>
+        ))}
+      </div>
+      {userVote && (
+        <p className="text-[10px] text-emerald-500 font-medium text-center">
+          Your pick: {userVote === 'home' ? match.homeTeam?.name : userVote === 'away' ? match.awayTeam?.name : 'Draw'}
+        </p>
+      )}
+      <p className="text-[10px] text-muted-foreground text-center">
+        Tap to predict the match winner
+      </p>
+    </div>
   );
 };
 
@@ -368,6 +411,7 @@ export const MatchCard = ({
   friendsOnMatch = [],
   isAuthenticated = false
 }) => {
+  const navigate = useNavigate();
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [homeScoreInput, setHomeScoreInput] = useState('');
   const [awayScoreInput, setAwayScoreInput] = useState('');
@@ -384,8 +428,18 @@ export const MatchCard = ({
     }
   }, [isAdvancedOpen, smartAdvice]);
 
-  const handleVote = (voteType) => {
-    onVote(match.id, voteType);
+  const handleVote = (matchId, voteType) => {
+    onVote(matchId, voteType);
+  };
+
+  // Navigate to match detail page on card click
+  const handleCardClick = (e) => {
+    // Don't navigate if clicking on interactive elements
+    const target = e.target.closest('button, a, [data-testid="advanced-toggle"], [data-testid^="vote-btn-"], [data-testid^="quick-predict-"], [data-testid="invite-friend-btn"], [data-testid="get-smart-advice"], [data-testid="submit-exact-score"], input');
+    if (target) return;
+    // Don't navigate if the advanced section is open
+    if (isAdvancedOpen) return;
+    navigate(`/match/${match.id}`);
   };
 
   const getMostPicked = () => {
@@ -439,8 +493,9 @@ export const MatchCard = ({
 
   return (
     <div 
-      className="bg-card rounded-xl border border-border hover:border-border-hover transition-all duration-300 animate-slide-in overflow-hidden"
+      className="bg-card rounded-xl border border-border hover:border-border-hover transition-all duration-300 animate-slide-in overflow-hidden cursor-pointer"
       data-testid={`match-card-${match.id}`}
+      onClick={handleCardClick}
     >
       <div className="p-5">
         {/* Match Meta */}
@@ -483,34 +538,25 @@ export const MatchCard = ({
             />
           </div>
 
-          {/* Vote Buttons */}
+          {/* Vote Buttons (Display Only) */}
           <div className="flex items-center gap-2 shrink-0">
             <VoteButton
               type="home"
               votes={match.votes.home.count}
               percentage={match.votes.home.percentage}
-              isSelected={userVote === 'home'}
               isWinning={mostPicked === 'home'}
-              onClick={handleVote}
-              disabled={isMatchLocked}
             />
             <VoteButton
               type="draw"
               votes={match.votes.draw.count}
               percentage={match.votes.draw.percentage}
-              isSelected={userVote === 'draw'}
               isWinning={mostPicked === 'draw'}
-              onClick={handleVote}
-              disabled={isMatchLocked}
             />
             <VoteButton
               type="away"
               votes={match.votes.away.count}
               percentage={match.votes.away.percentage}
-              isSelected={userVote === 'away'}
               isWinning={mostPicked === 'away'}
-              onClick={handleVote}
-              disabled={isMatchLocked}
             />
           </div>
         </div>
@@ -530,11 +576,11 @@ export const MatchCard = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+            onClick={(e) => { e.stopPropagation(); setIsAdvancedOpen(!isAdvancedOpen); }}
             className="text-muted-foreground hover:text-foreground gap-1.5"
             data-testid="advanced-toggle"
           >
-            <span className="text-xs">Advanced</span>
+            <span className="text-xs">Predict Match</span>
             <ChevronDown 
               className={`w-4 h-4 transition-transform duration-300 ${isAdvancedOpen ? 'rotate-180' : ''}`} 
             />
@@ -565,7 +611,13 @@ export const MatchCard = ({
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-4">
+                {/* Quick Prediction Shortcut */}
+                <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
+                  <QuickPrediction match={match} userVote={userVote} onVote={handleVote} />
+                </div>
+                
+                <div className="grid gap-4 md:grid-cols-2">
                 {/* Exact Score */}
                 <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
                   <ExactScoreInput
@@ -600,6 +652,7 @@ export const MatchCard = ({
                 <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
                   <FriendsActivity friends={friendsOnMatch} />
                 </div>
+              </div>
               </div>
             )}
           </div>

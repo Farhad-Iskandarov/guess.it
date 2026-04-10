@@ -129,7 +129,7 @@ PredictionLockedBanner.displayName = 'PredictionLockedBanner';
 
 // ============ Team Crest Image (larger for new design) ============
 const TeamCrest = memo(({ team, large }) => {
-  const size = large ? 'w-10 h-10 sm:w-12 sm:h-12' : 'w-6 h-6 md:w-7 md:h-7';
+  const size = large ? 'w-8 h-8 sm:w-10 sm:h-10' : 'w-6 h-6 md:w-7 md:h-7';
   if (team.crest) {
     return (
       <img
@@ -243,35 +243,34 @@ const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry 
   const country = competitionCountry || COMPETITION_COUNTRIES[competition] || '';
 
   return (
-    <div className="flex items-center gap-3 py-3 px-1" data-testid={`league-header-${competition}`}>
+    <div className="flex items-center gap-3 py-2 px-1" data-testid={`league-header-${competition}`}>
       {/* League Logo */}
-      <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-secondary/80 flex items-center justify-center overflow-hidden">
+      <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary/80 flex items-center justify-center overflow-hidden">
         {competitionEmblem ? (
           <img
             src={competitionEmblem}
             alt={competition}
-            className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+            className="w-6 h-6 sm:w-8 sm:h-8 object-contain"
             onError={(e) => { e.target.style.display = 'none'; }}
           />
         ) : (
-          <span className="text-lg font-bold text-muted-foreground">{competition.charAt(0)}</span>
+          <span className="text-base font-bold text-muted-foreground">{competition.charAt(0)}</span>
         )}
       </div>
       {/* League name + country */}
       <div className="flex-1 min-w-0">
-        <h3 className="text-base sm:text-lg font-bold text-foreground truncate">{competition}</h3>
-        {country && <p className="text-xs sm:text-sm text-muted-foreground">{country}</p>}
+        <h3 className="text-sm sm:text-base font-bold text-foreground truncate">{competition}</h3>
+        {country && <p className="text-[11px] sm:text-xs text-muted-foreground">{country}</p>}
       </div>
       {/* Arrow */}
-      <ChevronRight className="w-6 h-6 text-muted-foreground flex-shrink-0" />
+      <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
     </div>
   );
 });
 LeagueHeader.displayName = 'LeagueHeader';
 
-// ============ Prediction Bars (3 columns side-by-side, bar on top, label below) ============
-const PredictionBars = memo(({ votes, selectedType, onSelect, disabled, locked }) => {
-  const isLocked = disabled || locked;
+// ============ Prediction Bars (3 columns side-by-side, bar on top, label below — DISPLAY ONLY) ============
+const PredictionBars = memo(({ votes, selectedType, locked }) => {
   const items = [
     { type: 'home', label: '1', pct: votes.home.percentage },
     { type: 'draw', label: 'X', pct: votes.draw.percentage },
@@ -279,21 +278,17 @@ const PredictionBars = memo(({ votes, selectedType, onSelect, disabled, locked }
   ];
 
   return (
-    <div className="flex items-end gap-3 sm:gap-4">
+    <div className="flex items-end gap-2 sm:gap-3">
       {items.map(({ type, label, pct }) => {
         const isSelected = selectedType === type;
         return (
-          <button
+          <div
             key={type}
-            onClick={() => !isLocked && onSelect(type)}
-            disabled={isLocked}
             data-testid={`vote-btn-${type}`}
-            className={`flex-1 flex flex-col items-center gap-1.5 transition-all ${
-              isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-            }`}
+            className="flex-1 flex flex-col items-center gap-1 cursor-default select-none"
           >
             {/* Bar */}
-            <div className={`w-full h-1.5 rounded-full overflow-hidden ${
+            <div className={`w-full h-1 rounded-full overflow-hidden ${
               isSelected ? 'bg-primary/30' : 'bg-muted/80'
             }`}>
               <div
@@ -304,12 +299,12 @@ const PredictionBars = memo(({ votes, selectedType, onSelect, disabled, locked }
               />
             </div>
             {/* Label: "1: 45%" */}
-            <span className={`text-xs sm:text-sm font-semibold tabular-nums ${
+            <span className={`text-[11px] sm:text-xs font-semibold tabular-nums ${
               isSelected ? 'text-primary' : 'text-emerald-500/80'
             }`}>
               {label}: {pct}%
             </span>
-          </button>
+          </div>
         );
       })}
     </div>
@@ -323,7 +318,7 @@ const PredictMatchButton = memo(({ onClick, disabled }) => (
     onClick={onClick}
     disabled={disabled}
     data-testid="guess-it-btn"
-    className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm sm:text-base font-bold uppercase tracking-widest transition-all duration-200 ${
+    className={`w-full py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all duration-200 ${
       disabled
         ? 'bg-muted/20 border-2 border-border/30 text-muted-foreground/40 cursor-not-allowed'
         : 'bg-[#1a3a2a] border-2 border-emerald-600/50 text-white hover:bg-[#1f4533] hover:border-emerald-500/70 active:scale-[0.98]'
@@ -582,15 +577,15 @@ const AdvanceButton = memo(({ onClick, disabled }) => (
 AdvanceButton.displayName = 'AdvanceButton';
 
 // ============ Advanced Options Modal ============
-import { Target, Lightbulb, UserPlus, Users, X as XIcon, Search } from 'lucide-react';
+import { Target, Lightbulb, UserPlus, Users, X as XIcon, Search, Trophy } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { saveExactScorePrediction, getExactScorePrediction, getMyExactScorePredictions, deleteExactScorePrediction } from '@/services/predictions';
 import { useFriends } from '@/lib/FriendsContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, onNavigateLogin, onExactScoreSaved, savedPrediction }) => {
-  const [activeSection, setActiveSection] = useState('exact-score');
+const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, onNavigateLogin, onExactScoreSaved, savedPrediction, onQuickPredict }) => {
+  const [activeSection, setActiveSection] = useState('quick-predict');
   const [homeScore, setHomeScore] = useState('');
   const [awayScore, setAwayScore] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -750,6 +745,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
   if (!match) return null;
 
   const sections = [
+    { id: 'quick-predict', label: 'Quick Predict', icon: Trophy, color: 'emerald' },
     { id: 'exact-score', label: 'Exact Score', icon: Target, color: 'amber' },
     { id: 'smart-advice', label: 'Smart Advice', icon: Lightbulb, color: 'sky' },
     { id: 'invite', label: 'Invite Friend', icon: UserPlus, color: 'emerald' },
@@ -795,6 +791,47 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
               <div className="text-center py-8">
                 <p className="text-sm text-muted-foreground mb-4">Please sign in to access advanced features</p>
                 <Button onClick={onNavigateLogin}>Sign In</Button>
+              </div>
+            ) : activeSection === 'quick-predict' ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-primary" />
+                  <span className="font-semibold">Quick Prediction</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Tap to predict the match winner
+                </p>
+                <div className="flex gap-3">
+                  {[
+                    { type: 'home', label: match.homeTeam?.name || 'Home', shortLabel: '1' },
+                    { type: 'draw', label: 'Draw', shortLabel: 'X' },
+                    { type: 'away', label: match.awayTeam?.name || 'Away', shortLabel: '2' },
+                  ].map(opt => (
+                    <button
+                      key={opt.type}
+                      onClick={() => {
+                        if (onQuickPredict) onQuickPredict(match.id, opt.type);
+                        onClose();
+                      }}
+                      data-testid={`quick-predict-${opt.type}`}
+                      className={`flex-1 flex flex-col items-center gap-2 px-3 py-4 rounded-xl border-2 transition-all duration-200 ${
+                        savedPrediction === opt.type
+                          ? 'bg-primary/20 border-primary text-primary shadow-glow ring-1 ring-primary/30'
+                          : 'bg-card border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5'
+                      }`}
+                    >
+                      <span className={`text-2xl font-bold ${savedPrediction === opt.type ? 'text-primary' : 'text-foreground'}`}>
+                        {opt.shortLabel}
+                      </span>
+                      <span className="text-xs truncate max-w-full px-1">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {savedPrediction && (
+                  <p className="text-xs text-emerald-500 font-medium text-center">
+                    Your current pick: {savedPrediction === 'home' ? match.homeTeam?.name : savedPrediction === 'away' ? match.awayTeam?.name : 'Draw'}
+                  </p>
+                )}
               </div>
             ) : activeSection === 'exact-score' ? (
               <div className="space-y-4">
@@ -1057,7 +1094,6 @@ const MatchRow = memo(({
   match,
   currentSelection,
   savedPrediction,
-  onSelectPrediction,
   onGuessIt,
   onAdvance,
   isLoading,
@@ -1068,6 +1104,7 @@ const MatchRow = memo(({
   favoriteMatchIds,
   onToggleFavoriteMatch,
   hasExactScore,
+  onNavigateMatch,
 }) => {
   const displayedSelection = savedPrediction || currentSelection || null;
   const isLocked = match.predictionLocked;
@@ -1095,16 +1132,22 @@ const MatchRow = memo(({
 
   return (
     <div
-      className={`rounded-xl border overflow-hidden transition-colors duration-200 ${
+      className={`rounded-xl border overflow-hidden transition-colors duration-200 cursor-pointer ${
         isLive ? 'bg-card border-red-500/30' : 'bg-card border-border/50 hover:border-border'
       }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
+      onClick={(e) => {
+        // Don't navigate if clicking on interactive elements
+        const target = e.target.closest('button, a, input, [data-testid="guess-it-btn"], [data-testid="advance-prediction-btn"], [data-testid="remove-prediction-btn"], [data-testid^="bell-match-"], [data-testid^="fav-heart-"]');
+        if (target) return;
+        onNavigateMatch(match.id);
+      }}
     >
-      <div className="p-4 sm:p-5 space-y-4">
+      <div className="px-4 py-3 sm:px-5 sm:py-3.5 space-y-2.5">
 
         {/* === TOP ROW: Date | Time | Countdown + Bell === */}
-        <div className="flex items-center justify-between text-sm text-muted-foreground pb-3 border-b border-border/40">
+        <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/30">
           <span className="font-medium">
             {isLive ? (
               <StatusBadge status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
@@ -1114,7 +1157,7 @@ const MatchRow = memo(({
               getDateStr()
             )}
           </span>
-          <span className="font-semibold text-foreground">
+          <span className="font-semibold text-foreground text-sm">
             {isLive || isFinished ? '' : getTimeStr()}
           </span>
           <div className="flex items-center gap-1.5">
@@ -1129,47 +1172,45 @@ const MatchRow = memo(({
         </div>
 
         {/* === TEAMS ROW: Crest Name  VS  Name Crest === */}
-        <div className="flex items-center justify-between gap-2 py-1">
+        <div className="flex items-center justify-between gap-2 py-0.5">
           {/* Home team */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
             <TeamCrest team={match.homeTeam} large />
-            <span className="text-sm sm:text-base font-bold text-foreground uppercase leading-tight">
+            <span className="text-sm font-bold text-foreground uppercase leading-tight truncate">
               {match.homeTeam.shortName || match.homeTeam.name}
             </span>
           </div>
 
           {/* Score or VS */}
-          <div className="flex-shrink-0 px-2 sm:px-4">
+          <div className="flex-shrink-0 px-3">
             {(isLive || isFinished) && match.score?.home !== null ? (
               <div className="flex items-center gap-1.5">
-                <span className={`text-xl sm:text-2xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
+                <span className={`text-xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
                   {match.score.home}
                 </span>
-                <span className="text-base text-muted-foreground font-medium">-</span>
-                <span className={`text-xl sm:text-2xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
+                <span className="text-sm text-muted-foreground font-medium">-</span>
+                <span className={`text-xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
                   {match.score.away}
                 </span>
               </div>
             ) : (
-              <span className="text-base sm:text-lg font-bold text-muted-foreground uppercase tracking-widest">VS</span>
+              <span className="text-sm font-bold text-muted-foreground/60 uppercase tracking-wider">VS</span>
             )}
           </div>
 
           {/* Away team */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 justify-end">
-            <span className="text-sm sm:text-base font-bold text-foreground uppercase leading-tight text-right">
+          <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+            <span className="text-sm font-bold text-foreground uppercase leading-tight text-right truncate">
               {match.awayTeam.shortName || match.awayTeam.name}
             </span>
             <TeamCrest team={match.awayTeam} large />
           </div>
         </div>
 
-        {/* === PREDICTION BARS (3 columns side by side) === */}
+        {/* === PREDICTION BARS (3 columns side by side — display only) === */}
         <PredictionBars
           votes={match.votes}
           selectedType={displayedSelection}
-          onSelect={(type) => onSelectPrediction(match.id, type)}
-          disabled={isLoading || hasExactScore}
           locked={isLocked}
         />
 
@@ -1345,6 +1386,10 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     }
   }, [savedPredictions, onPredictionSaved, exactScoreMatchIds]);
 
+  const handleNavigateMatch = useCallback((matchId) => {
+    navigate(`/match/${matchId}`);
+  }, [navigate]);
+
   const handleAdvance = useCallback((matchId) => {
     const match = matches.find(m => m.id === matchId);
     if (match) {
@@ -1469,7 +1514,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
 
   return (
     <>
-      <div className="mt-4 sm:mt-6 space-y-6" data-testid="match-list-container">
+      <div className="mt-4 sm:mt-5 space-y-5 max-w-3xl mx-auto" data-testid="match-list-container">
         {groupedMatches.map((group) => (
           <div key={group.competition} data-testid={`league-section-${group.competition}`}>
             {/* League Header */}
@@ -1480,14 +1525,13 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
             />
 
             {/* Matches under this league */}
-            <div className="space-y-3 mt-1">
+            <div className="space-y-2.5 mt-1">
               {group.matches.map((match) => (
                 <MatchRow
                   key={match.id}
                   match={match}
                   currentSelection={currentSelections[match.id]}
                   savedPrediction={savedPredictions[match.id]}
-                  onSelectPrediction={handleLocalSelect}
                   onGuessIt={handleGuessIt}
                   onAdvance={handleAdvance}
                   isLoading={loadingMatches[match.id]}
@@ -1498,6 +1542,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
                   favoriteMatchIds={favoriteMatchIds}
                   onToggleFavoriteMatch={onToggleFavoriteMatch}
                   hasExactScore={exactScoreMatchIds.has(match.id)}
+                  onNavigateMatch={handleNavigateMatch}
                 />
               ))}
             </div>
@@ -1526,6 +1571,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
         onNavigateLogin={handleNavigateLoginFromAdvanced}
         onExactScoreSaved={handleExactScoreSaved}
         savedPrediction={advancedModalMatch ? savedPredictions[advancedModalMatch.id] : null}
+        onQuickPredict={handleSelectPrediction}
       />
     </>
   );

@@ -506,18 +506,20 @@ async def get_my_predictions_detailed(
             
             if match_data:
                 es_entry["match"] = {
-                    "homeTeam": match_data["homeTeam"],
-                    "awayTeam": match_data["awayTeam"],
-                    "competition": match_data["competition"],
+                    "homeTeam": match_data.get("homeTeam", {}),
+                    "awayTeam": match_data.get("awayTeam", {}),
+                    "competition": match_data.get("competition", ""),
                     "competitionEmblem": match_data.get("competitionEmblem"),
-                    "dateTime": match_data["dateTime"],
+                    "dateTime": match_data.get("dateTime", ""),
                     "utcDate": match_data.get("utcDate"),
-                    "status": match_data["status"],
+                    "status": match_data.get("status", "SCHEDULED"),
                     "statusDetail": match_data.get("statusDetail"),
                     "matchMinute": match_data.get("matchMinute"),
-                    "score": match_data["score"],
-                    "votes": match_data["votes"],
-                    "totalVotes": match_data["totalVotes"],
+                    "score": match_data.get("score", {}),
+                    "predictionLocked": match_data.get("predictionLocked", True),
+                    "lockReason": match_data.get("lockReason"),
+                    "votes": match_data.get("votes", {}),
+                    "totalVotes": match_data.get("totalVotes", 0),
                 }
                 
                 status = match_data["status"]
