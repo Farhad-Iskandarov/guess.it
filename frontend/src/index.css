@@ -587,3 +587,9 @@ button, a, input, select, textarea {
 .animate-scale-in {
     animation: scale-in 0.2s ease-out;
 }
+
+
+/* ===== Mobile Bottom Nav Safe Area ===== */
+.safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}

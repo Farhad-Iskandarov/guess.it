@@ -221,3 +221,29 @@ tail -f /var/log/supervisor/frontend.err.log
 2. **STRIPE_API_KEY not configured** - Subscription payments won't process. Add a Stripe test/live key
 3. **Redis not available** - Pub/sub falls back to local mode. Multi-worker real-time events won't sync across instances
 4. **bcrypt warning** - `passlib` shows a deprecation warning about `bcrypt.__about__`. Cosmetic only, does not affect functionality
+
+---
+
+## Recent Changes
+
+### Mobile Bottom Navigation Bar (2026-04-10)
+- 5-tab bottom nav: Home, Leaderboard, Message, Saved, Profile
+- Mobile-only (hidden on desktop), fixed at bottom
+- Dark/light theme aware, Instagram/TikTok style
+- Active tab highlighted, hidden on auth/admin pages
+- iPhone safe-area support
+
+### Live Match Time on Match Cards (2026-04-10)
+- Shows exact match minute (45', HT, 90+3') on live match cards
+- Displayed prominently between team rows and in status badge
+- Animated pulse for live indicators
+
+### UX Improvements (2026-04-10)
+- **Scroll reset**: Every tab switch via bottom nav resets scroll to top — no stale scroll positions
+- **Live vote bars**: Prediction percentages update instantly after voting (optimistic updates)
+- **Bell icon silenced**: Tapping the bell icon no longer shows a toast notification — clean toggle only
+
+### Match Card UI Overhaul (2026-04-11)
+- **Full club names**: No more truncation ("...") — long names wrap to 2 lines naturally (e.g., "OLYMPIQUE LYON")
+- **Better spacing**: Increased gap between cards (10px to 24px) with stronger borders for clean, breathable layout
+- **Improved readability**: More internal padding, balanced alignment, no cramped elements

@@ -318,7 +318,7 @@ const PredictMatchButton = memo(({ onClick, disabled }) => (
     onClick={onClick}
     disabled={disabled}
     data-testid="guess-it-btn"
-    className={`w-full py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all duration-200 ${
+    className={`w-full mt-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all duration-200 ${
       disabled
         ? 'bg-muted/20 border-2 border-border/30 text-muted-foreground/40 cursor-not-allowed'
         : 'bg-[#1a3a2a] border-2 border-emerald-600/50 text-white hover:bg-[#1f4533] hover:border-emerald-500/70 active:scale-[0.98]'
@@ -754,24 +754,24 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
-        <div className="bg-card">
+      <DialogContent className="sm:max-w-lg p-0 max-h-[85vh] w-[92vw] sm:w-full rounded-xl sm:rounded-lg gap-0">
+        <div className="bg-card overflow-hidden rounded-xl sm:rounded-lg">
           {/* Header */}
-          <div className="p-4 border-b border-border/50">
-            <DialogTitle className="text-lg font-bold">Advanced Options</DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
+          <div className="px-3 py-3 sm:px-4 sm:py-4 border-b border-border/50">
+            <DialogTitle className="text-base sm:text-lg font-bold">Advanced Options</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm text-muted-foreground truncate">
               {match.homeTeam.name} vs {match.awayTeam.name}
             </DialogDescription>
           </div>
 
           {/* Section Tabs */}
-          <div className="flex border-b border-border/30 overflow-x-auto">
+          <div className="flex border-b border-border/30 overflow-x-auto scrollbar-hide -mx-px">
             {sections.map(section => (
               <button
                 key={section.id}
                 onClick={() => !section.disabled && setActiveSection(section.id)}
                 disabled={section.disabled}
-                className={`flex-1 min-w-[100px] px-3 py-2.5 text-xs font-medium transition-all border-b-2 ${
+                className={`flex-shrink-0 min-w-0 px-3 sm:px-4 py-2.5 text-[10px] sm:text-xs font-medium transition-all border-b-2 whitespace-nowrap ${
                   activeSection === section.id
                     ? `border-${section.color}-500 text-${section.color}-500 bg-${section.color}-500/5`
                     : section.disabled
@@ -779,14 +779,14 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                 }`}
               >
-                <section.icon className="w-4 h-4 mx-auto mb-1" />
+                <section.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto mb-0.5 sm:mb-1" />
                 {section.label}
               </button>
             ))}
           </div>
 
           {/* Content */}
-          <div className="p-4 min-h-[200px]">
+          <div className="px-3 py-4 sm:p-4 min-h-[200px] overflow-y-auto" style={{ maxHeight: 'calc(85vh - 130px)' }}>
             {!isAuthenticated ? (
               <div className="text-center py-8">
                 <p className="text-sm text-muted-foreground mb-4">Please sign in to access advanced features</p>
@@ -801,31 +801,33 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                 <p className="text-sm text-muted-foreground">
                   Tap to predict the match winner
                 </p>
-                <div className="flex gap-3">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
                   {[
                     { type: 'home', label: match.homeTeam?.name || 'Home', shortLabel: '1' },
                     { type: 'draw', label: 'Draw', shortLabel: 'X' },
                     { type: 'away', label: match.awayTeam?.name || 'Away', shortLabel: '2' },
-                  ].map(opt => (
-                    <button
-                      key={opt.type}
-                      onClick={() => {
-                        if (onQuickPredict) onQuickPredict(match.id, opt.type);
-                        onClose();
-                      }}
-                      data-testid={`quick-predict-${opt.type}`}
-                      className={`flex-1 flex flex-col items-center gap-2 px-3 py-4 rounded-xl border-2 transition-all duration-200 ${
-                        savedPrediction === opt.type
-                          ? 'bg-primary/20 border-primary text-primary shadow-glow ring-1 ring-primary/30'
-                          : 'bg-card border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5'
-                      }`}
-                    >
-                      <span className={`text-2xl font-bold ${savedPrediction === opt.type ? 'text-primary' : 'text-foreground'}`}>
-                        {opt.shortLabel}
-                      </span>
-                      <span className="text-xs truncate max-w-full px-1">{opt.label}</span>
-                    </button>
-                  ))}
+                  ].map(opt => {
+                    const isSelected = savedPrediction === opt.type;
+                    return (
+                      <button
+                        key={opt.type}
+                        onClick={() => {
+                          if (onQuickPredict) onQuickPredict(match.id, opt.type);
+                        }}
+                        data-testid={`quick-predict-${opt.type}`}
+                        className={`flex flex-col items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-3 sm:py-4 rounded-lg sm:rounded-xl border-2 transition-all duration-200 ${
+                          isSelected
+                            ? 'bg-primary/20 border-primary text-primary shadow-glow ring-1 ring-primary/30 scale-[1.03]'
+                            : 'bg-card border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5'
+                        }`}
+                      >
+                        <span className={`text-xl sm:text-2xl font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                          {opt.shortLabel}
+                        </span>
+                        <span className="text-[9px] sm:text-xs truncate max-w-full leading-tight">{opt.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
                 {savedPrediction && (
                   <p className="text-xs text-emerald-500 font-medium text-center">
@@ -1133,7 +1135,7 @@ const MatchRow = memo(({
   return (
     <div
       className={`rounded-xl border overflow-hidden transition-colors duration-200 cursor-pointer ${
-        isLive ? 'bg-card border-red-500/30' : 'bg-card border-border/50 hover:border-border'
+        isLive ? 'bg-card border-red-500/30' : 'bg-card border-border/70 hover:border-border'
       }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
@@ -1144,7 +1146,7 @@ const MatchRow = memo(({
         onNavigateMatch(match.id);
       }}
     >
-      <div className="px-4 py-3 sm:px-5 sm:py-3.5 space-y-2.5">
+      <div className="px-4 py-4 sm:px-5 sm:py-4 space-y-3">
 
         {/* === TOP ROW: Date | Time | Countdown + Bell === */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/30">
@@ -1172,17 +1174,17 @@ const MatchRow = memo(({
         </div>
 
         {/* === TEAMS ROW: Crest Name  VS  Name Crest === */}
-        <div className="flex items-center justify-between gap-2 py-0.5">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 py-1">
           {/* Home team */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
             <TeamCrest team={match.homeTeam} large />
-            <span className="text-sm font-bold text-foreground uppercase leading-tight truncate">
+            <span className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-left break-words" data-testid="home-team-name">
               {match.homeTeam.shortName || match.homeTeam.name}
             </span>
           </div>
 
           {/* Score or VS */}
-          <div className="flex-shrink-0 px-3">
+          <div className="flex-shrink-0 px-2 sm:px-3">
             {(isLive || isFinished) && match.score?.home !== null ? (
               <div className="flex items-center gap-1.5">
                 <span className={`text-xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
@@ -1199,8 +1201,8 @@ const MatchRow = memo(({
           </div>
 
           {/* Away team */}
-          <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-            <span className="text-sm font-bold text-foreground uppercase leading-tight text-right truncate">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 justify-end">
+            <span className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-right break-words" data-testid="away-team-name">
               {match.awayTeam.shortName || match.awayTeam.name}
             </span>
             <TeamCrest team={match.awayTeam} large />
@@ -1525,7 +1527,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
             />
 
             {/* Matches under this league */}
-            <div className="space-y-2.5 mt-1">
+            <div className="flex flex-col gap-6 mt-2">
               {group.matches.map((match) => (
                 <MatchRow
                   key={match.id}

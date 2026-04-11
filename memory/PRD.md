@@ -1,40 +1,34 @@
 # GuessIt - Football Prediction App PRD
 
 ## Original Problem Statement
-Create a full copy (duplicate) of the existing project from https://github.com/Farhad-Iskandarov/guess.it and open it for editing. No redesign, no UI changes, no framework/library swaps. 100% identical clone.
+Clone the existing project from https://github.com/Farhad-Iskandarov/guess.it as a 100% identical copy, then implement incremental improvements.
 
 ## Architecture
-- **Frontend**: React 19 with Craco, Tailwind CSS, Radix UI, React Router v7
-- **Backend**: FastAPI (Python 3.11) with Motor (async MongoDB), Redis pub/sub (fallback to local mode)
-- **Database**: MongoDB (local, test_database)
-- **External APIs**: football-data.org v4, Stripe
-- **Real-time**: WebSockets (live matches, chat, friends, notifications)
+- **Backend**: FastAPI (Python) on port 8001
+- **Frontend**: React (CRA + Craco) on port 3000
+- **Database**: MongoDB (motor async driver)
+- **Real-time**: WebSockets
+- **Styling**: Tailwind CSS + shadcn/ui
 
 ## What's Been Implemented
+### Session 1 - Clone (2026-04-10)
+- Exact clone from GitHub
 
-### Session 1: Clone Setup (2026-04-09)
-- Complete project cloned from GitHub (main branch)
-- All backend/frontend files copied and configured
-- Admin account seeded, subscription plans seeded, weekly season created
+### Session 2 - Quick Predict Modal Fix (2026-04-10)
+- Modal stays open after prediction, mobile layout fixed
 
-### Session 2: Bug Fixes & Features (2026-04-10)
-- **Bug Fix**: Predictions page KeyError 'votes' (predictions.py)
-- **Bug Fix**: Slow page load on navigation back (HomePage.jsx cache logic)
-- **Feature**: Match card click → navigates to match detail page
-- **Feature**: Display-only prediction bars (no click interaction)
-- **Feature**: Quick Predict tab in PREDICT MATCH modal (Home/Draw/Away)
-- **UI**: Compact match card styling (padding, spacing, sizes)
+### Session 3 - Mobile Bottom Nav + Live Time (2026-04-10)
+- 5-tab bottom nav, live match minute display
 
-### Session 2: Documentation (2026-04-10)
-- Updated README.md with full project documentation
-- Created progress.md with detailed change log and architecture notes
+### Session 4 - UX Fixes (2026-04-10)
+- Scroll reset, live vote bars, bell toast removed
+
+### Session 5 - Match Card UI (2026-04-11)
+- Full club names (no truncation, natural wrapping)
+- Better card spacing (10px → 16px gaps)
+- Improved internal padding and readability
+- 100% test pass rate
 
 ## Prioritized Backlog
-- P1: Configure FOOTBALL_API_KEY for live match data
-- P1: Configure STRIPE_API_KEY for subscription payments
-- P2: Set up Redis for cross-worker pub/sub
-- P2: Google OAuth configuration
-
-## Next Tasks
-- Awaiting user instructions for further modifications
-- See `/app/progress.md` for detailed change log and architecture context
+- P1: Configure FOOTBALL_API_KEY
+- P2: Configure Stripe, Google OAuth

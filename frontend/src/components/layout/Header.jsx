@@ -485,6 +485,25 @@ const GlobalSearch = ({ onMatchSelect }) => {
   );
 };
 
+// =========== Drawer Menu Item ===========
+const DrawerItem = memo(({ icon, label, badge, pro, onClick, testId }) => (
+  <button
+    onClick={onClick}
+    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-secondary/70 transition-colors"
+    data-testid={testId}
+  >
+    <span className="text-muted-foreground">{icon}</span>
+    <span className="flex-1 text-left">{label}</span>
+    {pro && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-bold">PRO</span>}
+    {badge > 0 && (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+        {badge > 99 ? '99+' : badge}
+      </span>
+    )}
+  </button>
+));
+DrawerItem.displayName = 'DrawerItem';
+
 // =========== Main Header ===========
 export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, onLogin, onLogout: propOnLogout, onMatchSelect }) => {
   // Always use AuthContext as source of truth for auth state
@@ -495,6 +514,12 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
   
   // Get pending friend request count
   let friendRequestCount = 0;
@@ -530,12 +555,19 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
   }, [navigate]);
 
   const handleLoginClick = useCallback(() => {
+    setMobileMenuOpen(false);
     if (onLogin) onLogin();
     else navigate('/login');
   }, [onLogin, navigate]);
 
   const handleRegisterClick = useCallback(() => {
+    setMobileMenuOpen(false);
     navigate('/register');
+  }, [navigate]);
+
+  const mobileNav = useCallback((path) => {
+    setMobileMenuOpen(false);
+    navigate(path);
   }, [navigate]);
 
   // Handle match selection from search
@@ -663,16 +695,158 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
               </div>
             )}
 
-            {/* User avatar */}
-            {isAuthenticated && <UserDropdownMenu user={user} onLogout={onLogout} />}
+            {/* User avatar — desktop only */}
+            {isAuthenticated && (
+              <span className="hidden md:inline-flex">
+                <UserDropdownMenu user={user} onLogout={onLogout} />
+              </span>
+            )}
 
-            {/* Mobile menu */}
-            <Button variant="ghost" size="icon" className="ml-1 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors md:hidden" aria-label="Menu">
+            {/* Mobile menu button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="ml-1 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors md:hidden"
+              aria-label="Menu"
+              onClick={() => setMobileMenuOpen(true)}
+              data-testid="hamburger-menu-btn"
+            >
               <Menu className="h-5 w-5" />
             </Button>
           </div>
         </div>
       </div>
+
+      {/* ===== Mobile Drawer ===== */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] md:hidden" data-testid="mobile-drawer">
+          {/* Overlay */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Drawer panel */}
+          <div className="absolute top-0 right-0 h-full w-[280px] bg-background border-l border-border shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200">
+            {/* Drawer header */}
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <span className="text-lg font-bold">
+                <span className="text-primary">GUESS</span>
+                <span className="text-foreground">IT</span>
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileMenuOpen(false)}
+                data-testid="mobile-drawer-close"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* User info (logged in) */}
+            {isAuthenticated && user && (
+              <div className="p-4 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10 border-2 border-primary/50">
+                    <AvatarImage src={user?.picture} alt={user?.nickname || user?.name} />
+                    <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                      {(user?.nickname || user?.name || 'U').charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{user?.nickname || user?.name || 'User'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 mt-3">
+                  <div className="flex items-center gap-1.5">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-semibold">Level {user?.level ?? 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-semibold text-primary">{user?.points ?? 0} pts</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Menu items */}
+            <div className="py-2">
+              {isAuthenticated ? (
+                <>
+                  {/* Account section */}
+                  <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Account</p>
+                  <DrawerItem icon={<Users className="w-4 h-4" />} label="Profile" onClick={() => mobileNav('/profile')} testId="drawer-profile" />
+                  <DrawerItem icon={<BarChart3 className="w-4 h-4" />} label="My Predictions" onClick={() => mobileNav('/my-predictions')} testId="drawer-predictions" />
+                  <DrawerItem icon={<Mail className="w-4 h-4" />} label="Messages" badge={messageCount} onClick={() => mobileNav('/messages')} testId="drawer-messages" />
+                  <DrawerItem icon={<Users className="w-4 h-4" />} label="Friends" badge={friendRequestCount} onClick={() => mobileNav('/friends')} testId="drawer-friends" />
+                  <DrawerItem icon={<Bookmark className="w-4 h-4" />} label="Saved Matches" onClick={() => mobileNav('/saved-matches')} testId="drawer-saved" />
+                  <DrawerItem icon={<Zap className="w-4 h-4" />} label="Subscribe" pro onClick={() => mobileNav('/subscribe')} testId="drawer-subscribe" />
+
+                  {/* Navigation section */}
+                  <div className="my-2 border-t border-border" />
+                  <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Navigate</p>
+                  <DrawerItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" onClick={() => mobileNav('/leaderboard')} testId="drawer-leaderboard" />
+                  <DrawerItem icon={<Newspaper className="w-4 h-4" />} label="News" onClick={() => mobileNav('/news')} testId="drawer-news" />
+                  <DrawerItem icon={<Phone className="w-4 h-4" />} label="Contact" onClick={() => mobileNav('/contact')} testId="drawer-contact" />
+
+                  {/* Settings & Logout */}
+                  <div className="my-2 border-t border-border" />
+                  <DrawerItem icon={<Search className="w-4 h-4" />} label="How It Works" onClick={() => mobileNav('/how-it-works')} testId="drawer-how" />
+                  <DrawerItem icon={<Radio className="w-4 h-4" />} label="About Us" onClick={() => mobileNav('/about')} testId="drawer-about" />
+                  <DrawerItem
+                    icon={theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-yellow-400" />}
+                    label={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                    onClick={() => { toggleTheme(); }}
+                    testId="drawer-theme"
+                  />
+                  <DrawerItem icon={<Zap className="w-4 h-4" />} label="Settings" onClick={() => mobileNav('/settings')} testId="drawer-settings" />
+
+                  <div className="my-2 border-t border-border" />
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); onLogout(); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
+                    data-testid="drawer-logout"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Guest navigation */}
+                  <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Navigate</p>
+                  <DrawerItem icon={<Search className="w-4 h-4" />} label="How It Works" onClick={() => mobileNav('/how-it-works')} testId="drawer-how" />
+                  <DrawerItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" onClick={() => mobileNav('/leaderboard')} testId="drawer-leaderboard" />
+                  <DrawerItem icon={<Radio className="w-4 h-4" />} label="About Us" onClick={() => mobileNav('/about')} testId="drawer-about" />
+                  <DrawerItem icon={<Newspaper className="w-4 h-4" />} label="News" onClick={() => mobileNav('/news')} testId="drawer-news" />
+                  <DrawerItem icon={<Phone className="w-4 h-4" />} label="Contact" onClick={() => mobileNav('/contact')} testId="drawer-contact" />
+                  <DrawerItem icon={<Zap className="w-4 h-4" />} label="Subscription" onClick={() => mobileNav('/subscribe')} testId="drawer-subscribe" />
+
+                  <div className="my-2 border-t border-border" />
+                  <DrawerItem
+                    icon={theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-yellow-400" />}
+                    label={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                    onClick={() => { toggleTheme(); }}
+                    testId="drawer-theme"
+                  />
+
+                  {/* Login / Register buttons */}
+                  <div className="p-4 mt-2 space-y-2 border-t border-border">
+                    <Button variant="default" className="w-full" onClick={handleLoginClick} data-testid="drawer-login">
+                      <LogIn className="w-4 h-4 mr-2" /> Login
+                    </Button>
+                    <Button variant="outline" className="w-full" onClick={handleRegisterClick} data-testid="drawer-register">
+                      <UserPlus className="w-4 h-4 mr-2" /> Register
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

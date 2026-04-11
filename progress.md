@@ -241,12 +241,108 @@ curl -X POST https://guess-it-staging-2.preview.emergentagent.com/api/auth/login
 
 ---
 
+
+## Session 3 - Mobile Bottom Nav & Live Match Time (2026-04-10)
+
+### Feature 1: Mobile Bottom Navigation Bar
+- Created `MobileBottomNav.jsx` component with 5 tabs: Home, Leaderboard, Message, Saved, Profile
+- Fixed at bottom of screen, full width, mobile-only (hidden on md+ breakpoints)
+- Dark theme: #0a0a0a background, white active tab, zinc-500 inactive tabs
+- Light theme: white background, zinc-900 active tab, zinc-400 inactive tabs
+- Thin outlined icons (lucide-react: Home, Trophy, Send, Bookmark, User)
+- Active tab detection based on current route
+- Hidden on auth pages (login, register, choose-nickname, admin)
+- Bottom padding added to main content (pb-16 md:pb-0) to prevent content overlap
+- Safe area support for iPhone notch (env(safe-area-inset-bottom))
+- Unauthenticated users clicking Message/Saved/Profile are redirected to login
+
+### Feature 2: Live Match Minute Display
+- Enhanced MatchCard to show exact match minute (45', HT, 90+3') between team rows for live matches
+- Improved status badge to properly handle HT (Half Time) display
+- Both MatchCard (desktop) and MatchList (mobile) already had minute support in status badges
+
+### Files Changed
+- `frontend/src/components/layout/MobileBottomNav.jsx` (new)
+- `frontend/src/App.js` (import + render MobileBottomNav, bottom padding)
+- `frontend/src/index.css` (safe-area-bottom CSS)
+- `frontend/src/components/home/MatchCard.jsx` (live minute between teams, HT handling)
+- `README.md` (updated features section)
+- `progress.md` (this entry)
+
+---
+
+## Session 4 - UX Fixes: Scroll, Live Votes, Bell Toast, Branding (2026-04-10)
+
+### Fix 1: Scroll Reset on Tab Switch
+- Added `ScrollToTop` component in `App.js` that resets `window.scrollTo(0, 0)` on every route change
+- Also added `window.scrollTo(0, 0)` in `MobileBottomNav.handleNav` for immediate effect
+- Each tab now behaves like a fresh page load — no cached scroll positions
+
+### Fix 2: Live Progress Bar Updates
+- Modified `handlePredictionSaved` in `HomePage.jsx` to optimistically update match vote counts/percentages
+- After a prediction, the prediction bars (1/X/2 percentages) update immediately without page refresh
+- When a vote is added/changed/removed, the old vote count is decremented and new vote incremented
+- Percentages are recalculated in real-time with rounding correction
+
+### Fix 3: Bell Icon Toast Removed
+- Removed `toast.success('Match bookmarked')` and `toast.success('Bookmark removed')` from `handleToggleFavoriteMatch` in `HomePage.jsx`
+- Also removed `toast.error` for bookmark failures — silently logs to console instead
+- Bell icon click now toggles bookmark state visually without any bottom notification
+
+### Fix 4: "Made with Emergent" Branding
+- This is an Emergent platform feature in the preview environment
+- Users should contact support@emergent.sh with their job ID to request removal
+
+### Files Changed
+- `frontend/src/App.js` (added ScrollToTop component)
+- `frontend/src/components/layout/MobileBottomNav.jsx` (scroll reset on navigation)
+- `frontend/src/pages/HomePage.jsx` (optimistic vote updates, removed bell toast)
+- `README.md` (updated)
+- `progress.md` (this entry)
+
+---
+
+## Session 5 - Match Card UI Improvements (2026-04-11)
+
+### Fix 1: Full Club Names (No Truncation)
+- Removed `truncate` CSS class from both home and away team name spans in `MatchRow`
+- Added `break-words` class to allow natural multi-line wrapping for long names
+- Examples: "OLYMPIQUE LYON" wraps to 2 lines, "STADE RENNAIS" wraps properly
+- Reduced font size on mobile (`text-xs sm:text-sm`) to fit more text per line
+
+### Fix 2: Card Spacing
+- Increased gap between match cards from `space-y-2.5` (10px) to `space-y-6` (24px)
+- Each card is now clearly separated with breathing room
+- Container margin increased from `mt-1` to `mt-2`
+- Card border opacity increased from `/50` to `/70` for clearer visual distinction
+
+### Fix 3: Internal Card Readability
+- Increased vertical padding from `py-3` to `py-4` (mobile)
+- Increased internal spacing from `space-y-2.5` to `space-y-3`
+- Teams row vertical padding increased from `py-0.5` to `py-1`
+- Added `data-testid` to home/away team names for testing
+
+### Files Changed
+- `frontend/src/components/home/MatchList.jsx` (MatchRow team names, spacing, padding)
+- `README.md` (updated)
+- `progress.md` (this entry)
+
+---
+
+
+
+
+
+
 ## Files Modified (from original clone)
 
 | File | Change Type | Description |
 |------|------------|-------------|
 | `backend/routes/predictions.py` | Bug fix | `.get()` defaults for match data fields (~line 510-530) |
 | `frontend/src/pages/HomePage.jsx` | Performance fix | Cache-aware `initialFetchDone`, smarter skeleton condition |
-| `frontend/src/components/home/MatchList.jsx` | Feature + UI | Display-only PredictionBars, card click navigation, Quick Predict tab, compact styling |
-| `frontend/src/components/home/MatchCard.jsx` | Feature | Added QuickPrediction component, display-only VoteButton, card click navigation, Trophy import |
+| `frontend/src/components/home/MatchList.jsx` | Feature + UI | Display-only PredictionBars, card click navigation, Quick Predict tab, compact styling, mobile dialog fixes |
+| `frontend/src/components/home/MatchCard.jsx` | Feature | Added QuickPrediction component, display-only VoteButton, card click navigation, Trophy import, live match minute display between teams |
+| `frontend/src/components/layout/MobileBottomNav.jsx` | New component | Mobile-only bottom navigation bar (Home, Leaderboard, Message, Saved, Profile) |
+| `frontend/src/App.js` | Integration | Added MobileBottomNav import and render, bottom padding on mobile |
+| `frontend/src/index.css` | Styling | Added safe-area-bottom CSS for iPhone notch support |
 | `backend/.env` | Config | Added REDIS_URL, FOOTBALL_API_KEY, ADMIN_*, STRIPE_API_KEY |

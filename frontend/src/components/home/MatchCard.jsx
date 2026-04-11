@@ -507,7 +507,7 @@ export const MatchCard = ({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
               </span>
-              {match.matchMinute || 'LIVE'}
+              {match.statusDetail === 'HT' ? 'HT' : match.matchMinute || 'LIVE'}
             </span>
           ) : match.status === 'FINISHED' ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground border border-border">
@@ -531,6 +531,14 @@ export const MatchCard = ({
               isHome={true} 
               score={match.score?.home}
             />
+            {/* Live match minute between teams */}
+            {(match.status === 'LIVE' || match.status === 'IN_PLAY') && match.matchMinute && (
+              <div className="flex items-center gap-1.5 pl-9">
+                <span className="text-[11px] font-bold text-red-400 tabular-nums animate-pulse" data-testid="match-card-minute">
+                  {match.matchMinute}
+                </span>
+              </div>
+            )}
             <TeamRow 
               team={match.awayTeam} 
               isHome={false} 

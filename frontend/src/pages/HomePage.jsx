@@ -610,7 +610,6 @@ export const HomePage = () => {
           score_home: match.score?.home,
           score_away: match.score?.away,
         }]);
-        toast.success('Match bookmarked', { duration: 2000 });
       } else {
         await removeFavoriteMatch(match.id);
         setFavoriteMatchIds(prev => {
@@ -619,10 +618,9 @@ export const HomePage = () => {
           return next;
         });
         setFavoriteMatchList(prev => prev.filter(f => f.match_id !== match.id));
-        toast.success('Bookmark removed', { duration: 2000 });
       }
     } catch (error) {
-      toast.error('Could not update bookmark', { description: 'Please try again.', duration: 3000 });
+      console.error('Could not update bookmark:', error);
     }
   }, []);
 
@@ -669,6 +667,10 @@ export const HomePage = () => {
   }, [activeLeague]);
 
   const handlePredictionSaved = useCallback((matchId, prediction) => {
+    // Get the old prediction before updating
+    const oldPrediction = savedPredictions[matchId] || null;
+
+    // Update saved predictions
     setSavedPredictions(prev => {
       if (prediction === null) {
         const next = { ...prev };
@@ -677,7 +679,52 @@ export const HomePage = () => {
       }
       return { ...prev, [matchId]: prediction };
     });
-  }, []);
+
+    // Optimistically update match vote counts/percentages
+    if (prediction !== oldPrediction) {
+      setMatches(prevMatches => prevMatches.map(match => {
+        if (match.id !== matchId) return match;
+        const votes = match.votes || {};
+        const newVotes = {
+          home: { count: votes.home?.count || 0, percentage: 0 },
+          draw: { count: votes.draw?.count || 0, percentage: 0 },
+          away: { count: votes.away?.count || 0, percentage: 0 },
+        };
+
+        // Decrement old vote
+        if (oldPrediction && newVotes[oldPrediction]) {
+          newVotes[oldPrediction].count = Math.max(0, newVotes[oldPrediction].count - 1);
+        }
+        // Increment new vote
+        if (prediction && newVotes[prediction]) {
+          newVotes[prediction].count += 1;
+        }
+
+        // Recalculate percentages
+        const total = newVotes.home.count + newVotes.draw.count + newVotes.away.count;
+        if (total > 0) {
+          newVotes.home.percentage = Math.round((newVotes.home.count / total) * 100);
+          newVotes.draw.percentage = Math.round((newVotes.draw.count / total) * 100);
+          newVotes.away.percentage = Math.round((newVotes.away.count / total) * 100);
+          const sum = newVotes.home.percentage + newVotes.draw.percentage + newVotes.away.percentage;
+          if (sum !== 100) {
+            const maxKey = Object.keys(newVotes).reduce((a, b) => newVotes[a].count >= newVotes[b].count ? a : b);
+            newVotes[maxKey].percentage += (100 - sum);
+          }
+        }
+
+        return {
+          ...match,
+          votes: newVotes,
+          totalVotes: total,
+          mostPicked: total > 0
+            ? (newVotes.home.count >= newVotes.draw.count && newVotes.home.count >= newVotes.away.count ? '1'
+              : newVotes.draw.count >= newVotes.away.count ? 'X' : '2')
+            : '-',
+        };
+      }));
+    }
+  }, [savedPredictions]);
 
   const handleLogout = useCallback(async () => {
     await logout();

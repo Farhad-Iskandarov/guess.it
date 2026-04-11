@@ -29,6 +29,7 @@ import { SavedMatchesPage } from "@/pages/SavedMatchesPage";
 import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import MobileBottomNav from "@/components/layout/MobileBottomNav";
 import { Toaster } from "@/components/ui/sonner";
 
 // ============ Initial Loading Screen ============
@@ -198,6 +199,15 @@ const PublicLayout = ({ children }) => {
   );
 };
 
+// ============ Scroll to top on route change ============
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 // ============ App Router ============
 function AppRouter() {
   const location = useLocation();
@@ -207,7 +217,9 @@ function AppRouter() {
   }
 
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
@@ -234,6 +246,7 @@ function AppRouter() {
       <Route path="/" element={<HomePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 
@@ -256,9 +269,10 @@ function AppShell() {
   return (
     <>
       {showLoader && <InitialLoadingScreen onReady={handleReady} />}
-      <div className={`min-h-screen bg-background overflow-x-hidden ${showLoader ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}>
+      <div className={`min-h-screen bg-background overflow-x-hidden pb-16 md:pb-0 ${showLoader ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}>
         <BrowserRouter>
           <AppRouter />
+          <MobileBottomNav />
         </BrowserRouter>
       </div>
     </>

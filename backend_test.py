@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 class GuessItAPITester:
-    def __init__(self, base_url: str = "https://guess-it-staging-2.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://guess-it-mirror.preview.emergentagent.com"):
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
         self.session_token = None
