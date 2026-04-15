@@ -145,7 +145,7 @@ const ExactScoreInput = ({
       <div className="flex items-center gap-3">
         {/* Home Score */}
         <div className="flex-1">
-          <label className="text-[10px] text-muted-foreground mb-1 block truncate">{homeTeamName}</label>
+          <label className="text-[10px] text-muted-foreground mb-1 block line-clamp-2 break-words leading-tight">{homeTeamName}</label>
           <input
             type="text" inputMode="numeric" pattern="[0-9]*"
             value={homeScore}
@@ -161,7 +161,7 @@ const ExactScoreInput = ({
         
         {/* Away Score */}
         <div className="flex-1">
-          <label className="text-[10px] text-muted-foreground mb-1 block truncate">{awayTeamName}</label>
+          <label className="text-[10px] text-muted-foreground mb-1 block line-clamp-2 break-words leading-tight">{awayTeamName}</label>
           <input
             type="text" inputMode="numeric" pattern="[0-9]*"
             value={awayScore}

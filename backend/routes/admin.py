@@ -2039,7 +2039,7 @@ async def update_points_config(request: Request, db: AsyncIOMotorDatabase = Depe
     
     update_data = {
         "config_id": "default_points",
-        "correct_prediction": max(0, min(1000, int(body.get("correct_prediction", 10)))),
+        "correct_prediction": max(0, min(1000, int(body.get("correct_prediction", 50)))),
         "wrong_penalty": max(0, min(100, int(body.get("wrong_penalty", 5)))),
         "penalty_min_level": max(0, min(10, int(body.get("penalty_min_level", 5)))),
         "exact_score_bonus": max(0, min(500, int(body.get("exact_score_bonus", 50)))),

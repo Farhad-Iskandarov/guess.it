@@ -19,7 +19,7 @@ router = APIRouter(prefix="/predictions", tags=["Predictions"])
 
 # Default values - these are overridden by DB config when available
 DEFAULT_LEVEL_THRESHOLDS = [0, 100, 120, 200, 330, 500, 580, 650, 780, 900, 1000]
-DEFAULT_POINTS_CORRECT = 10
+DEFAULT_POINTS_CORRECT = 50  # Now base_points for dynamic calculation
 DEFAULT_POINTS_WRONG_PENALTY = 5
 DEFAULT_PENALTY_MIN_LEVEL = 5
 DEFAULT_EXACT_SCORE_BONUS = 50
@@ -54,6 +54,39 @@ def calculate_level(points, level_thresholds=None):
         else:
             break
     return level
+
+
+def calculate_dynamic_points(votes: dict, total_votes: int, base_points: int = 50) -> dict:
+    """Calculate dynamic points for each prediction option based on vote distribution."""
+    def calc_pts(pct):
+        if total_votes == 0:
+            pct = 33.3
+        pts = base_points * (1 - pct / 100) * 1.3
+        return max(5, min(50, round(pts)))
+
+    def get_label(pct):
+        if total_votes == 0:
+            return "balanced"
+        if pct > 60:
+            return "popular"
+        if pct < 20:
+            return "high_risk"
+        return "balanced"
+
+    hp = votes.get("home", {}).get("percentage", 0) if votes else 0
+    dp = votes.get("draw", {}).get("percentage", 0) if votes else 0
+    ap = votes.get("away", {}).get("percentage", 0) if votes else 0
+
+    return {
+        "home": calc_pts(hp),
+        "draw": calc_pts(dp),
+        "away": calc_pts(ap),
+        "home_label": get_label(hp),
+        "draw_label": get_label(dp),
+        "away_label": get_label(ap),
+        "base_points": base_points,
+    }
+
 
 # Dependency to get database
 def get_db(request: Request) -> AsyncIOMotorDatabase:
@@ -267,7 +300,7 @@ async def get_my_predictions_detailed(
     
     # Get dynamic points config
     points_config = await get_points_config(db)
-    POINTS_CORRECT = points_config["correct_prediction"]
+    BASE_POINTS = points_config["correct_prediction"]  # Now means base_points for dynamic formula
     POINTS_WRONG_PENALTY = -points_config["wrong_penalty"]
     PENALTY_MIN_LEVEL = points_config["penalty_min_level"]
     LEVEL_THRESHOLDS = points_config["level_thresholds"]
@@ -376,6 +409,9 @@ async def get_my_predictions_detailed(
                 "lockReason": match_data.get("lockReason"),
                 "votes": match_data.get("votes", {}),
                 "totalVotes": match_data.get("totalVotes", 0),
+                "dynamicPoints": match_data.get("dynamicPoints") or calculate_dynamic_points(
+                    match_data.get("votes", {}), match_data.get("totalVotes", 0), BASE_POINTS
+                ),
             }
 
             # Determine if prediction was correct for finished matches
@@ -405,7 +441,18 @@ async def get_my_predictions_detailed(
                     current_level = calculate_level(current_user_points, LEVEL_THRESHOLDS)
 
                     if is_correct:
-                        pts = POINTS_CORRECT
+                        # Dynamic points: calculate based on prediction distribution
+                        # Get vote counts for this match
+                        match_votes = match_data.get("votes", {})
+                        total_votes = match_data.get("totalVotes", 0)
+                        if total_votes > 0:
+                            user_pick = pred["prediction"]  # "home", "draw", or "away"
+                            pick_pct = match_votes.get(user_pick, {}).get("percentage", 33.3)
+                        else:
+                            pick_pct = 33.3  # Equal distribution fallback
+                        # Formula: base_points * (1 - pct/100) * 1.3, clamped [5, 50]
+                        dynamic_pts = BASE_POINTS * (1 - pick_pct / 100) * 1.3
+                        pts = max(5, min(50, round(dynamic_pts)))
                     else:
                         # Deduct only if level >= penalty threshold
                         if current_level >= PENALTY_MIN_LEVEL:

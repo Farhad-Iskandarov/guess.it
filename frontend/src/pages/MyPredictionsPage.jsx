@@ -333,9 +333,10 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
               {match.competition}
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          {/* Mobile: stacked layout, Desktop: single row */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             {/* Status + Meta */}
-            <div className="flex items-center gap-2 flex-shrink-0 min-w-[140px]">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <StatusBadge status={match.status} matchMinute={match.matchMinute} />
               <span className="text-xs text-muted-foreground">{formatLocalDateTime(match.utcDate)}</span>
             </div>
@@ -348,69 +349,72 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
             >
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <TeamCrest team={match.homeTeam} />
-                <span className="text-sm font-medium text-foreground truncate">{match.homeTeam.name}</span>
+                <span className="text-sm font-medium text-foreground leading-tight break-words">{match.homeTeam.name}</span>
               </div>
               <span className="text-xs text-muted-foreground/60 font-medium flex-shrink-0 px-1">vs</span>
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <TeamCrest team={match.awayTeam} />
-                <span className="text-sm font-medium text-foreground truncate">{match.awayTeam.name}</span>
+                <span className="text-sm font-medium text-foreground leading-tight break-words">{match.awayTeam.name}</span>
               </div>
             </div>
 
-            {/* Score */}
-            <div className="flex-shrink-0 w-12 text-center">
-              {match.score.home !== null ? (
-                <span className="text-base font-bold tabular-nums text-foreground">{match.score.home} - {match.score.away}</span>
-              ) : (
-                <span className="text-sm text-muted-foreground/40 font-medium">-</span>
+            {/* Score + Pick + Actions — own row on mobile */}
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+              {/* Score */}
+              <div className="w-12 text-center">
+                {match.score.home !== null ? (
+                  <span className="text-base font-bold tabular-nums text-foreground">{match.score.home} - {match.score.away}</span>
+                ) : (
+                  <span className="text-sm text-muted-foreground/40 font-medium">-</span>
+                )}
+              </div>
+
+              {/* Pick */}
+              {prediction && <PredictionBadge prediction={prediction} result={result} />}
+              {exactScore && (
+                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${
+                  result === 'correct' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' :
+                  result === 'wrong' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
+                  'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                }`} data-testid="exact-score-badge">
+                  <Target className="w-4 h-4" />
+                  <span className="font-bold text-lg">{exactScore.home_score}-{exactScore.away_score}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              {canEdit && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleStartEdit}
+                    data-testid={`edit-prediction-${data.match_id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 hover:border-primary/40 transition-all"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleRemove}
+                    disabled={isRemovingAny}
+                    data-testid={`remove-prediction-${data.match_id}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all disabled:opacity-50"
+                  >
+                    {isRemovingAny ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    Remove
+                  </button>
+                </div>
+              )}
+              {result === 'correct' && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Correct
+                </span>
+              )}
+              {result === 'wrong' && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-red-400">
+                  <XCircle className="w-3.5 h-3.5" /> Wrong
+                </span>
               )}
             </div>
-
-            {/* Pick */}
-            {prediction && <PredictionBadge prediction={prediction} result={result} />}
-            {exactScore && (
-              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${
-                result === 'correct' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' :
-                result === 'wrong' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                'bg-amber-500/15 text-amber-400 border-amber-500/30'
-              }`} data-testid="exact-score-badge">
-                <Target className="w-4 h-4" />
-                <span className="font-bold text-lg">{exactScore.home_score}-{exactScore.away_score}</span>
-              </div>
-            )}
-
-            {/* Actions */}
-            {canEdit && (
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button
-                  onClick={handleStartEdit}
-                  data-testid={`edit-prediction-${data.match_id}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 hover:border-primary/40 transition-all"
-                >
-                  <Pencil className="w-3 h-3" />
-                  Edit
-                </button>
-                <button
-                  onClick={handleRemove}
-                  disabled={isRemovingAny}
-                  data-testid={`remove-prediction-${data.match_id}`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all disabled:opacity-50"
-                >
-                  {isRemovingAny ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                  Remove
-                </button>
-              </div>
-            )}
-            {result === 'correct' && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400 flex-shrink-0">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Correct
-              </span>
-            )}
-            {result === 'wrong' && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-red-400 flex-shrink-0">
-                <XCircle className="w-3.5 h-3.5" /> Wrong
-              </span>
-            )}
           </div>
         </div>
       )}
@@ -468,62 +472,67 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
 
           {/* Match content */}
           <div className="px-5 py-3">
-            <div className="flex items-center gap-4">
-              {/* Teams with vs — clickable to open match detail */}
-              <div
-                className="flex flex-col gap-1 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
-                onClick={() => navigate(`/match/${data.match_id}`)}
-                data-testid={`prediction-grid-link-${data.match_id}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">1</span>
-                  <TeamCrest team={match.homeTeam} />
-                  <span className="text-sm font-medium text-foreground truncate">{match.homeTeam.name}</span>
-                </div>
-                <div className="flex items-center gap-2.5 pl-[22px]">
-                  <span className="text-xs font-medium text-muted-foreground/60 italic">vs</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">2</span>
-                  <TeamCrest team={match.awayTeam} />
-                  <span className="text-sm font-medium text-foreground truncate">{match.awayTeam.name}</span>
-                </div>
-              </div>
-
-              {/* Score */}
-              <div className="score-block flex flex-col items-center justify-center">
-                {match.status === 'LIVE' && match.matchMinute ? (
-                  <span className="text-xs font-semibold text-red-400 tabular-nums mb-1">{match.matchMinute}</span>
-                ) : (
-                  <span className="text-xs mb-1 invisible">00'</span>
-                )}
-                {match.score.home !== null ? (
-                  <div className="flex items-center gap-1.5 text-2xl font-bold tabular-nums">
-                    <span className="text-foreground">{match.score.home}</span>
-                    <span className="text-muted-foreground/50 text-lg">-</span>
-                    <span className="text-foreground">{match.score.away}</span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              {/* Teams + Score row */}
+              <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                {/* Teams with vs — clickable to open match detail */}
+                <div
+                  className="flex flex-col gap-1 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => navigate(`/match/${data.match_id}`)}
+                  data-testid={`prediction-grid-link-${data.match_id}`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">1</span>
+                    <TeamCrest team={match.homeTeam} />
+                    <span className="text-sm font-medium text-foreground leading-tight break-words">{match.homeTeam.name}</span>
                   </div>
-                ) : (
-                  <span className="text-lg font-bold text-muted-foreground/40">-</span>
-                )}
+                  <div className="flex items-center gap-2.5 pl-[22px]">
+                    <span className="text-xs font-medium text-muted-foreground/60 italic">vs</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[11px] font-semibold text-muted-foreground w-3 text-right flex-shrink-0">2</span>
+                    <TeamCrest team={match.awayTeam} />
+                    <span className="text-sm font-medium text-foreground leading-tight break-words">{match.awayTeam.name}</span>
+                  </div>
+                </div>
+
+                {/* Score */}
+                <div className="score-block flex flex-col items-center justify-center flex-shrink-0">
+                  {match.status === 'LIVE' && match.matchMinute ? (
+                    <span className="text-xs font-semibold text-red-400 tabular-nums mb-1">{match.matchMinute}</span>
+                  ) : (
+                    <span className="text-xs mb-1 invisible">00'</span>
+                  )}
+                  {match.score.home !== null ? (
+                    <div className="flex items-center gap-1.5 text-2xl font-bold tabular-nums">
+                      <span className="text-foreground">{match.score.home}</span>
+                      <span className="text-muted-foreground/50 text-lg">-</span>
+                      <span className="text-foreground">{match.score.away}</span>
+                    </div>
+                  ) : (
+                    <span className="text-lg font-bold text-muted-foreground/40">-</span>
+                  )}
+                </div>
               </div>
 
-              {/* User prediction */}
+              {/* User prediction — own row on mobile */}
               {!isEditing && !isEditingExactScore && (
-                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                <div className="flex items-center sm:items-end sm:flex-col gap-2 sm:gap-1.5 flex-shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-border/20">
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Your Pick</span>
-                  {prediction && <PredictionBadge prediction={prediction} result={result} />}
-                  {exactScore && (
-                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${
-                      result === 'correct' && isExactScoreOnly ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' :
-                      result === 'wrong' && isExactScoreOnly ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                      'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                    }`} data-testid="exact-score-pick">
-                      <Target className="w-4 h-4" />
-                      <span className="font-bold">{exactScore.home_score} - {exactScore.away_score}</span>
-                      <span className="text-xs opacity-80">Exact</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {prediction && <PredictionBadge prediction={prediction} result={result} />}
+                    {exactScore && (
+                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${
+                        result === 'correct' && isExactScoreOnly ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' :
+                        result === 'wrong' && isExactScoreOnly ? 'bg-red-500/15 text-red-400 border-red-500/30' :
+                        'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      }`} data-testid="exact-score-pick">
+                        <Target className="w-4 h-4" />
+                        <span className="font-bold">{exactScore.home_score} - {exactScore.away_score}</span>
+                        <span className="text-xs opacity-80">Exact</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -572,7 +581,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
                 </p>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="flex-1 text-center">
-                    <label className="text-xs text-muted-foreground block mb-1 truncate">{match.homeTeam.name}</label>
+                    <label className="text-xs text-muted-foreground block mb-1 line-clamp-2 break-words leading-tight">{match.homeTeam.name}</label>
                     <input
                       type="text" inputMode="numeric" pattern="[0-9]*"
                       value={editHomeScore}
@@ -584,7 +593,7 @@ const PredictionCard = memo(({ data, index, viewMode = 'grid', onEdit, onRemove,
                   </div>
                   <span className="text-xl font-bold text-muted-foreground pt-5">-</span>
                   <div className="flex-1 text-center">
-                    <label className="text-xs text-muted-foreground block mb-1 truncate">{match.awayTeam.name}</label>
+                    <label className="text-xs text-muted-foreground block mb-1 line-clamp-2 break-words leading-tight">{match.awayTeam.name}</label>
                     <input
                       type="text" inputMode="numeric" pattern="[0-9]*"
                       value={editAwayScore}

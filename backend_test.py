@@ -1,254 +1,334 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for GuessIt Application
-Tests all critical API endpoints including health, auth, football data
+Backend API Testing for Dynamic Points System
+Tests the GuessIt football prediction platform's dynamic points implementation.
 """
 
 import requests
 import sys
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
 
-class GuessItAPITester:
-    def __init__(self, base_url: str = "https://guess-it-mirror.preview.emergentagent.com"):
-        self.base_url = base_url.rstrip('/')
+class DynamicPointsAPITester:
+    def __init__(self, base_url="https://guess-it-duplicate-6.preview.emergentagent.com"):
+        self.base_url = base_url
         self.session = requests.Session()
-        self.session_token = None
+        self.admin_token = None
         self.tests_run = 0
         self.tests_passed = 0
-        self.failed_tests = []
-        self.admin_credentials = {
-            "email": "farhad.isgandar@gmail.com",
-            "password": "Salam123?"
-        }
+        self.test_results = []
 
-    def log_test(self, name: str, success: bool, details: str = ""):
+    def log_test(self, name, success, details=""):
         """Log test result"""
         self.tests_run += 1
         if success:
             self.tests_passed += 1
-            print(f"✅ {name}: PASSED {details}")
+            print(f"✅ {name}")
         else:
-            self.failed_tests.append({"test": name, "details": details})
-            print(f"❌ {name}: FAILED {details}")
-
-    def make_request(self, method: str, endpoint: str, data: Optional[Dict] = None, 
-                    expected_status: int = 200, headers: Optional[Dict] = None) -> tuple[bool, Dict]:
-        """Make HTTP request and validate response"""
-        url = f"{self.base_url}/api/{endpoint.lstrip('/')}"
+            print(f"❌ {name} - {details}")
         
-        request_headers = {'Content-Type': 'application/json'}
-        if headers:
-            request_headers.update(headers)
-        
-        if self.session_token:
-            request_headers['Authorization'] = f'Bearer {self.session_token}'
+        self.test_results.append({
+            "test": name,
+            "success": success,
+            "details": details
+        })
 
+    def admin_login(self):
+        """Login as admin to access protected endpoints"""
+        print("\n🔐 Testing Admin Login...")
         try:
-            if method.upper() == 'GET':
-                response = self.session.get(url, headers=request_headers, timeout=10)
-            elif method.upper() == 'POST':
-                response = self.session.post(url, json=data, headers=request_headers, timeout=10)
+            response = self.session.post(
+                f"{self.base_url}/api/auth/login",
+                json={
+                    "email": "farhad.isgandar@gmail.com",
+                    "password": "Salam123?"
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Check if user has admin role
+                user = data.get("user", {})
+                if user.get("role") == "admin":
+                    self.admin_token = "session_based"  # Mark as logged in
+                    self.log_test("Admin Login", True, f"Admin user logged in: {user.get('nickname')}")
+                    return True
+                else:
+                    self.log_test("Admin Login", False, f"User role: {user.get('role')}, expected: admin")
+                    return False
             else:
-                return False, {"error": f"Unsupported method: {method}"}
+                self.log_test("Admin Login", False, f"Status: {response.status_code}, Response: {response.text[:200]}")
+                return False
+        except Exception as e:
+            self.log_test("Admin Login", False, f"Exception: {str(e)}")
+            return False
 
-            success = response.status_code == expected_status
-            try:
-                response_data = response.json()
-            except:
-                response_data = {"text": response.text, "status_code": response.status_code}
-
-            return success, response_data
-
-        except requests.exceptions.RequestException as e:
-            return False, {"error": str(e)}
-
-    def test_health_endpoints(self):
-        """Test basic health and system endpoints"""
-        print("\n🔍 Testing Health & System Endpoints...")
+    def test_football_matches_api(self):
+        """Test /api/football/matches endpoint for dynamic points"""
+        print("\n⚽ Testing Football Matches API...")
         
-        # Test health endpoint
-        success, data = self.make_request('GET', '/health')
-        self.log_test("Health Check", success, 
-                     f"Status: {data.get('status', 'unknown')}" if success else f"Error: {data}")
-
-        # Test root API endpoint
-        success, data = self.make_request('GET', '/')
-        expected_message = "GuessIt API is running"
-        message_correct = success and data.get('message') == expected_message
-        self.log_test("Root API Message", message_correct,
-                     f"Message: {data.get('message', 'none')}" if success else f"Error: {data}")
-
-        # Test system metrics
-        success, data = self.make_request('GET', '/system/metrics')
-        has_metrics = success and 'websocket_connections' in data and 'mongodb' in data
-        self.log_test("System Metrics", has_metrics,
-                     f"MongoDB: {data.get('mongodb', 'unknown')}, Redis: {data.get('redis', 'unknown')}" if success else f"Error: {data}")
-
-    def test_auth_endpoints(self):
-        """Test authentication endpoints"""
-        print("\n🔍 Testing Authentication Endpoints...")
-        
-        # Test registration endpoint (should accept data)
-        test_user_data = {
-            "email": f"test_{datetime.now().strftime('%H%M%S')}@example.com",
-            "password": "TestPass123!"
-        }
-        
-        success, data = self.make_request('POST', '/auth/register', test_user_data, expected_status=200)
-        self.log_test("Registration Endpoint", success,
-                     f"User created: {data.get('user', {}).get('email', 'unknown')}" if success else f"Error: {data}")
-
-        # Test admin login
-        success, data = self.make_request('POST', '/auth/login', self.admin_credentials)
-        if success and 'user' in data:
-            # Extract session token from response or cookies
-            user_data = data['user']
-            self.log_test("Admin Login", True, 
-                         f"Logged in as: {user_data.get('email', 'unknown')}, Role: {user_data.get('role', 'user')}")
+        try:
+            response = self.session.get(f"{self.base_url}/api/football/matches")
             
-            # Try to get session token from cookies if available
-            if hasattr(self.session, 'cookies') and 'session_token' in self.session.cookies:
-                self.session_token = self.session.cookies['session_token']
-        else:
-            self.log_test("Admin Login", False, f"Error: {data}")
-
-        # Test /auth/me endpoint
-        success, data = self.make_request('GET', '/auth/me')
-        self.log_test("Get Current User", success,
-                     f"User: {data.get('email', 'unknown')}" if success else f"Error: {data}")
-
-    def test_football_endpoints(self):
-        """Test football-related endpoints"""
-        print("\n🔍 Testing Football Endpoints...")
-        
-        # Test competitions list
-        success, data = self.make_request('GET', '/football/competitions')
-        has_competitions = success and 'competitions' in data
-        self.log_test("Football Competitions", has_competitions,
-                     f"Found {len(data.get('competitions', []))} competitions" if success else f"Error: {data}")
-
-        # Test matches endpoint
-        success, data = self.make_request('GET', '/football/matches')
-        has_matches = success and 'matches' in data
-        match_count = len(data.get('matches', [])) if success else 0
-        self.log_test("Football Matches", has_matches,
-                     f"Found {match_count} matches" if success else f"Error: {data}")
-
-        # Test today's matches
-        success, data = self.make_request('GET', '/football/matches/today')
-        self.log_test("Today's Matches", success,
-                     f"Found {len(data.get('matches', []))} today's matches" if success else f"Error: {data}")
-
-        # Test live matches
-        success, data = self.make_request('GET', '/football/matches/live')
-        self.log_test("Live Matches", success,
-                     f"Found {len(data.get('matches', []))} live matches" if success else f"Error: {data}")
-
-        # Test upcoming matches
-        success, data = self.make_request('GET', '/football/matches/upcoming')
-        self.log_test("Upcoming Matches", success,
-                     f"Found {len(data.get('matches', []))} upcoming matches" if success else f"Error: {data}")
-
-        # Test leaderboard
-        success, data = self.make_request('GET', '/football/leaderboard')
-        has_users = success and 'users' in data
-        self.log_test("Global Leaderboard", has_users,
-                     f"Found {len(data.get('users', []))} users" if success else f"Error: {data}")
-
-    def test_predictions_endpoints(self):
-        """Test predictions endpoints - main focus of this iteration"""
-        print("\n🔍 Testing Predictions Endpoints (Main Fix)...")
-        
-        # Test basic predictions endpoint
-        success, data = self.make_request('GET', '/predictions/me')
-        self.log_test("Basic Predictions", success,
-                     f"Found {len(data.get('predictions', []))} predictions" if success else f"Error: {data}")
-
-        # Test detailed predictions endpoint - this was the main issue with KeyError: 'votes'
-        success, data = self.make_request('GET', '/predictions/me/detailed')
-        if success:
-            predictions = data.get('predictions', [])
-            summary = data.get('summary', {})
+            if response.status_code != 200:
+                self.log_test("Football Matches API Status", False, f"Status: {response.status_code}")
+                return False
             
-            # Check for the 'votes' field issue that was fixed
-            votes_issue_found = False
-            for i, pred in enumerate(predictions[:3]):  # Check first 3
-                match_data = pred.get('match', {})
-                if 'votes' not in match_data:
-                    votes_issue_found = True
+            self.log_test("Football Matches API Status", True, "200 OK")
+            
+            data = response.json()
+            matches = data.get("matches", [])
+            
+            if not matches:
+                self.log_test("Football Matches Data", False, "No matches returned")
+                return False
+            
+            self.log_test("Football Matches Data", True, f"Found {len(matches)} matches")
+            
+            # Test dynamic points structure
+            match_with_dynamic_points = None
+            for match in matches:
+                if "dynamicPoints" in match:
+                    match_with_dynamic_points = match
                     break
             
-            if votes_issue_found:
-                self.log_test("Detailed Predictions (votes fix)", False, 
-                             "KeyError: 'votes' issue still present")
-            else:
-                self.log_test("Detailed Predictions (votes fix)", True,
-                             f"Found {len(predictions)} predictions, votes field present ✅")
+            if not match_with_dynamic_points:
+                self.log_test("Dynamic Points Structure", False, "No match found with dynamicPoints")
+                return False
+            
+            dynamic_points = match_with_dynamic_points["dynamicPoints"]
+            required_fields = ["home", "draw", "away", "home_label", "draw_label", "away_label", "base_points"]
+            
+            missing_fields = [field for field in required_fields if field not in dynamic_points]
+            if missing_fields:
+                self.log_test("Dynamic Points Structure", False, f"Missing fields: {missing_fields}")
+                return False
+            
+            self.log_test("Dynamic Points Structure", True, "All required fields present")
+            
+            # Test dynamic points calculation logic
+            votes = match_with_dynamic_points.get("votes", {})
+            total_votes = match_with_dynamic_points.get("totalVotes", 0)
+            
+            # Test points range [5, 50]
+            for option in ["home", "draw", "away"]:
+                pts = dynamic_points[option]
+                if not (5 <= pts <= 50):
+                    self.log_test("Dynamic Points Range", False, f"{option}: {pts} not in [5, 50]")
+                    return False
+            
+            self.log_test("Dynamic Points Range", True, "All points in [5, 50] range")
+            
+            # Test formula logic with known values
+            if total_votes > 0:
+                home_pct = votes.get("home", {}).get("percentage", 0)
+                base_pts = dynamic_points.get("base_points", 50)
                 
-            # Check summary data
-            correct = summary.get('correct', 0)
-            wrong = summary.get('wrong', 0) 
-            pending = summary.get('pending', 0)
-            self.log_test("Predictions Summary", True,
-                         f"Correct: {correct}, Wrong: {wrong}, Pending: {pending}")
-        else:
-            self.log_test("Detailed Predictions (votes fix)", False, f"Error: {data}")
+                # Formula: base_points * (1 - pct/100) * 1.3, clamped [5, 50]
+                expected_home_pts = max(5, min(50, round(base_pts * (1 - home_pct / 100) * 1.3)))
+                actual_home_pts = dynamic_points["home"]
+                
+                if expected_home_pts == actual_home_pts:
+                    self.log_test("Dynamic Points Formula", True, f"Home: {actual_home_pts} pts (expected: {expected_home_pts})")
+                else:
+                    self.log_test("Dynamic Points Formula", False, f"Home: {actual_home_pts} pts, expected: {expected_home_pts}")
+            else:
+                # Test equal distribution fallback (33.3% each = 43 pts)
+                expected_pts = max(5, min(50, round(50 * (1 - 33.3 / 100) * 1.3)))
+                if all(dynamic_points[opt] == expected_pts for opt in ["home", "draw", "away"]):
+                    self.log_test("Dynamic Points Equal Distribution", True, f"All options: {expected_pts} pts")
+                else:
+                    self.log_test("Dynamic Points Equal Distribution", False, "Not equal distribution for 0 votes")
+            
+            # Test labels
+            label_options = ["popular", "high_risk", "balanced"]
+            for option in ["home", "draw", "away"]:
+                label = dynamic_points[f"{option}_label"]
+                if label not in label_options:
+                    self.log_test("Dynamic Points Labels", False, f"{option}_label: {label} not in {label_options}")
+                    return False
+            
+            self.log_test("Dynamic Points Labels", True, "All labels valid")
+            
+            return True
+            
+        except Exception as e:
+            self.log_test("Football Matches API", False, f"Exception: {str(e)}")
+            return False
 
-    def test_additional_endpoints(self):
-        """Test additional endpoints"""
-        print("\n🔍 Testing Additional Endpoints...")
+    def test_points_config_api(self):
+        """Test points configuration API"""
+        print("\n⚙️ Testing Points Configuration...")
         
-        # Test banners endpoint
-        success, data = self.make_request('GET', '/football/banners')
-        self.log_test("Active Banners", success,
-                     f"Found {len(data.get('banners', []))} banners" if success else f"Error: {data}")
+        if not self.admin_token:
+            self.log_test("Points Config API", False, "No admin token available")
+            return False
+        
+        try:
+            # Test GET points config
+            response = self.session.get(f"{self.base_url}/api/admin/points-config")
+            
+            if response.status_code != 200:
+                self.log_test("Points Config GET", False, f"Status: {response.status_code}")
+                return False
+            
+            self.log_test("Points Config GET", True, "200 OK")
+            
+            config = response.json()
+            
+            # Check if correct_prediction field exists (now base_points for dynamic)
+            if "correct_prediction" not in config:
+                self.log_test("Points Config Structure", False, "Missing correct_prediction field")
+                return False
+            
+            base_points = config["correct_prediction"]
+            if base_points != 50:  # Should be 50 as per requirements
+                self.log_test("Base Points Default", False, f"Expected 50, got {base_points}")
+                return False
+            
+            self.log_test("Base Points Default", True, f"Base points: {base_points}")
+            
+            return True
+            
+        except Exception as e:
+            self.log_test("Points Config API", False, f"Exception: {str(e)}")
+            return False
 
-        # Test weekly leaderboard
-        success, data = self.make_request('GET', '/football/leaderboard/weekly')
-        self.log_test("Weekly Leaderboard", success,
-                     f"Weekly data available" if success else f"Error: {data}")
+    def test_dynamic_points_edge_cases(self):
+        """Test edge cases for dynamic points calculation"""
+        print("\n🧪 Testing Dynamic Points Edge Cases...")
+        
+        try:
+            # Test with specific scenarios
+            test_cases = [
+                {"percentage": 100, "expected_min": 5, "expected_max": 5, "label": "popular"},  # Popular choice
+                {"percentage": 0, "expected_min": 50, "expected_max": 50, "label": "high_risk"},  # Rare choice
+                {"percentage": 33.3, "expected_min": 43, "expected_max": 43, "label": "balanced"},  # Equal distribution
+                {"percentage": 70, "expected_min": 5, "expected_max": 20, "label": "popular"},  # High popularity
+                {"percentage": 15, "expected_min": 40, "expected_max": 50, "label": "high_risk"},  # Low popularity
+            ]
+            
+            base_points = 50
+            for i, case in enumerate(test_cases):
+                pct = case["percentage"]
+                # Formula: base_points * (1 - pct/100) * 1.3, clamped [5, 50]
+                calculated_pts = max(5, min(50, round(base_points * (1 - pct / 100) * 1.3)))
+                
+                if case["expected_min"] <= calculated_pts <= case["expected_max"]:
+                    self.log_test(f"Edge Case {i+1} ({pct}%)", True, f"{calculated_pts} pts")
+                else:
+                    self.log_test(f"Edge Case {i+1} ({pct}%)", False, f"Got {calculated_pts}, expected {case['expected_min']}-{case['expected_max']}")
+            
+            return True
+            
+        except Exception as e:
+            self.log_test("Dynamic Points Edge Cases", False, f"Exception: {str(e)}")
+            return False
 
-        # Test search functionality
-        success, data = self.make_request('GET', '/football/search?q=arsenal')
-        self.log_test("Match Search", success,
-                     f"Search returned {len(data.get('matches', []))} results" if success else f"Error: {data}")
+    def test_admin_panel_integration(self):
+        """Test admin panel points settings integration"""
+        print("\n👑 Testing Admin Panel Integration...")
+        
+        if not self.admin_token:
+            self.log_test("Admin Panel Integration", False, "No admin token available")
+            return False
+        
+        try:
+            # Test updating base points
+            new_base_points = 60
+            response = self.session.put(
+                f"{self.base_url}/api/admin/points-config",
+                json={
+                    "correct_prediction": new_base_points,
+                    "wrong_penalty": 5,
+                    "penalty_min_level": 5,
+                    "exact_score_bonus": 50,
+                    "level_thresholds": [0, 100, 120, 200, 330, 500, 580, 650, 780, 900, 1000]
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                self.log_test("Admin Panel Update", True, f"Base points updated to {new_base_points}")
+                
+                # Verify the change
+                verify_response = self.session.get(f"{self.base_url}/api/admin/points-config")
+                
+                if verify_response.status_code == 200:
+                    config = verify_response.json()
+                    if config.get("correct_prediction") == new_base_points:
+                        self.log_test("Admin Panel Verification", True, "Base points updated successfully")
+                    else:
+                        self.log_test("Admin Panel Verification", False, f"Expected {new_base_points}, got {config.get('correct_prediction')}")
+                else:
+                    self.log_test("Admin Panel Verification", False, f"Verification failed: {verify_response.status_code}")
+                
+                # Reset to original value
+                reset_response = self.session.put(
+                    f"{self.base_url}/api/admin/points-config",
+                    json={
+                        "correct_prediction": 50,
+                        "wrong_penalty": 5,
+                        "penalty_min_level": 5,
+                        "exact_score_bonus": 50,
+                        "level_thresholds": [0, 100, 120, 200, 330, 500, 580, 650, 780, 900, 1000]
+                    },
+                    headers={"Content-Type": "application/json"}
+                )
+                
+                if reset_response.status_code == 200:
+                    self.log_test("Admin Panel Reset", True, "Base points reset to 50")
+                else:
+                    self.log_test("Admin Panel Reset", False, f"Reset failed: {reset_response.status_code}")
+                
+            else:
+                self.log_test("Admin Panel Update", False, f"Status: {response.status_code}, Response: {response.text[:200]}")
+            
+            return True
+            
+        except Exception as e:
+            self.log_test("Admin Panel Integration", False, f"Exception: {str(e)}")
+            return False
 
     def run_all_tests(self):
-        """Run all test suites"""
-        print("🚀 Starting GuessIt Backend API Tests")
-        print(f"🎯 Testing against: {self.base_url}")
-        print("=" * 60)
-
-        try:
-            self.test_health_endpoints()
-            self.test_auth_endpoints()
-            self.test_predictions_endpoints()  # Add predictions test
-            self.test_football_endpoints()
-            self.test_additional_endpoints()
-        except Exception as e:
-            print(f"❌ Test suite error: {e}")
-
+        """Run all dynamic points tests"""
+        print("🚀 Starting Dynamic Points System Tests")
+        print("=" * 50)
+        
+        # Login first
+        if not self.admin_login():
+            print("\n❌ Cannot proceed without admin login")
+            return False
+        
+        # Run all tests
+        tests = [
+            self.test_football_matches_api,
+            self.test_points_config_api,
+            self.test_dynamic_points_edge_cases,
+            self.test_admin_panel_integration,
+        ]
+        
+        for test in tests:
+            try:
+                test()
+            except Exception as e:
+                print(f"❌ Test {test.__name__} failed with exception: {e}")
+        
         # Print summary
-        print("\n" + "=" * 60)
-        print("📊 TEST SUMMARY")
-        print("=" * 60)
-        print(f"Total Tests: {self.tests_run}")
-        print(f"Passed: {self.tests_passed}")
-        print(f"Failed: {len(self.failed_tests)}")
-        print(f"Success Rate: {(self.tests_passed/self.tests_run*100):.1f}%" if self.tests_run > 0 else "0%")
-
-        if self.failed_tests:
-            print("\n❌ FAILED TESTS:")
-            for failure in self.failed_tests:
-                print(f"  • {failure['test']}: {failure['details']}")
-
-        return len(self.failed_tests) == 0
+        print("\n" + "=" * 50)
+        print(f"📊 Test Summary: {self.tests_passed}/{self.tests_run} tests passed")
+        
+        if self.tests_passed == self.tests_run:
+            print("🎉 All tests passed!")
+            return True
+        else:
+            print(f"⚠️  {self.tests_run - self.tests_passed} tests failed")
+            return False
 
 def main():
-    """Main test execution"""
-    tester = GuessItAPITester()
+    """Main test runner"""
+    tester = DynamicPointsAPITester()
     success = tester.run_all_tests()
     return 0 if success else 1
 

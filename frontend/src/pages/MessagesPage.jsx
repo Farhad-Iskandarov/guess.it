@@ -434,11 +434,11 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
           <div className="flex-1 min-w-0 space-y-0.5">
             <div className="flex items-center gap-1.5">
               {matchData.homeTeam?.crest && <img src={matchData.homeTeam.crest} alt="" className="w-3.5 h-3.5 rounded-full object-contain flex-shrink-0" />}
-              <span className={`text-[11px] font-medium truncate text-foreground`}>{sanitizeDisplay(homeName)}</span>
+              <span className="text-[11px] font-medium line-clamp-2 break-words leading-tight text-foreground">{sanitizeDisplay(homeName)}</span>
             </div>
             <div className="flex items-center gap-1.5">
               {matchData.awayTeam?.crest && <img src={matchData.awayTeam.crest} alt="" className="w-3.5 h-3.5 rounded-full object-contain flex-shrink-0" />}
-              <span className={`text-[11px] font-medium truncate text-foreground`}>{sanitizeDisplay(awayName)}</span>
+              <span className="text-[11px] font-medium line-clamp-2 break-words leading-tight text-foreground">{sanitizeDisplay(awayName)}</span>
             </div>
           </div>
           {matchData.score && matchData.score.home !== null && matchData.score.home !== undefined && (
@@ -585,7 +585,7 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5">
                         <div className="flex-1 text-center">
-                          <p className="text-[8px] text-muted-foreground mb-0.5 truncate">{homeName}</p>
+                          <p className="text-[8px] text-muted-foreground mb-0.5 line-clamp-2 break-words leading-tight text-center">{homeName}</p>
                           <input
                             type="text" inputMode="numeric" pattern="[0-9]*"
                             value={homeScoreInput}
@@ -597,7 +597,7 @@ const SharedMatchCard = memo(({ matchData, isMine }) => {
                         </div>
                         <span className="text-[10px] text-muted-foreground font-bold mt-3">-</span>
                         <div className="flex-1 text-center">
-                          <p className="text-[8px] text-muted-foreground mb-0.5 truncate">{awayName}</p>
+                          <p className="text-[8px] text-muted-foreground mb-0.5 line-clamp-2 break-words leading-tight text-center">{awayName}</p>
                           <input
                             type="text" inputMode="numeric" pattern="[0-9]*"
                             value={awayScoreInput}
@@ -863,11 +863,11 @@ const MatchShareModal = memo(({ isOpen, onClose, onSelect }) => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       {match.homeTeam?.crest && <img src={match.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain bg-secondary" />}
-                      <span className="text-xs font-medium truncate">{match.homeTeam?.name}</span>
+                      <span className="text-xs font-medium line-clamp-2 break-words leading-tight">{match.homeTeam?.name}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {match.awayTeam?.crest && <img src={match.awayTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain bg-secondary" />}
-                      <span className="text-xs font-medium truncate">{match.awayTeam?.name}</span>
+                      <span className="text-xs font-medium line-clamp-2 break-words leading-tight">{match.awayTeam?.name}</span>
                     </div>
                   </div>
                   {match.score && match.score.home !== null && (

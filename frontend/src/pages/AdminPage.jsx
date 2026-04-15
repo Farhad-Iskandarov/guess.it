@@ -888,14 +888,14 @@ const UsersTab = () => {
                             {pred.match_data?.homeTeam?.crest && (
                               <img src={pred.match_data.homeTeam.crest} alt="" className="w-5 h-5 object-contain" />
                             )}
-                            <span className="text-xs font-semibold text-foreground truncate">
+                            <span className="text-xs font-semibold text-foreground line-clamp-2 break-words leading-tight">
                               {pred.match_data?.homeTeam?.name || 'Unknown'}
                             </span>
-                            <span className="text-xs text-muted-foreground">vs</span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">vs</span>
                             {pred.match_data?.awayTeam?.crest && (
                               <img src={pred.match_data.awayTeam.crest} alt="" className="w-5 h-5 object-contain" />
                             )}
-                            <span className="text-xs font-semibold text-foreground truncate">
+                            <span className="text-xs font-semibold text-foreground line-clamp-2 break-words leading-tight">
                               {pred.match_data?.awayTeam?.name || 'Unknown'}
                             </span>
                           </div>
@@ -998,9 +998,9 @@ const MatchesTab = () => {
                   {m.is_pinned && <Pin className="w-3 h-3 text-primary" />}
                 </div>
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="font-medium truncate">{m.homeTeam?.name}</span>
-                  {m.score && m.score.home !== null && <span className="font-bold tabular-nums text-foreground">{m.score.home} - {m.score.away}</span>}
-                  <span className="font-medium truncate">{m.awayTeam?.name}</span>
+                  <span className="font-medium line-clamp-2 break-words leading-tight">{m.homeTeam?.name}</span>
+                  {m.score && m.score.home !== null && <span className="font-bold tabular-nums text-foreground flex-shrink-0">{m.score.home} - {m.score.away}</span>}
+                  <span className="font-medium line-clamp-2 break-words leading-tight">{m.awayTeam?.name}</span>
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -1033,7 +1033,7 @@ const PointsTab = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
-    correct_prediction: 10,
+    correct_prediction: 50,
     wrong_penalty: 5,
     penalty_min_level: 5,
     exact_score_bonus: 50,
@@ -1127,15 +1127,15 @@ const PointsTab = () => {
 
       {/* Main Settings Grid */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Correct Prediction Points */}
+        {/* Base Points (Dynamic) */}
         <div className="p-4 rounded-xl border border-border/40 bg-card/60">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
               <Check className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">Correct Prediction</p>
-              <p className="text-[10px] text-muted-foreground">Points awarded for correct predictions</p>
+              <p className="text-sm font-semibold text-foreground">Base Points (Dynamic)</p>
+              <p className="text-[10px] text-muted-foreground">Base value for dynamic point calculation. Final points depend on prediction popularity.</p>
             </div>
           </div>
           <Input

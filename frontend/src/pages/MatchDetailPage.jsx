@@ -101,7 +101,7 @@ const ExactScoreSection = ({ matchId, homeTeam, awayTeam, existingPrediction, is
       </div>
       <div className="flex items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[80px]">{homeTeam}</span>
+          <span className="text-[10px] text-muted-foreground font-medium text-center leading-tight line-clamp-2 break-words max-w-[100px]">{homeTeam}</span>
           <input
             type="text" inputMode="numeric" pattern="[0-9]*"
             value={homeScore}
@@ -115,7 +115,7 @@ const ExactScoreSection = ({ matchId, homeTeam, awayTeam, existingPrediction, is
         </div>
         <span className="text-2xl font-black text-muted-foreground/50 mt-5">:</span>
         <div className="flex flex-col items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[80px]">{awayTeam}</span>
+          <span className="text-[10px] text-muted-foreground font-medium text-center leading-tight line-clamp-2 break-words max-w-[100px]">{awayTeam}</span>
           <input
             type="text" inputMode="numeric" pattern="[0-9]*"
             value={awayScore}
@@ -272,7 +272,7 @@ const StandingsTable = ({ standings, homeTeam, awayTeam }) => {
                   <td className="px-3 py-2.5 text-left">
                     <div className="flex items-center gap-2">
                       {row.teamCrest && <img src={row.teamCrest} alt="" className="w-5 h-5 object-contain flex-shrink-0" />}
-                      <span className={`font-semibold truncate max-w-[120px] sm:max-w-[200px] ${hl ? 'text-primary' : 'text-foreground'}`}>{row.team}</span>
+                      <span className={`font-semibold line-clamp-2 break-words leading-tight ${hl ? 'text-primary' : 'text-foreground'}`}>{row.team}</span>
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-center text-muted-foreground">{row.played}</td>
@@ -489,7 +489,7 @@ export const MatchDetailPage = () => {
                   <span className="text-3xl font-black text-muted-foreground/40">{(match.homeTeam?.name || '?')[0]}</span>
                 )}
               </div>
-              <span className="text-sm sm:text-base font-bold text-foreground text-center leading-tight truncate max-w-[100px] sm:max-w-[150px]" data-testid="home-team-name">
+              <span className="text-sm sm:text-base font-bold text-foreground text-center leading-tight line-clamp-2 break-words max-w-[120px] sm:max-w-[180px]" data-testid="home-team-name">
                 {match.homeTeam?.shortName || match.homeTeam?.name || ''}
               </span>
             </div>
@@ -521,7 +521,7 @@ export const MatchDetailPage = () => {
                   <span className="text-3xl font-black text-muted-foreground/40">{(match.awayTeam?.name || '?')[0]}</span>
                 )}
               </div>
-              <span className="text-sm sm:text-base font-bold text-foreground text-center leading-tight truncate max-w-[100px] sm:max-w-[150px]" data-testid="away-team-name">
+              <span className="text-sm sm:text-base font-bold text-foreground text-center leading-tight line-clamp-2 break-words max-w-[120px] sm:max-w-[180px]" data-testid="away-team-name">
                 {match.awayTeam?.shortName || match.awayTeam?.name || ''}
               </span>
             </div>

@@ -247,3 +247,38 @@ tail -f /var/log/supervisor/frontend.err.log
 - **Full club names**: No more truncation ("...") — long names wrap to 2 lines naturally (e.g., "OLYMPIQUE LYON")
 - **Better spacing**: Increased gap between cards (10px to 24px) with stronger borders for clean, breathable layout
 - **Improved readability**: More internal padding, balanced alignment, no cramped elements
+
+### Global Club Name Truncation Fix (2026-04-13)
+- **Applied globally**: Full club names now shown without "..." truncation across ALL pages and components
+- **Affected pages**: My Predictions, Saved/Bookmarked Matches, Match Detail, Messages, Admin Panel, Top Matches Carousel, Search Results (Header)
+- **Behavior**: Long names wrap to 2 lines max (`line-clamp-2`) with clean layout — no overflow, no ellipsis
+- **Mobile responsive**: Proper wrapping and spacing maintained on all screen sizes (tested 390px and 1920px)
+- **Files changed**: `MyPredictionsPage.jsx`, `MatchDetailPage.jsx`, `MessagesPage.jsx`, `AdminPage.jsx`, `TopMatchesCards.jsx`, `MatchList.jsx`, `MatchCard.jsx`, `Header.jsx`
+
+### Mobile Layout Restructuring for Club Names (2026-04-13)
+- **Root cause**: On mobile, prediction badges and action buttons used `flex-shrink-0`, squeezing team name containers to ~30% width
+- **Fix**: Restructured card layouts in My Predictions page (both grid and list views) using responsive `flex-col sm:flex-row` — teams now get full width on mobile, with "YOUR PICK" badge on its own row below
+- **Saved Matches**: Added `break-words leading-tight` for consistent text wrapping
+- **Result**: All club names fully readable on mobile (390px) — "FC St. Pauli 1910", "TSG 1899 Hoffenheim", "Borussia Dortmund", "Bayer 04 Leverkusen" etc.
+- **Desktop preserved**: Side-by-side layout unchanged on desktop (1920px)
+- **Testing**: 100% frontend pass rate
+
+### Dynamic Points System (2026-04-13)
+- **Formula**: `points = base_points * (1 - percentage/100) * 1.3`, clamped to [5, 50]
+- **Behavior**: Popular choices (>60%) → low points + "👥 Popular Pick" label. Rare choices (<20%) → high points + "🔥 High Risk" label. Otherwise → "⚖️ Balanced"
+- **Admin**: "Correct Prediction" renamed to "Base Points (Dynamic)" (default: 50)
+- **Frontend**: Dynamic points and risk labels shown on prediction bars and Quick Predict modal
+- **Backend**: Points calculated per match based on vote distribution, stored as `dynamicPoints` in match data
+- **Edge case**: 0 total votes → equal distribution (33.3% each → 43 pts, Balanced)
+- **Testing**: 100% backend + frontend + integration pass rate
+
+### Prediction UI Cleanup (2026-04-13)
+- Removed "pts" values from prediction bars and Quick Predict modal (backend unchanged)
+- Removed risk label icons and text (👥 Most Popular / 🔥 High Risk / ⚖️ Balanced) — X-edit reverted per user request
+- Clean display: only percentages + progress bars remain
+
+### Header Auto-Hide & Scroll-to-Top Fix (2026-04-15)
+- **Header**: Hides smoothly on scroll down, reappears on scroll up (mobile only, desktop always visible)
+- **Implementation**: Fixed positioning with `translateY(-100%)` hide + 0.3s transition. JS scroll-direction detection only on `< 768px`
+- **Scroll-to-top button**: Now stays visible after scroll-up stops (Instagram/Twitter style). Hides only on scroll-down or near page top
+- **No content shift**: Spacer div prevents layout jump when header hides/shows

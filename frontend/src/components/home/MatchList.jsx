@@ -270,7 +270,7 @@ const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry 
 LeagueHeader.displayName = 'LeagueHeader';
 
 // ============ Prediction Bars (3 columns side-by-side, bar on top, label below — DISPLAY ONLY) ============
-const PredictionBars = memo(({ votes, selectedType, locked }) => {
+const PredictionBars = memo(({ votes, selectedType, locked, dynamicPoints }) => {
   const items = [
     { type: 'home', label: '1', pct: votes.home.percentage },
     { type: 'draw', label: 'X', pct: votes.draw.percentage },
@@ -298,7 +298,7 @@ const PredictionBars = memo(({ votes, selectedType, locked }) => {
                 style={{ width: `${Math.max(pct, 4)}%` }}
               />
             </div>
-            {/* Label: "1: 45%" */}
+            {/* Percentage */}
             <span className={`text-[11px] sm:text-xs font-semibold tabular-nums ${
               isSelected ? 'text-primary' : 'text-emerald-500/80'
             }`}>
@@ -759,7 +759,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
           {/* Header */}
           <div className="px-3 py-3 sm:px-4 sm:py-4 border-b border-border/50">
             <DialogTitle className="text-base sm:text-lg font-bold">Advanced Options</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm text-muted-foreground truncate">
+            <DialogDescription className="text-xs sm:text-sm text-muted-foreground line-clamp-2 break-words leading-tight">
               {match.homeTeam.name} vs {match.awayTeam.name}
             </DialogDescription>
           </div>
@@ -799,7 +799,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                   <span className="font-semibold">Quick Prediction</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Tap to predict the match winner
+                  Tap to predict the match winner — points are dynamic based on popularity
                 </p>
                 <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
                   {[
@@ -808,6 +808,8 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                     { type: 'away', label: match.awayTeam?.name || 'Away', shortLabel: '2' },
                   ].map(opt => {
                     const isSelected = savedPrediction === opt.type;
+                    const dynPts = match.dynamicPoints?.[opt.type];
+                    const dynLabel = match.dynamicPoints?.[`${opt.type}_label`];
                     return (
                       <button
                         key={opt.type}
@@ -824,7 +826,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                         <span className={`text-xl sm:text-2xl font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
                           {opt.shortLabel}
                         </span>
-                        <span className="text-[9px] sm:text-xs truncate max-w-full leading-tight">{opt.label}</span>
+                        <span className="text-[9px] sm:text-xs line-clamp-2 break-words max-w-full leading-tight">{opt.label}</span>
                       </button>
                     );
                   })}
@@ -879,7 +881,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                   <>
                     <div className="flex items-center gap-4">
                       <div className="flex-1 text-center">
-                        <label className="text-xs text-muted-foreground block mb-1 truncate">{match.homeTeam.name}</label>
+                        <label className="text-xs text-muted-foreground block mb-1 line-clamp-2 break-words leading-tight">{match.homeTeam.name}</label>
                         <input
                           type="text" inputMode="numeric" pattern="[0-9]*"
                           value={homeScore}
@@ -891,7 +893,7 @@ const AdvancedOptionsModal = memo(({ isOpen, onClose, match, isAuthenticated, on
                       </div>
                       <span className="text-2xl font-bold text-muted-foreground pt-5">-</span>
                       <div className="flex-1 text-center">
-                        <label className="text-xs text-muted-foreground block mb-1 truncate">{match.awayTeam.name}</label>
+                        <label className="text-xs text-muted-foreground block mb-1 line-clamp-2 break-words leading-tight">{match.awayTeam.name}</label>
                         <input
                           type="text" inputMode="numeric" pattern="[0-9]*"
                           value={awayScore}
@@ -1214,6 +1216,7 @@ const MatchRow = memo(({
           votes={match.votes}
           selectedType={displayedSelection}
           locked={isLocked}
+          dynamicPoints={match.dynamicPoints}
         />
 
         {/* === PREDICT MATCH BUTTON (opens Advanced modal) === */}
@@ -1320,10 +1323,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
     setLoadingMatches((prev) => ({ ...prev, [matchId]: true }));
     try {
       const result = await savePrediction(matchId, prediction);
-      toast.success(result.is_new ? 'Prediction saved!' : 'Prediction updated!', {
-        description: `You predicted: ${prediction === 'home' ? 'Home Win (1)' : prediction === 'draw' ? 'Draw (X)' : 'Away Win (2)'}`,
-        duration: 2000,
-      });
+      // Success — no toast notification (cleaner UX)
     } catch (error) {
       // Revert optimistic update on failure
       if (onPredictionSaved) onPredictionSaved(matchId, previousPrediction || null);

@@ -240,7 +240,7 @@ const SearchResultCard = memo(({ match, onClick, query }) => {
           {match.homeTeam.crest && (
             <img src={match.homeTeam.crest} alt="" className="w-4 h-4 rounded-full object-contain flex-shrink-0" />
           )}
-          <span className="text-xs font-medium text-foreground truncate">
+          <span className="text-xs font-medium text-foreground line-clamp-2 break-words leading-tight">
             <HighlightText text={match.homeTeam.name} query={query} />
           </span>
         </div>
@@ -258,7 +258,7 @@ const SearchResultCard = memo(({ match, onClick, query }) => {
 
         {/* Away team */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span className="text-xs font-medium text-foreground truncate text-right">
+          <span className="text-xs font-medium text-foreground line-clamp-2 break-words leading-tight text-right">
             <HighlightText text={match.awayTeam.name} query={query} />
           </span>
           {match.awayTeam.crest && (
@@ -516,6 +516,32 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // --- Scroll-direction header hide/show (mobile only) ---
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      // Only apply auto-hide on mobile (< 768px)
+      if (window.innerWidth >= 768) {
+        setHeaderVisible(true);
+        return;
+      }
+      const currentY = window.scrollY;
+      const prev = lastScrollYRef.current;
+      if (currentY <= 10) {
+        setHeaderVisible(true);
+      } else if (currentY > prev + 5) {
+        setHeaderVisible(false);
+      } else if (currentY < prev - 5) {
+        setHeaderVisible(true);
+      }
+      lastScrollYRef.current = currentY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -596,7 +622,13 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
   );
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-background border-b border-border">
+    <>
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 w-full bg-background border-b border-border transition-transform duration-300 ease-in-out ${
+        headerVisible ? 'translate-y-0' : '-translate-y-full'
+      }`}
+      data-testid="main-header"
+    >
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -848,6 +880,9 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
         </div>
       )}
     </header>
+    {/* Spacer for fixed header — prevents content from being hidden behind it */}
+    <div className="h-[57px] sm:h-[65px]" />
+    </>
   );
 };
 

@@ -407,8 +407,8 @@ def _is_prediction_locked(utc_date_str: str, app_status: str) -> bool:
         return False
 
 
-def _enrich_with_votes(match: dict, vote_counts: dict) -> dict:
-    """Add vote data to a transformed match dict."""
+def _enrich_with_votes(match: dict, vote_counts: dict, base_points: int = 50) -> dict:
+    """Add vote data and dynamic points to a transformed match dict."""
     mid = match["id"]
     votes = vote_counts.get(mid, {})
     hv = votes.get("home", 0)
@@ -430,6 +430,34 @@ def _enrich_with_votes(match: dict, vote_counts: dict) -> dict:
     }
     match["totalVotes"] = total
     match["mostPicked"] = most
+
+    # Dynamic points calculation: points = base_points * (1 - pct/100) * 1.3
+    # Clamped to [5, 50]
+    def calc_dynamic_pts(pct):
+        if total == 0:
+            # Equal distribution fallback
+            pct = 33.3
+        pts = base_points * (1 - pct / 100) * 1.3
+        return max(5, min(50, round(pts)))
+
+    def get_label(pct):
+        if total == 0:
+            return "balanced"
+        if pct > 60:
+            return "popular"
+        if pct < 20:
+            return "high_risk"
+        return "balanced"
+
+    match["dynamicPoints"] = {
+        "home": calc_dynamic_pts(hp),
+        "draw": calc_dynamic_pts(dp),
+        "away": calc_dynamic_pts(ap),
+        "home_label": get_label(hp),
+        "draw_label": get_label(dp),
+        "away_label": get_label(ap),
+        "base_points": base_points,
+    }
     return match
 
 
@@ -801,10 +829,13 @@ async def get_matches(
             return expired
         return []
 
-    # Enrich with vote counts
+    # Enrich with vote counts + dynamic points
     match_ids = [m["id"] for m in matches]
     vote_counts = await _get_vote_counts(db, match_ids)
-    matches = [_enrich_with_votes(m, vote_counts) for m in matches]
+    # Get base_points from points config
+    pts_config = await db.points_config.find_one({"config_id": "default_points"}, {"_id": 0})
+    base_pts = pts_config.get("correct_prediction", 50) if pts_config else 50
+    matches = [_enrich_with_votes(m, vote_counts, base_pts) for m in matches]
 
     # Sort by date
     matches.sort(key=lambda m: m.get("utcDate", ""))

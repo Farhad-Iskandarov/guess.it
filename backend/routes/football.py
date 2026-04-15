@@ -533,9 +533,11 @@ async def get_single_match(
     if not match:
         return {"match": None}
 
-    # Enrich with votes
+    # Enrich with votes + dynamic points
     vote_counts = await _get_vote_counts(db, [match_id])
-    match = _enrich_with_votes(match, vote_counts)
+    pts_config = await db.points_config.find_one({"config_id": "default_points"}, {"_id": 0})
+    base_pts = pts_config.get("correct_prediction", 50) if pts_config else 50
+    match = _enrich_with_votes(match, vote_counts, base_pts)
 
     return {"match": match}
 

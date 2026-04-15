@@ -837,44 +837,44 @@ const ScrollToTopButton = () => {
   const lastScrollY = useRef(0);
 
   useEffect(() => {
-    let timer = null;
     const onScroll = () => {
-      if (timer) return;
-      timer = setTimeout(() => {
-        const currentY = window.scrollY;
-        const scrollingUp = currentY < lastScrollY.current - 5;
-        const farEnough = currentY > 400;
+      const currentY = window.scrollY;
+      const prev = lastScrollY.current;
+      const scrollingDown = currentY > prev + 5;
+      const scrollingUp = currentY < prev - 5;
+      const nearTop = currentY <= 100;
 
-        if (scrollingUp && farEnough) {
-          setVisible(true);
-        } else if (!scrollingUp || currentY <= 80) {
-          setVisible(false);
-        }
+      if (nearTop) {
+        // At/near top → hide
+        setVisible(false);
+      } else if (scrollingUp) {
+        // Scrolling up & not near top → show (and keep visible)
+        setVisible(true);
+      } else if (scrollingDown) {
+        // Scrolling down → hide
+        setVisible(false);
+      }
+      // If not scrolling (stopped) → do nothing, keep current state
 
-        lastScrollY.current = currentY;
-        timer = null;
-      }, 60);
+      lastScrollY.current = currentY;
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (timer) clearTimeout(timer);
-    };
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  if (!visible) return null;
-
   return (
     <button
       onClick={scrollToTop}
       aria-label="Scroll to top"
       data-testid="scroll-to-top-btn"
-      className="fixed bottom-20 right-5 z-50 w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-black/25 hover:bg-primary/90 active:scale-90 transition-transform duration-200 animate-fade-in"
+      className={`fixed bottom-20 right-5 z-50 w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-black/25 hover:bg-primary/90 active:scale-90 transition-all duration-300 ease-in-out md:hidden ${
+        visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+      }`}
     >
       <ChevronUp className="w-5 h-5" />
     </button>

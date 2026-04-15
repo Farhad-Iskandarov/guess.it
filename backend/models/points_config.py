@@ -8,8 +8,8 @@ class PointsConfig(BaseModel):
     
     config_id: str = Field(default_factory=lambda: f"pconfig_{uuid.uuid4().hex[:12]}")
     
-    # Basic prediction points
-    correct_prediction: int = Field(default=10, ge=0, le=1000)
+    # Base points for dynamic calculation (replaces fixed correct_prediction)
+    correct_prediction: int = Field(default=50, ge=0, le=1000)  # Now used as BASE_POINTS for dynamic formula
     wrong_penalty: int = Field(default=5, ge=0, le=100)  # Stored as positive, applied as negative
     penalty_min_level: int = Field(default=5, ge=0, le=10)  # Level at which penalties apply
     
@@ -28,7 +28,7 @@ class PointsConfig(BaseModel):
 
 class PointsConfigUpdate(BaseModel):
     """Update points configuration"""
-    correct_prediction: int = Field(default=10, ge=0, le=1000)
+    correct_prediction: int = Field(default=50, ge=0, le=1000)
     wrong_penalty: int = Field(default=5, ge=0, le=100)
     penalty_min_level: int = Field(default=5, ge=0, le=10)
     exact_score_bonus: int = Field(default=50, ge=0, le=500)
@@ -40,7 +40,7 @@ class PointsConfigUpdate(BaseModel):
 # Default configuration values
 DEFAULT_POINTS_CONFIG = {
     "config_id": "default_points",
-    "correct_prediction": 10,
+    "correct_prediction": 50,
     "wrong_penalty": 5,
     "penalty_min_level": 5,
     "exact_score_bonus": 50,

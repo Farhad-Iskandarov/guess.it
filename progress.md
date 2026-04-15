@@ -329,8 +329,124 @@ curl -X POST https://guess-it-staging-2.preview.emergentagent.com/api/auth/login
 
 ---
 
+## Session 5 - Global Club Name Truncation Fix (2026-04-13)
 
+### Problem
+Club names were truncated with "..." (ellipsis) in several pages: My Predictions, Saved Matches, Match Detail, Messages, Admin Panel, Top Matches Carousel, and Header search results. The main match cards on the homepage had already been fixed in Session 4, but the fix was not applied globally.
 
+### Fix Applied
+Replaced all `truncate` CSS classes on team/club name `<span>` and `<label>` elements with `line-clamp-2 break-words leading-tight` across 8 frontend files. This allows long club names (e.g., "OLYMPIQUE LYON", "BORUSSIA DORTMUND") to wrap naturally to a maximum of 2 lines without ellipsis.
+
+### Files Changed (18 total edits across 8 files)
+- `frontend/src/pages/MyPredictionsPage.jsx` — 4 team name elements (compact + grid views + exact score labels)
+- `frontend/src/pages/MatchDetailPage.jsx` — 5 elements (main header names, exact score labels, standings table)
+- `frontend/src/pages/MessagesPage.jsx` — 6 elements (chat match cards, exact score inputs, match share items)
+- `frontend/src/pages/AdminPage.jsx` — 4 elements (prediction rows, match management rows)
+- `frontend/src/components/home/TopMatchesCards.jsx` — 1 element (TeamDisplay component)
+- `frontend/src/components/home/MatchList.jsx` — 3 elements (advanced dialog title, exact score labels)
+- `frontend/src/components/home/MatchCard.jsx` — 2 elements (exact score input labels)
+- `frontend/src/components/layout/Header.jsx` — 2 elements (search result team names)
+
+### Testing Results
+- Frontend: 90% pass rate (all team name tests passed)
+- Desktop (1920px) + Mobile (390px) verified via screenshots
+- Low-priority notes: player scorer names and competition names still truncate in some spots (not club names, out of scope)
+
+### Files Updated
+- `README.md` (added new Recent Changes entry)
+- `progress.md` (this entry + updated Files Modified table)
+
+---
+
+## Session 6 - Mobile Layout Restructuring for Club Names (2026-04-13)
+
+### Problem
+Even after Session 5's `line-clamp-2` fix, club names were still truncated on mobile (e.g., "FC St....", "Boru ssi...", "Baye r 0...") because the **container width** was too narrow. The prediction badge ("YOUR PICK"), score column, and action buttons all used `flex-shrink-0`, squeezing the team name container to ~30% of the card width on mobile.
+
+### Root Cause
+Layout issue, not CSS text issue. The `flex items-center gap-4` container put teams, score, and prediction badge all in one horizontal row. On 390px mobile screens, this left only ~100px for team names — even 2 lines wasn't enough to show "TSG 1899 Hoffenheim".
+
+### Fix Applied
+**Restructured card layouts with responsive breakpoints:**
+
+1. **Grid view (MyPredictionsPage)**: Changed outer container from `flex items-center gap-4` to `flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4`. Teams + Score are in one row (teams get `flex-1`), YOUR PICK badge moves to its own row on mobile.
+2. **List view (MyPredictionsPage)**: Same responsive stacking — status/meta, teams, and score+pick+actions each get their own row on mobile.
+3. **Team name spans**: Changed from `line-clamp-2 break-words leading-tight` to just `break-words leading-tight` — no line clamping needed now since containers have enough width.
+4. **SavedMatchesPage**: Added `break-words leading-tight` and `flex-shrink-0` on score for consistency.
+
+### Testing Results
+- Frontend: 100% pass rate
+- Mobile (390px): All names fully visible — "FC St. Pauli 1910", "TSG 1899 Hoffenheim", "Borussia Dortmund", "Bayer 04 Leverkusen", etc.
+- Desktop (1920px): Side-by-side layout preserved unchanged
+
+### Files Changed
+- `frontend/src/pages/MyPredictionsPage.jsx` (grid + list views restructured)
+- `frontend/src/pages/SavedMatchesPage.jsx` (break-words + flex-shrink-0 added)
+- `README.md` (updated)
+- `progress.md` (this entry)
+
+---
+
+## Session 7 - Dynamic Points System (2026-04-13)
+
+### What was done
+Implemented a dynamic points system where prediction rewards are calculated based on vote distribution popularity, replacing fixed point values.
+
+### Formula
+`points = base_points * (1 - percentage/100) * 1.3`, clamped to [5, 50]
+- Popular choices (>60% votes) → low points (e.g., 5 pts) + "👥 Popular Pick" label
+- Rare choices (<20% votes) → high points (e.g., 50 pts) + "🔥 High Risk" label
+- Balanced (20-60%) → medium points + "⚖️ Balanced" label
+- 0 total votes → equal distribution fallback (33.3% each → 43 pts, Balanced)
+
+### Backend Changes
+1. `models/points_config.py`: Changed `correct_prediction` default from 10 → 50 (now means "base points")
+2. `services/football_api.py`: `_enrich_with_votes()` now calculates `dynamicPoints` for each match with home/draw/away points + labels
+3. `routes/predictions.py`: Added `calculate_dynamic_points()` helper. Points awarding for finished matches now uses dynamic formula instead of fixed `POINTS_CORRECT`
+4. `routes/football.py`: Updated `get_match_by_id` to pass `base_points` to enrich function
+5. DB: Updated `points_config.correct_prediction` to 50
+
+### Frontend Changes
+1. `MatchList.jsx`: `PredictionBars` component now shows dynamic points + risk labels under percentage bars. Quick Predict modal shows points and labels per option.
+2. `AdminPage.jsx`: "Correct Prediction" → "Base Points (Dynamic)" with updated description
+
+### Testing Results
+- Backend: 100% (17/17 tests)
+- Frontend: 100%
+- Integration: 100%
+- Admin panel: 100%
+
+---
+
+## Session 8 & 9 - Prediction UI Cleanup (2026-04-13)
+
+### What was done
+1. Removed all "pts" text from prediction bars and Quick Predict modal (UI-only, backend unchanged)
+2. Added risk label icons+words inline — then removed per user X-edit request
+3. Final state: clean percentages + progress bars only, no labels or pts text
+
+### Files Changed
+- `frontend/src/components/home/MatchList.jsx` — PredictionBars component: removed pts span, label icons+words inline with %. Quick Predict modal: removed pts span, label icons+words inline with team name.
+
+---
+
+## Session 10 - Header Auto-Hide & Scroll-to-Top Fix (2026-04-15)
+
+### What was done
+1. **Header auto-hide on mobile scroll**: Hides smoothly on scroll down, reappears on scroll up. Always visible at page top and on desktop (≥768px). Changed from `sticky` to `fixed` positioning + spacer div.
+2. **Scroll-to-top button fix**: Now stays visible after user stops scrolling (Instagram/Twitter behavior). Only disappears on scroll-down or when near page top. Added fade+slide animation. Mobile only (`md:hidden`).
+
+### Files Changed
+- `frontend/src/components/layout/Header.jsx` — Added scroll-direction state + useEffect, changed to `fixed` positioning, added spacer div
+- `frontend/src/pages/HomePage.jsx` — Rewrote ScrollToTopButton scroll logic, added CSS transitions for fade+slide
+
+### Testing Results
+- Desktop: 100% (header always visible)
+- Mobile scroll-to-top: 100% (all behaviors correct)
+- Mobile header: Working (hide/show/animation smooth)
+- Header functionality: 100% (search, theme, menu, login all working)
+
+---
 
 
 
@@ -338,11 +454,20 @@ curl -X POST https://guess-it-staging-2.preview.emergentagent.com/api/auth/login
 
 | File | Change Type | Description |
 |------|------------|-------------|
-| `backend/routes/predictions.py` | Bug fix | `.get()` defaults for match data fields (~line 510-530) |
+| `backend/routes/predictions.py` | Bug fix + Feature | `.get()` defaults, dynamic points calculation & awarding |
 | `frontend/src/pages/HomePage.jsx` | Performance fix | Cache-aware `initialFetchDone`, smarter skeleton condition |
-| `frontend/src/components/home/MatchList.jsx` | Feature + UI | Display-only PredictionBars, card click navigation, Quick Predict tab, compact styling, mobile dialog fixes |
-| `frontend/src/components/home/MatchCard.jsx` | Feature | Added QuickPrediction component, display-only VoteButton, card click navigation, Trophy import, live match minute display between teams |
-| `frontend/src/components/layout/MobileBottomNav.jsx` | New component | Mobile-only bottom navigation bar (Home, Leaderboard, Message, Saved, Profile) |
-| `frontend/src/App.js` | Integration | Added MobileBottomNav import and render, bottom padding on mobile |
-| `frontend/src/index.css` | Styling | Added safe-area-bottom CSS for iPhone notch support |
-| `backend/.env` | Config | Added REDIS_URL, FOOTBALL_API_KEY, ADMIN_*, STRIPE_API_KEY |
+| `frontend/src/components/home/MatchList.jsx` | Feature + UI | PredictionBars with dynamic pts/labels, Quick Predict with pts, club name wrapping |
+| `frontend/src/components/home/MatchCard.jsx` | Feature | QuickPrediction, VoteButton, card click nav, live match minute, club name fix |
+| `frontend/src/components/layout/MobileBottomNav.jsx` | New component | Mobile-only bottom navigation bar |
+| `frontend/src/App.js` | Integration | MobileBottomNav import and render |
+| `frontend/src/index.css` | Styling | Safe-area-bottom CSS for iPhone notch |
+| `backend/.env` | Config | REDIS_URL, FOOTBALL_API_KEY, ADMIN_*, STRIPE_API_KEY |
+| `frontend/src/pages/MyPredictionsPage.jsx` | UI fix + Layout | Responsive layout, club name wrapping |
+| `frontend/src/pages/MatchDetailPage.jsx` | UI fix | Club name wrapping (5 occurrences) |
+| `frontend/src/pages/MessagesPage.jsx` | UI fix | Club name wrapping (6 occurrences) |
+| `frontend/src/pages/AdminPage.jsx` | UI fix + Feature | Club name wrapping + "Base Points (Dynamic)" rename |
+| `frontend/src/components/home/TopMatchesCards.jsx` | UI fix | Club name wrapping |
+| `frontend/src/components/layout/Header.jsx` | UI fix | Club name wrapping in search |
+| `backend/models/points_config.py` | Feature | Default correct_prediction changed to 50 (base points) |
+| `backend/services/football_api.py` | Feature | `_enrich_with_votes` calculates dynamicPoints per match |
+| `backend/routes/football.py` | Feature | Passes base_points to enrich function |

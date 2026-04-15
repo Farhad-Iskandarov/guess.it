@@ -58,9 +58,9 @@ const SavedMatchCard = memo(({ match, onRemove, removing }) => {
               <img src={match.home_crest} alt="" className="w-5 h-5 object-contain" />
             ) : '⚽'}
           </div>
-          <span className="text-base font-medium text-foreground flex-1">{match.home_team}</span>
+          <span className="text-base font-medium text-foreground flex-1 break-words leading-tight">{match.home_team}</span>
           {(match.score_home !== null && match.score_home !== undefined) && (
-            <span className="text-lg font-bold text-foreground tabular-nums">{match.score_home}</span>
+            <span className="text-lg font-bold text-foreground tabular-nums flex-shrink-0">{match.score_home}</span>
           )}
         </div>
         <div className="flex items-center gap-2.5">
@@ -69,7 +69,7 @@ const SavedMatchCard = memo(({ match, onRemove, removing }) => {
               <img src={match.away_crest} alt="" className="w-5 h-5 object-contain" />
             ) : '⚽'}
           </div>
-          <span className="text-base font-medium text-foreground flex-1">{match.away_team}</span>
+          <span className="text-base font-medium text-foreground flex-1 break-words leading-tight">{match.away_team}</span>
           {(match.score_away !== null && match.score_away !== undefined) && (
             <span className="text-lg font-bold text-foreground tabular-nums">{match.score_away}</span>
           )}

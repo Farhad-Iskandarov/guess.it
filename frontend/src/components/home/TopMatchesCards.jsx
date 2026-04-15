@@ -252,7 +252,7 @@ const TeamDisplay = memo(({ team, number }) => (
   <div className="flex items-center gap-1.5 min-w-0">
     <span className="text-[10px] font-semibold text-muted-foreground w-2.5 text-right flex-shrink-0" data-testid={`team-number-${number}`}>{number}</span>
     <TeamCrestCompact team={team} />
-    <span className="text-xs font-medium text-foreground truncate">{team.name}</span>
+    <span className="text-xs font-medium text-foreground line-clamp-2 break-words leading-tight">{team.name}</span>
   </div>
 ));
 TeamDisplay.displayName = 'TeamDisplay';
