@@ -471,3 +471,5 @@ Implemented a dynamic points system where prediction rewards are calculated base
 | `backend/models/points_config.py` | Feature | Default correct_prediction changed to 50 (base points) |
 | `backend/services/football_api.py` | Feature | `_enrich_with_votes` calculates dynamicPoints per match |
 | `backend/routes/football.py` | Feature | Passes base_points to enrich function |
+| `frontend/src/components/layout/Header.jsx` | Feature | Scroll-direction auto-hide on mobile, fixed positioning + spacer div, club name wrapping |
+| `frontend/src/pages/HomePage.jsx` | Feature + Fix | ScrollToTopButton rewritten — stays visible after scroll-up stops, fade+slide animation, md:hidden |
