@@ -282,3 +282,49 @@ tail -f /var/log/supervisor/frontend.err.log
 - **Implementation**: Fixed positioning with `translateY(-100%)` hide + 0.3s transition. JS scroll-direction detection only on `< 768px`
 - **Scroll-to-top button**: Now stays visible after scroll-up stops (Instagram/Twitter style). Hides only on scroll-down or near page top
 - **No content shift**: Spacer div prevents layout jump when header hides/shows
+
+
+### Mobile Hamburger Menu Fix (2026-04-28)
+- **Bug**: Drawer was rendered inside `<header>` which has a `transform` — that traps `position: fixed` descendants, clipping the drawer to header height (64px). Result: menu "opened" (DOM) but was invisible
+- **Fix**: Moved the mobile drawer JSX outside `<header>` (still inside the same fragment) so `position: fixed` covers full viewport. Replaced brittle `animate-in slide-in-from-right` with explicit CSS keyframes in `App.css` (`drawer-overlay-fade-in` 200ms + `drawer-panel-slide-in` 220ms cubic-bezier)
+- **UX**: Body-scroll lock + Escape-key close while drawer is open; backdrop-click and item-tap both close the drawer; drawer also auto-closes on route change
+- **Unified post-login menu**: Profile, My Predictions, Messages, Friends, Saved Matches, Subscribe + full navigation + Settings + Logout — uses clean Lucide icons (User, ListChecks, LogOut, HelpCircle, Info, Home, Settings)
+- **Pre-login menu** now has: Home, How It Works, Leaderboard, About Us, News, Contact, Subscribe (PRO), theme toggle, Login/Register CTAs — matching what the user requested
+- Desktop nav untouched (drawer is `md:hidden`)
+
+### Mobile-First Match Filter System (2026-04-28)
+- **New component** `components/home/MatchFilters.jsx` — sticky two-row filter beneath the app header:
+  - Row 1: horizontal date selector — `LIVE` (red, with live count) + `TODAY` + next 6 days (`WED 29 APR` …). Active item auto-scrolls into center view
+  - Row 2: pill-style category filter — 🔥 Top Matches, ▦ All Matches, ⭐ Favorites (with count), 🧠 My Predictions (with count). Personal categories only render when signed in
+- **HomePage pipeline**: new `selectedDate` (defaults to today's local YYYY-MM-DD) and `selectedCategory` (defaults to `all`) drive a memoized `filteredMatches` chain, 100% client-side. No extra API calls when switching filters
+- **Contextual empty states**: "No live matches right now" / "No favorite matches yet" / "No predictions for this date" / "No matches on this date"
+- **Active league filter**: see below
+
+### Club Star Favorites, My Predictions Filter Fix, Clickable League Headers (2026-04-28)
+- **Star system**: New `ClubLogoWithStar` component overlays a small amber-filled / outline star on the top-right corner of each club crest (only for authenticated users with valid `team.id`). Uses the existing `favoriteTeamIds` / `onToggleFavorite` API — single source of truth (`user.favoriteClubs`)
+- **My Predictions bug fix**: Type mismatch — backend `match_id` was stored in the predictions map using its raw type (int) while filter compared against frontend `m.id`. Fix: normalized to strings everywhere (`predictionsMap[String(p.match_id)]`, `handlePredictionSaved` uses `String(matchId)`, filter uses `savedPredictions[String(m.id)]`). Bonus UX: Favorites and My Predictions categories now bypass the date filter so users see all their saved/predicted matches across dates
+- **Clickable league headers**: `LeagueHeader` is now a `<button>` accepting `onClick`. Tapping a header toggles a client-side league filter — a green "Showing: <league> · Show all leagues" banner appears above the list; clearing is a one-tap action
+
+### Leaderboard Page Redesign (2026-05-03)
+- Full rewrite to match the provided reference
+- **Top bar**: Back · 🏆 Leaderboard · ⓘ info
+- **3-tab pill switcher**: Global · Weekly · Monthly (active = primary green with soft shadow)
+- **Season strip**: dynamic context ("Season ends in Xd Yh Zm" for weekly, "All-time rankings" for global) + right-side `All time ▼` DropdownMenu
+- **Podium**: hex-shaped rank badges (#2 silver, #1 gold + crown, #3 bronze). #1 card elevated with a larger avatar, gold lightning-bolt points, and a glowing gold platform underneath. Each card shows Target-accuracy + Flame-streak in a divided bottom strip
+- **Rank table**: desktop grid `RANK · PLAYER · TODAY · POINTS · STREAK`, collapses to 3-column on mobile. Rows show rank + ↑/↓ change, avatar, nickname + green accuracy %, today delta, ⚡ points, 🔥 streak, and a row chevron. Clicking navigates to `/profile/:userId`
+- **"YOU" floating card**: when the signed-in user is outside the top-12, their row appears below with a glowing green `YOU` badge floating above
+- **Skeletons** for podium + rows during loading; graceful empty state
+
+### Leaderboard Accuracy Fix + Signed-in User Row Emphasis (2026-05-03)
+- **Accuracy bug**: `/api/football/leaderboard` never returned `predictions_count` / `correct_predictions` because those fields aren't stored on the user document. Accuracy showed 0% for everyone
+- **Backend fix**: Endpoint now computes stats by aggregating the `predictions` collection against `football_matches_cache` for finished matches (same logic the profile bundle uses). Cached in Redis for 30s
+- **Frontend**: Signed-in user's own row now renders larger — bigger avatar, bigger nickname + accuracy, thicker padding, stronger primary-colored avatar ring — while all other rows stay compact. Removed the inline "You" text label (the green-glow row border already conveys ownership)
+
+### Desktop Home Page Sidebar (2026-05-03)
+- **New component** `components/home/HomeSidebar.jsx` containing three cards:
+  - **Your Stats** — 2×2 grid (Total Points, Correct Predictions, Accuracy, Win Streak) with Trophy / Target / TrendingUp / Flame icon tiles. Pulls `/api/profile/bundle` when signed-in, zeros otherwise. "View All" → `/profile`
+  - **Leaderboard** — top 5 with gold/silver/bronze crowns on ranks 1–3, avatar + nickname + `N pts`, auto-refreshing every 60s. Row spacing uses `divide-y` with `py-3` for comfortable reading
+  - **Promo** — dark-green card "Predict. Compete. Win." with Gift icon, tagline, "Learn More" pill, and a real jersey image on the right (2-column split grid)
+- **HomePage integration**: `<main>` wrapped in `lg:grid lg:grid-cols-[1fr_340px]` — left column keeps the existing matches UI, right column holds the sticky sidebar. Mobile/tablet (<lg) layout is **unchanged** via `hidden lg:block`
+- `MatchFilters` drops its negative horizontal margin, backdrop blur, and bottom border on `lg` so it doesn't bleed past the grid into the sidebar column
+- No existing algorithms touched — sidebar is purely additive

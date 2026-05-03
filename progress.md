@@ -473,3 +473,161 @@ Implemented a dynamic points system where prediction rewards are calculated base
 | `backend/routes/football.py` | Feature | Passes base_points to enrich function |
 | `frontend/src/components/layout/Header.jsx` | Feature | Scroll-direction auto-hide on mobile, fixed positioning + spacer div, club name wrapping |
 | `frontend/src/pages/HomePage.jsx` | Feature + Fix | ScrollToTopButton rewritten — stays visible after scroll-up stops, fade+slide animation, md:hidden |
+
+
+## Session 11 - Mobile Hamburger Menu Fix (2026-04-28)
+
+### Problem
+Mobile hamburger menu button appeared but tapping it did not display the drawer overlay visually. Only visible on post-login view for some users; pre-login users reported it simply "didn't work".
+
+### Root cause
+The drawer was rendered inside the `<header>` element. The header applies a `transform` (`translate-y-0` / `-translate-y-full` for auto-hide). A transform on any ancestor creates a containing block for `position: fixed` descendants — so the drawer's `fixed inset-0` was clipped to the header's 64px bounding box, making it effectively invisible.
+
+### Fix
+1. Moved the mobile drawer JSX **outside** `<header>` (still inside the same React fragment) so `position: fixed` uses the viewport as its containing block
+2. Replaced brittle `animate-in slide-in-from-right` (tailwindcss-animate) with explicit CSS keyframes in `App.css`:
+   - `drawer-overlay-fade-in` — 200ms ease-out
+   - `drawer-panel-slide-in` — 220ms cubic-bezier, `will-change: transform`
+3. Added body-scroll lock + Escape-key close
+4. Unified post-login menu items (Profile, My Predictions, Messages, Friends, Saved Matches, Subscribe + nav + Settings + Logout) with clean Lucide icons
+5. Pre-login menu: Home, How It Works, Leaderboard, About Us, News, Contact, Subscribe (PRO), theme toggle, Login/Register
+
+### Files changed
+- `frontend/src/components/layout/Header.jsx` — drawer moved outside header, imports updated, unified menus, body-scroll lock + Escape key
+- `frontend/src/App.css` — new keyframes
+- `README.md`, `progress.md`
+
+---
+
+## Session 12 - Mobile-First Match Filter System (2026-04-28)
+
+### What was done
+Added a sticky two-row filter bar beneath the header to replace the unstructured, cluttered homepage feed.
+
+### New component
+`frontend/src/components/home/MatchFilters.jsx`
+- Top row: `LIVE` (red pill with live count) + `TODAY` + 6 upcoming days (`WED 29 APR` …). Horizontal-scroll with snap. Active item auto-scrolls into center on change
+- Bottom row: pill category filter — `🔥 Top Matches`, `▦ All Matches`, `⭐ Favorites (N)`, `🧠 My Predictions (N)`. Personal categories render only when authenticated. Lucide icons only — no emojis
+
+### HomePage integration
+- `selectedDate` (defaults to `todayISO()`) + `selectedCategory` (defaults to `'all'`)
+- Memoized `filteredMatches` applies date → league → category filters 100% client-side. No extra API calls when switching
+- New contextual empty states: "No live matches right now" / "No favorite matches yet" / "No predictions for this date" / "No matches on this date"
+- Key wrapper on the list triggers the existing fade-in animation on every filter change
+- Sticky offset matches header height (`top-[57px] sm:top-[65px]`), backdrop-blur, `-mx` to bleed to viewport edges on mobile
+
+### Files changed
+- `frontend/src/components/home/MatchFilters.jsx` (new)
+- `frontend/src/pages/HomePage.jsx` (state, pipeline, render)
+
+---
+
+## Session 13 - Stars, My Predictions Bug, League Navigation (2026-04-28)
+
+### 1. Star favorites on club logos
+New `ClubLogoWithStar` component in `MatchList.jsx` overlays a tiny amber-filled / outline star on the top-right corner of each crest. Uses the existing `favoriteTeamIds` Set + `onToggleFavorite` API — single source of truth. Only renders for authenticated users with a valid `team.id`. Click event is stopped from propagating so it doesn't navigate to the match detail.
+
+### 2. My Predictions filter bug fix
+**Root cause**: Type mismatch. Backend returns `match_id` as an integer, the predictions map was keyed with the raw value, but `filter((m) => savedPredictions[m.id])` compared against frontend `m.id`. Depending on where match data came from, one side could be a string and the other a number.
+
+**Fix**: Normalized to strings everywhere:
+- `predictionsMap[String(p.match_id)] = p.prediction`
+- `handlePredictionSaved` uses `key = String(matchId)`
+- Filter: `result.filter((m) => !!savedPredictions[String(m.id)])`
+
+**Bonus UX**: Favorites and My Predictions categories now bypass the date filter so users see all their saved / predicted matches across dates.
+
+### 3. Clickable league headers
+`LeagueHeader` is now a `<button>` with an `onClick` prop, wired through `MatchList` via a new `onLeagueClick` prop. HomePage maintains `selectedLeague` state — tapping a header filters the list to that competition and shows a green "League: X · Show all leagues" banner with a one-tap clear action. Tapping the same header again toggles off. Auto-scrolls to top on change.
+
+### Files changed
+- `frontend/src/components/home/MatchList.jsx` — `ClubLogoWithStar`, starred `TeamCrest` usages in `MatchRow`, clickable `LeagueHeader`
+- `frontend/src/pages/HomePage.jsx` — string-normalized predictions keys, new `selectedLeague` state + handlers, `filteredMatches` updated pipeline, league filter banner UI
+
+---
+
+## Session 14 - Leaderboard Page Redesign (2026-05-03)
+
+### What was done
+Complete rewrite of `pages/LeaderboardPage.jsx` to match the provided reference image. App header and mobile bottom nav untouched. Same layout on mobile and desktop (responsive).
+
+### New structure
+- In-page top bar: ← Back · 🏆 Leaderboard · ⓘ info
+- 3-tab pill switcher: Global · Weekly · Monthly (active = filled green with soft shadow)
+- Season strip: dynamic context + `All time ▼` DropdownMenu
+- Podium:
+  - Hex-shaped rank badges with gradient fills (#2 silver, #1 gold, #3 bronze)
+  - #1 card elevated + crown above + larger avatar + amber points value + gold platform strip underneath
+  - Each card has Target-accuracy + Flame-streak stats in a divided bottom strip
+- Rank table:
+  - Desktop grid: `RANK · PLAYER · TODAY · POINTS · STREAK`
+  - Mobile compact: 3-column layout with right-side stat stack
+  - Rows show rank + ↑/↓ change, avatar, nickname + accuracy %, today delta, points, streak, chevron
+- "YOU" floating card: when signed-in user is outside top-12, rendered below the list with a floating "YOU" badge
+- Skeletons for podium + rows; graceful empty state
+
+### Files changed
+- `frontend/src/pages/LeaderboardPage.jsx` (full rewrite)
+
+---
+
+## Session 15 - Leaderboard Accuracy + Signed-in User Emphasis (2026-05-03)
+
+### Accuracy bug
+`/api/football/leaderboard` was projecting `predictions_count` and `correct_predictions` from user documents, but those fields aren't stored on the user document. Accuracy always showed 0%.
+
+### Backend fix
+Endpoint now computes stats for every returned user by aggregating the `predictions` collection against `football_matches_cache` for finished matches (same logic the profile bundle uses):
+- Load predictions for the top-N users in one query
+- Load referenced matches from cache in one query
+- For each finished match (status in `FINISHED`, `AFTER_EXTRA_TIME`, `PENALTY_SHOOTOUT`), determine actual outcome from score and increment per-user correct / total counters
+- Attach `predictions_count` and `correct_predictions` to each user
+- Cached in Redis for 30s to avoid recomputation
+
+### Frontend signed-in user emphasis
+- Removed inline "You" text next to nickname in the list — the green-glow row border already conveys ownership
+- When `isCurrentUser`, the row renders larger: bigger avatar (44→48px), bigger nickname (text-sm → text-base / sm:text-lg), bigger rank number + points + streak, thicker vertical padding, stronger primary-colored avatar ring
+
+### Files changed
+- `backend/routes/football.py` — leaderboard endpoint compute block
+- `frontend/src/pages/LeaderboardPage.jsx` — `RankRow` conditional size classes, removed "You" label
+
+---
+
+## Session 16 - Desktop Home Page Sidebar (2026-05-03)
+
+### What was done
+Added a desktop-only right sidebar to the home page matching the reference (`Your Stats`, `Leaderboard`, and a `Predict. Compete. Win.` promo card with a club jersey image).
+
+### New component
+`frontend/src/components/home/HomeSidebar.jsx`:
+- **Your Stats**: 2×2 grid of Total Points / Correct Predictions / Accuracy / Win Streak with Trophy / Target / TrendingUp / Flame icon tiles. Reads `/api/profile/bundle`. "View All" → `/profile`
+- **Leaderboard**: top 5 with gold/silver/bronze Crown icons on ranks 1–3, avatar + nickname + `N pts`. Uses `divide-y divide-border/40` with `py-3` per row for comfortable spacing (originally `space-y-2.5` which felt cramped per user feedback). Auto-refreshes every 60s
+- **Promo card**: dark green (`#0B4A2A`) 2-column grid with text on left (Gift icon, "Predict. Compete. Win." headline, tagline, "Learn More" pill) and a jersey image on the right. Soft gradient blends the image into the card background
+
+### HomePage integration
+- Wrapped `<main>` content in `lg:grid lg:grid-cols-[1fr_340px] lg:gap-6 xl:gap-8`
+- Left column = existing matches UI; right column = `<HomeSidebar isAuthenticated />` inside a `sticky top-[80px]` wrapper
+- Mobile / tablet (<lg) layout is **unchanged** via `hidden lg:block` on the sidebar column
+- `MatchFilters` now drops its negative horizontal margin, backdrop blur, and bottom border on `lg` so it doesn't bleed past the grid into the sidebar column
+
+### Files changed
+- `frontend/src/components/home/HomeSidebar.jsx` (new)
+- `frontend/src/components/home/MatchFilters.jsx` — responsive overrides
+- `frontend/src/pages/HomePage.jsx` — 2-column grid wrap
+
+---
+
+## Files Modified (update)
+
+| File | Change |
+|------|--------|
+| `frontend/src/components/layout/Header.jsx` | Drawer moved outside header, unified menus, body-scroll lock |
+| `frontend/src/components/home/MatchFilters.jsx` | New filter bar (dates + categories) |
+| `frontend/src/components/home/MatchList.jsx` | `ClubLogoWithStar` on crests, clickable `LeagueHeader` |
+| `frontend/src/components/home/HomeSidebar.jsx` | New desktop sidebar (Stats, Leaderboard, Promo) |
+| `frontend/src/pages/HomePage.jsx` | Filter pipeline, league filter, string-normalized predictions keys, 2-col desktop grid |
+| `frontend/src/pages/LeaderboardPage.jsx` | Full rewrite to match reference |
+| `backend/routes/football.py` | Leaderboard accuracy computed from predictions × matches cache |
+| `frontend/src/App.css` | Drawer keyframes |
+| `README.md`, `progress.md` | Updated |

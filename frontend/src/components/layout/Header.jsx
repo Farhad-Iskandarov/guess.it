@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, UserPlus, X, Loader2, Radio, Trophy, Zap, Newspaper, Phone, BarChart3, Bookmark } from 'lucide-react';
+import { Search, Mail, Users, Bell, Menu, Sun, Moon, LogIn, LogOut, UserPlus, X, Loader2, Radio, Trophy, Zap, Newspaper, Phone, BarChart3, Bookmark, Home, HelpCircle, Info, User, Settings, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/lib/ThemeContext';
@@ -546,6 +546,25 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [mobileMenuOpen]);
+
+  // Close mobile drawer on Escape
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [mobileMenuOpen]);
   
   // Get pending friend request count
   let friendRequestCount = 0;
@@ -748,17 +767,20 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
           </div>
         </div>
       </div>
+    </header>
+    {/* Spacer for fixed header — prevents content from being hidden behind it */}
+    <div className="h-[57px] sm:h-[65px]" />
 
-      {/* ===== Mobile Drawer ===== */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-[100] md:hidden" data-testid="mobile-drawer">
-          {/* Overlay */}
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          {/* Drawer panel */}
-          <div className="absolute top-0 right-0 h-full w-[280px] bg-background border-l border-border shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200">
+    {/* ===== Mobile Drawer (rendered OUTSIDE header to avoid transform-bound fixed positioning) ===== */}
+    {mobileMenuOpen && (
+      <div className="fixed inset-0 z-[200] md:hidden" data-testid="mobile-drawer" role="dialog" aria-modal="true">
+        {/* Overlay with fade animation */}
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm mobile-drawer-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+        {/* Drawer panel with slide-in animation */}
+        <div className="absolute top-0 right-0 h-full w-[280px] max-w-[85vw] bg-background border-l border-border shadow-2xl overflow-y-auto mobile-drawer-panel">
             {/* Drawer header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
               <span className="text-lg font-bold">
@@ -809,8 +831,8 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
                 <>
                   {/* Account section */}
                   <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Account</p>
-                  <DrawerItem icon={<Users className="w-4 h-4" />} label="Profile" onClick={() => mobileNav('/profile')} testId="drawer-profile" />
-                  <DrawerItem icon={<BarChart3 className="w-4 h-4" />} label="My Predictions" onClick={() => mobileNav('/my-predictions')} testId="drawer-predictions" />
+                  <DrawerItem icon={<User className="w-4 h-4" />} label="Profile" onClick={() => mobileNav('/profile')} testId="drawer-profile" />
+                  <DrawerItem icon={<ListChecks className="w-4 h-4" />} label="My Predictions" onClick={() => mobileNav('/my-predictions')} testId="drawer-predictions" />
                   <DrawerItem icon={<Mail className="w-4 h-4" />} label="Messages" badge={messageCount} onClick={() => mobileNav('/messages')} testId="drawer-messages" />
                   <DrawerItem icon={<Users className="w-4 h-4" />} label="Friends" badge={friendRequestCount} onClick={() => mobileNav('/friends')} testId="drawer-friends" />
                   <DrawerItem icon={<Bookmark className="w-4 h-4" />} label="Saved Matches" onClick={() => mobileNav('/saved-matches')} testId="drawer-saved" />
@@ -819,21 +841,22 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
                   {/* Navigation section */}
                   <div className="my-2 border-t border-border" />
                   <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Navigate</p>
+                  <DrawerItem icon={<Home className="w-4 h-4" />} label="Home" onClick={() => mobileNav('/')} testId="drawer-home" />
+                  <DrawerItem icon={<HelpCircle className="w-4 h-4" />} label="How It Works" onClick={() => mobileNav('/how-it-works')} testId="drawer-how" />
                   <DrawerItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" onClick={() => mobileNav('/leaderboard')} testId="drawer-leaderboard" />
+                  <DrawerItem icon={<Info className="w-4 h-4" />} label="About Us" onClick={() => mobileNav('/about')} testId="drawer-about" />
                   <DrawerItem icon={<Newspaper className="w-4 h-4" />} label="News" onClick={() => mobileNav('/news')} testId="drawer-news" />
                   <DrawerItem icon={<Phone className="w-4 h-4" />} label="Contact" onClick={() => mobileNav('/contact')} testId="drawer-contact" />
 
                   {/* Settings & Logout */}
                   <div className="my-2 border-t border-border" />
-                  <DrawerItem icon={<Search className="w-4 h-4" />} label="How It Works" onClick={() => mobileNav('/how-it-works')} testId="drawer-how" />
-                  <DrawerItem icon={<Radio className="w-4 h-4" />} label="About Us" onClick={() => mobileNav('/about')} testId="drawer-about" />
                   <DrawerItem
                     icon={theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-yellow-400" />}
                     label={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                     onClick={() => { toggleTheme(); }}
                     testId="drawer-theme"
                   />
-                  <DrawerItem icon={<Zap className="w-4 h-4" />} label="Settings" onClick={() => mobileNav('/settings')} testId="drawer-settings" />
+                  <DrawerItem icon={<Settings className="w-4 h-4" />} label="Settings" onClick={() => mobileNav('/settings')} testId="drawer-settings" />
 
                   <div className="my-2 border-t border-border" />
                   <button
@@ -841,7 +864,7 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors"
                     data-testid="drawer-logout"
                   >
-                    <LogIn className="w-4 h-4" />
+                    <LogOut className="w-4 h-4" />
                     Log out
                   </button>
                 </>
@@ -849,12 +872,13 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
                 <>
                   {/* Guest navigation */}
                   <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Navigate</p>
-                  <DrawerItem icon={<Search className="w-4 h-4" />} label="How It Works" onClick={() => mobileNav('/how-it-works')} testId="drawer-how" />
+                  <DrawerItem icon={<Home className="w-4 h-4" />} label="Home" onClick={() => mobileNav('/')} testId="drawer-home" />
+                  <DrawerItem icon={<HelpCircle className="w-4 h-4" />} label="How It Works" onClick={() => mobileNav('/how-it-works')} testId="drawer-how" />
                   <DrawerItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" onClick={() => mobileNav('/leaderboard')} testId="drawer-leaderboard" />
-                  <DrawerItem icon={<Radio className="w-4 h-4" />} label="About Us" onClick={() => mobileNav('/about')} testId="drawer-about" />
+                  <DrawerItem icon={<Info className="w-4 h-4" />} label="About Us" onClick={() => mobileNav('/about')} testId="drawer-about" />
                   <DrawerItem icon={<Newspaper className="w-4 h-4" />} label="News" onClick={() => mobileNav('/news')} testId="drawer-news" />
                   <DrawerItem icon={<Phone className="w-4 h-4" />} label="Contact" onClick={() => mobileNav('/contact')} testId="drawer-contact" />
-                  <DrawerItem icon={<Zap className="w-4 h-4" />} label="Subscription" onClick={() => mobileNav('/subscribe')} testId="drawer-subscribe" />
+                  <DrawerItem icon={<Zap className="w-4 h-4" />} label="Subscribe" pro onClick={() => mobileNav('/subscribe')} testId="drawer-subscribe" />
 
                   <div className="my-2 border-t border-border" />
                   <DrawerItem
@@ -879,9 +903,6 @@ export const Header = ({ user: propUser, isAuthenticated: propIsAuthenticated, o
           </div>
         </div>
       )}
-    </header>
-    {/* Spacer for fixed header — prevents content from being hidden behind it */}
-    <div className="h-[57px] sm:h-[65px]" />
     </>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useCallback, memo, useEffect, useRef, useMemo } from 'react';
-import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart, Bell, ChevronRight } from 'lucide-react';
+import { TrendingUp, Loader2, Check, AlertCircle, RefreshCw, Trash2, Sparkles, Lock, Radio, Heart, Star, Bell, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/AuthContext';
 import { savePrediction, deletePrediction } from '@/services/predictions';
@@ -118,11 +118,11 @@ ScoreDisplay.displayName = 'ScoreDisplay';
 // ============ Prediction Locked Indicator ============
 const PredictionLockedBanner = memo(({ lockReason }) => (
   <div
-    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium"
+    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium"
     data-testid="prediction-locked"
   >
-    <Lock className="w-3 h-3" />
-    <span>{lockReason || 'Prediction closed'}</span>
+    <Lock className="w-3 h-3 flex-shrink-0" />
+    <span className="truncate">{lockReason || 'Prediction closed'}</span>
   </div>
 ));
 PredictionLockedBanner.displayName = 'PredictionLockedBanner';
@@ -150,6 +150,52 @@ const TeamCrest = memo(({ team, large }) => {
   );
 });
 TeamCrest.displayName = 'TeamCrest';
+
+// ============ Club Logo with Star (favorite) overlay ============
+const ClubLogoWithStar = memo(({ team, large, isFavorite, onToggle, isAuthenticated }) => {
+  const [animating, setAnimating] = useState(false);
+  const [optimistic, setOptimistic] = useState(null);
+
+  useEffect(() => { setOptimistic(null); }, [isFavorite]);
+
+  const display = optimistic !== null ? optimistic : !!isFavorite;
+  const teamId = team?.id;
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (!isAuthenticated || !teamId) return;
+    const next = !display;
+    setOptimistic(next);
+    setAnimating(true);
+    setTimeout(() => setAnimating(false), 200);
+    onToggle?.(teamId, team?.name, team?.crest, next).catch(() => setOptimistic(!next));
+  };
+
+  return (
+    <div className="relative flex-shrink-0">
+      <TeamCrest team={team} large={large} />
+      {isAuthenticated && teamId && (
+        <button
+          onClick={handleClick}
+          aria-label={display ? 'Remove club from favorites' : 'Add club to favorites'}
+          data-testid={`club-star-${teamId}`}
+          className={`absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-[18px] h-[18px] sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-background shadow-sm ${
+            display
+              ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]'
+              : 'bg-background hover:bg-amber-400/10'
+          } ${animating ? 'scale-125' : 'scale-100'} transition-transform duration-150`}
+        >
+          <Star
+            className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${
+              display ? 'text-background fill-background' : 'text-muted-foreground'
+            }`}
+          />
+        </button>
+      )}
+    </div>
+  );
+});
+ClubLogoWithStar.displayName = 'ClubLogoWithStar';
 
 // ============ Favorite Heart Button ============
 const FavoriteHeart = memo(({ teamId, teamName, teamCrest, isFavorite, onToggle, isAuthenticated }) => {
@@ -239,11 +285,17 @@ const BellNotification = memo(({ match, isBookmarked, onToggle, isAuthenticated 
 BellNotification.displayName = 'BellNotification';
 
 // ============ League Header ============
-const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry }) => {
+const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry, onClick, showViewAll, extraCount }) => {
   const country = competitionCountry || COMPETITION_COUNTRIES[competition] || '';
 
   return (
-    <div className="flex items-center gap-3 py-2 px-1" data-testid={`league-header-${competition}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-3 py-2 px-1 text-left rounded-lg hover:bg-secondary/40 active:scale-[0.99] transition-colors duration-150 cursor-pointer"
+      data-testid={`league-header-${competition}`}
+      aria-label={`Filter matches: ${competition}`}
+    >
       {/* League Logo */}
       <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary/80 flex items-center justify-center overflow-hidden">
         {competitionEmblem ? (
@@ -259,12 +311,21 @@ const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry 
       </div>
       {/* League name + country */}
       <div className="flex-1 min-w-0">
-        <h3 className="text-sm sm:text-base font-bold text-foreground truncate">{competition}</h3>
+        <h3 className="text-sm sm:text-base font-bold text-foreground truncate group-hover:text-primary">{competition}</h3>
         {country && <p className="text-[11px] sm:text-xs text-muted-foreground">{country}</p>}
       </div>
+      {/* View All (desktop only, when there are more matches than what's shown) */}
+      {showViewAll && (
+        <span
+          className="hidden lg:inline-flex items-center text-xs font-semibold text-primary hover:text-primary/80"
+          data-testid={`view-all-${competition}`}
+        >
+          View All{typeof extraCount === 'number' && extraCount > 0 ? ` (+${extraCount})` : ''}
+        </span>
+      )}
       {/* Arrow */}
       <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-    </div>
+    </button>
   );
 });
 LeagueHeader.displayName = 'LeagueHeader';
@@ -318,7 +379,7 @@ const PredictMatchButton = memo(({ onClick, disabled }) => (
     onClick={onClick}
     disabled={disabled}
     data-testid="guess-it-btn"
-    className={`w-full mt-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all duration-200 ${
+    className={`w-full py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all duration-200 ${
       disabled
         ? 'bg-muted/20 border-2 border-border/30 text-muted-foreground/40 cursor-not-allowed'
         : 'bg-[#1a3a2a] border-2 border-emerald-600/50 text-white hover:bg-[#1f4533] hover:border-emerald-500/70 active:scale-[0.98]'
@@ -1136,19 +1197,19 @@ const MatchRow = memo(({
 
   return (
     <div
-      className={`rounded-xl border overflow-hidden transition-colors duration-200 cursor-pointer ${
+      className={`rounded-xl border overflow-hidden transition-colors duration-200 cursor-pointer w-full flex flex-col h-full ${
         isLive ? 'bg-card border-red-500/30' : 'bg-card border-border/70 hover:border-border'
       }`}
       data-testid={`match-row-${match.id}`}
       data-match-id={match.id}
       onClick={(e) => {
         // Don't navigate if clicking on interactive elements
-        const target = e.target.closest('button, a, input, [data-testid="guess-it-btn"], [data-testid="advance-prediction-btn"], [data-testid="remove-prediction-btn"], [data-testid^="bell-match-"], [data-testid^="fav-heart-"]');
+        const target = e.target.closest('button, a, input, [data-testid="guess-it-btn"], [data-testid="advance-prediction-btn"], [data-testid="remove-prediction-btn"], [data-testid^="bell-match-"], [data-testid^="fav-heart-"], [data-testid^="club-star-"]');
         if (target) return;
         onNavigateMatch(match.id);
       }}
     >
-      <div className="px-4 py-4 sm:px-5 sm:py-4 space-y-3">
+      <div className="flex flex-col flex-1 px-4 py-5 sm:px-5 sm:py-5 gap-4">
 
         {/* === TOP ROW: Date | Time | Countdown + Bell === */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/30">
@@ -1175,20 +1236,30 @@ const MatchRow = memo(({
           </div>
         </div>
 
-        {/* === TEAMS ROW: Crest Name  VS  Name Crest === */}
-        <div className="flex items-center justify-between gap-1.5 sm:gap-2 py-1">
-          {/* Home team */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
-            <TeamCrest team={match.homeTeam} large />
-            <span className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-left break-words" data-testid="home-team-name">
+        {/* === TEAMS ROW: Logo → Name  |  Score  |  Name → Logo  ===
+            Grid layout guarantees: score is centered; team columns never overflow into score. */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4 py-2">
+          {/* Home team (logo + name) */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
+            <ClubLogoWithStar
+              team={match.homeTeam}
+              large
+              isFavorite={favoriteTeamIds?.has(match.homeTeam?.id)}
+              onToggle={onToggleFavorite}
+              isAuthenticated={isAuthenticated}
+            />
+            <span
+              className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-left break-words min-w-0"
+              data-testid="home-team-name"
+            >
               {match.homeTeam.shortName || match.homeTeam.name}
             </span>
           </div>
 
-          {/* Score or VS */}
-          <div className="flex-shrink-0 px-2 sm:px-3">
+          {/* Score or VS (center column, fixed min-width, never collides with names) */}
+          <div className="flex-shrink-0 min-w-[56px] sm:min-w-[64px] text-center">
             {(isLive || isFinished) && match.score?.home !== null ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-center gap-2">
                 <span className={`text-xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
                   {match.score.home}
                 </span>
@@ -1202,35 +1273,48 @@ const MatchRow = memo(({
             )}
           </div>
 
-          {/* Away team */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 justify-end">
-            <span className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-right break-words" data-testid="away-team-name">
+          {/* Away team (name + logo) */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-end pl-1 sm:pl-2">
+            <span
+              className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-right line-clamp-2 break-words min-w-0"
+              data-testid="away-team-name"
+            >
               {match.awayTeam.shortName || match.awayTeam.name}
             </span>
-            <TeamCrest team={match.awayTeam} large />
+            <ClubLogoWithStar
+              team={match.awayTeam}
+              large
+              isFavorite={favoriteTeamIds?.has(match.awayTeam?.id)}
+              onToggle={onToggleFavorite}
+              isAuthenticated={isAuthenticated}
+            />
           </div>
         </div>
 
         {/* === PREDICTION BARS (3 columns side by side — display only) === */}
-        <PredictionBars
-          votes={match.votes}
-          selectedType={displayedSelection}
-          locked={isLocked}
-          dynamicPoints={match.dynamicPoints}
-        />
-
-        {/* === PREDICT MATCH BUTTON (opens Advanced modal) === */}
-        {!isLocked && (
-          <PredictMatchButton
-            onClick={() => onAdvance(match.id)}
-            disabled={isLocked}
+        <div className="px-1 sm:px-2">
+          <PredictionBars
+            votes={match.votes}
+            selectedType={displayedSelection}
+            locked={isLocked}
+            dynamicPoints={match.dynamicPoints}
           />
-        )}
+        </div>
 
-        {/* Locked banner */}
-        {isLocked && (
-          <PredictionLockedBanner lockReason={match.lockReason} />
-        )}
+        {/* === Spacer so the action area always sticks to the bottom (uniform card height) === */}
+        <div className="flex-1" />
+
+        {/* === ACTION AREA (uniform height for Predict button / Locked banner) === */}
+        <div className="min-h-[44px] flex items-stretch">
+          {!isLocked ? (
+            <PredictMatchButton
+              onClick={() => onAdvance(match.id)}
+              disabled={isLocked}
+            />
+          ) : (
+            <PredictionLockedBanner lockReason={match.lockReason} />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1238,7 +1322,7 @@ const MatchRow = memo(({
 MatchRow.displayName = 'MatchRow';
 
 // ============ Main MatchList ============
-export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid', favoriteTeamIds, onToggleFavorite, favoriteMatchIds, onToggleFavoriteMatch }) => {
+export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid', favoriteTeamIds, onToggleFavorite, favoriteMatchIds, onToggleFavoriteMatch, onLeagueClick }) => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -1516,40 +1600,52 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
 
   return (
     <>
-      <div className="mt-4 sm:mt-5 space-y-5 max-w-3xl mx-auto" data-testid="match-list-container">
-        {groupedMatches.map((group) => (
-          <div key={group.competition} data-testid={`league-section-${group.competition}`}>
-            {/* League Header */}
-            <LeagueHeader
-              competition={group.competition}
-              competitionEmblem={group.competitionEmblem}
-              competitionCountry={group.competitionCountry}
-            />
+      <div className="mt-4 sm:mt-5 space-y-5 max-w-3xl lg:max-w-none mx-auto" data-testid="match-list-container">
+        {groupedMatches.map((group) => {
+          const hasMore = group.matches.length > 3;
+          return (
+            <div key={group.competition} data-testid={`league-section-${group.competition}`}>
+              {/* League Header — "View All" text + chevron inline on desktop when there are extra matches */}
+              <LeagueHeader
+                competition={group.competition}
+                competitionEmblem={group.competitionEmblem}
+                competitionCountry={group.competitionCountry}
+                onClick={() => onLeagueClick?.(group.competition)}
+                showViewAll={hasMore}
+                extraCount={Math.max(0, group.matches.length - 3)}
+              />
 
-            {/* Matches under this league */}
-            <div className="flex flex-col gap-6 mt-2">
-              {group.matches.map((match) => (
-                <MatchRow
-                  key={match.id}
-                  match={match}
-                  currentSelection={currentSelections[match.id]}
-                  savedPrediction={savedPredictions[match.id]}
-                  onGuessIt={handleGuessIt}
-                  onAdvance={handleAdvance}
-                  isLoading={loadingMatches[match.id]}
-                  prevScores={prevScores}
-                  favoriteTeamIds={favoriteTeamIds}
-                  onToggleFavorite={onToggleFavorite}
-                  isAuthenticated={isAuthenticated}
-                  favoriteMatchIds={favoriteMatchIds}
-                  onToggleFavoriteMatch={onToggleFavoriteMatch}
-                  hasExactScore={exactScoreMatchIds.has(match.id)}
-                  onNavigateMatch={handleNavigateMatch}
-                />
-              ))}
+              {/* Matches under this league
+                  Mobile/tablet: stacked vertically (show all)
+                  Desktop (lg+): 3-column grid showing max 3 matches (others hidden, accessible via View All in header) */}
+              <div className="flex flex-col gap-6 mt-2 lg:grid lg:grid-cols-3 lg:gap-4 lg:items-stretch">
+                {group.matches.map((match, idx) => (
+                  <div
+                    key={match.id}
+                    className={`h-full flex ${idx >= 3 ? 'lg:hidden' : ''}`}
+                  >
+                    <MatchRow
+                      match={match}
+                      currentSelection={currentSelections[match.id]}
+                      savedPrediction={savedPredictions[match.id]}
+                      onGuessIt={handleGuessIt}
+                      onAdvance={handleAdvance}
+                      isLoading={loadingMatches[match.id]}
+                      prevScores={prevScores}
+                      favoriteTeamIds={favoriteTeamIds}
+                      onToggleFavorite={onToggleFavorite}
+                      isAuthenticated={isAuthenticated}
+                      favoriteMatchIds={favoriteMatchIds}
+                      onToggleFavoriteMatch={onToggleFavoriteMatch}
+                      hasExactScore={exactScoreMatchIds.has(match.id)}
+                      onNavigateMatch={handleNavigateMatch}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {groupedMatches.length === 0 && (
           <div className="text-center py-8 text-muted-foreground" data-testid="no-matches-in-list">

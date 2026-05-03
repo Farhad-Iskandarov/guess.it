@@ -278,7 +278,8 @@ async def get_leaderboard(
     limit: int = 50,
     db: AsyncIOMotorDatabase = Depends(get_db)
 ):
-    """Get global leaderboard - top users by points. Cached in Redis for 30s."""
+    """Get global leaderboard - top users by points. Cached in Redis for 30s.
+    Accuracy is computed from actual prediction results vs finished match scores."""
     from services.redis_pubsub import cache_get, cache_set
     import json as _json
 
@@ -292,9 +293,50 @@ async def get_leaderboard(
 
     users = await db.users.find(
         {},
-        {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1, 
-         "points": 1, "level": 1, "predictions_count": 1, "correct_predictions": 1}
+        {"_id": 0, "user_id": 1, "nickname": 1, "email": 1, "picture": 1,
+         "points": 1, "level": 1}
     ).sort("points", -1).limit(limit).to_list(limit)
+
+    # ==== Compute predictions_count & correct_predictions for ALL returned users ====
+    user_ids = [u["user_id"] for u in users]
+    if user_ids:
+        # Pull all predictions for these users
+        preds = await db.predictions.find(
+            {"user_id": {"$in": user_ids}},
+            {"_id": 0, "user_id": 1, "match_id": 1, "prediction": 1}
+        ).to_list(50000)
+
+        # Fetch all referenced matches from persistent cache
+        match_ids = list({p["match_id"] for p in preds})
+        match_map = {}
+        if match_ids:
+            cached_matches = await db.football_matches_cache.find(
+                {"id": {"$in": match_ids}},
+                {"_id": 0, "id": 1, "status": 1, "score": 1}
+            ).to_list(len(match_ids))
+            match_map = {m["id"]: m for m in cached_matches}
+
+        # Aggregate per user
+        stats = {uid: {"total": 0, "correct": 0} for uid in user_ids}
+        for p in preds:
+            m = match_map.get(p["match_id"])
+            if not m or m.get("status") not in ("FINISHED", "AFTER_EXTRA_TIME", "PENALTY_SHOOTOUT"):
+                continue
+            score = m.get("score") or {}
+            h, a = score.get("home"), score.get("away")
+            if h is None or a is None:
+                continue
+            actual = "draw" if h == a else ("home" if h > a else "away")
+            uid = p["user_id"]
+            if uid in stats:
+                stats[uid]["total"] += 1
+                if p.get("prediction") == actual:
+                    stats[uid]["correct"] += 1
+
+        for u in users:
+            s = stats.get(u["user_id"], {"total": 0, "correct": 0})
+            u["predictions_count"] = s["total"]
+            u["correct_predictions"] = s["correct"]
 
     result = {"users": users}
     await cache_set(cache_key, _json.dumps(result, default=str), ttl_seconds=30)

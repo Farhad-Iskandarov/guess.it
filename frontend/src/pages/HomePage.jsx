@@ -5,6 +5,8 @@ import { Footer } from '@/components/layout/Footer';
 import { PromoBanner } from '@/components/home/PromoBanner';
 import { TabsSection } from '@/components/home/TabsSection';
 import { LeagueFilters } from '@/components/home/LeagueFilters';
+import { MatchFilters } from '@/components/home/MatchFilters';
+import { HomeSidebar } from '@/components/home/HomeSidebar';
 
 import { MatchList } from '@/components/home/MatchList';
 import { useAuth } from '@/lib/AuthContext';
@@ -95,6 +97,16 @@ const MatchSkeletonGrid = () => (
 export const HomePage = () => {
   const [activeTab, setActiveTab] = useState('top-matches');
   const [activeLeague, setActiveLeague] = useState('all');
+
+  // === New mobile-first match filters ===
+  const todayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const [selectedDate, setSelectedDate] = useState(() => todayISO());
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  // Selected league filter (competition name) — set when user taps a league header
+  const [selectedLeague, setSelectedLeague] = useState(null);
   // Initialize from cache to prevent loading flash on navigation
   const [matches, setMatches] = useState(() => {
     const cached = getStaleCachedMatches('all');
@@ -245,6 +257,92 @@ export const HomePage = () => {
         });
     }
   }, [activeTab, activeMatches, matches]);
+
+  // ============ NEW: Mobile-first date + category filter pipeline ============
+  const liveMatchCount = useMemo(
+    () =>
+      matches.filter((m) =>
+        ['LIVE', 'IN_PLAY', 'HALFTIME', 'PAUSED'].includes(m.status)
+      ).length,
+    [matches]
+  );
+
+  // Helper: compare a match's local date with selectedDate (YYYY-MM-DD)
+  const matchLocalISO = (m) => {
+    if (!m.utcDate) return null;
+    const d = new Date(m.utcDate);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const filteredMatches = useMemo(() => {
+    // 1. Date filter — skipped for personal categories (favorites / predictions)
+    //    so users see ALL their saved/predicted matches regardless of date.
+    const skipDateFilter = selectedCategory === 'favorites' || selectedCategory === 'predictions';
+    let result;
+    if (skipDateFilter) {
+      result = [...matches];
+    } else if (selectedDate === 'live') {
+      result = matches.filter((m) =>
+        ['LIVE', 'IN_PLAY', 'HALFTIME', 'PAUSED'].includes(m.status)
+      );
+    } else {
+      result = matches.filter((m) => matchLocalISO(m) === selectedDate);
+    }
+
+    // 2. League filter (when a specific league is tapped from a header)
+    if (selectedLeague) {
+      result = result.filter((m) => (m.competition || '') === selectedLeague);
+    }
+
+    // 3. Category filter
+    if (selectedCategory === 'top') {
+      // Top by total user predictions (engagement); break tie by date asc
+      result = [...result].sort((a, b) => {
+        const av = a.totalVotes || 0;
+        const bv = b.totalVotes || 0;
+        if (bv !== av) return bv - av;
+        const da = a.utcDate ? new Date(a.utcDate) : new Date(0);
+        const db = b.utcDate ? new Date(b.utcDate) : new Date(0);
+        return da - db;
+      });
+    } else if (selectedCategory === 'favorites') {
+      // Show matches whose home OR away club is in user's favorite clubs
+      // (also keep manually-bookmarked matches working)
+      result = result.filter((m) => {
+        const homeFav = m.homeTeam?.id != null && favoriteTeamIds.has(m.homeTeam.id);
+        const awayFav = m.awayTeam?.id != null && favoriteTeamIds.has(m.awayTeam.id);
+        const matchFav = favoriteMatchIds.has(m.id);
+        return homeFav || awayFav || matchFav;
+      });
+    } else if (selectedCategory === 'predictions') {
+      // Match by string-normalized ID to avoid type mismatch (BUG FIX)
+      result = result.filter((m) => !!savedPredictions[String(m.id)]);
+    }
+
+    return result;
+  }, [matches, selectedDate, selectedCategory, selectedLeague, favoriteMatchIds, favoriteTeamIds, savedPredictions]);
+
+  const handleDateChange = useCallback((id) => {
+    setSelectedDate(id);
+    setFilterKey((k) => k + 1);
+  }, []);
+
+  const handleCategoryChange = useCallback((id) => {
+    setSelectedCategory(id);
+    setFilterKey((k) => k + 1);
+  }, []);
+
+  // Tapping a league header filters the list to that competition
+  const handleLeagueClick = useCallback((competition) => {
+    setSelectedLeague((prev) => (prev === competition ? null : competition));
+    setFilterKey((k) => k + 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleClearLeagueFilter = useCallback(() => {
+    setSelectedLeague(null);
+    setFilterKey((k) => k + 1);
+  }, []);
 
 
   // Handle live WebSocket updates
@@ -479,7 +577,8 @@ export const HomePage = () => {
           const data = await getMyPredictions();
           const predictionsMap = {};
           data.predictions.forEach(p => {
-            predictionsMap[p.match_id] = p.prediction;
+            // Normalize match_id to string to avoid type mismatch when filtering
+            predictionsMap[String(p.match_id)] = p.prediction;
           });
           setSavedPredictions(predictionsMap);
 
@@ -492,7 +591,7 @@ export const HomePage = () => {
               await savePrediction(pending.matchId, pending.prediction);
               setSavedPredictions(prev => ({
                 ...prev,
-                [pending.matchId]: pending.prediction,
+                [String(pending.matchId)]: pending.prediction,
               }));
               toast.success('Prediction saved!', {
                 description: 'Your pending prediction has been saved.',
@@ -667,17 +766,18 @@ export const HomePage = () => {
   }, [activeLeague]);
 
   const handlePredictionSaved = useCallback((matchId, prediction) => {
+    const key = String(matchId);
     // Get the old prediction before updating
-    const oldPrediction = savedPredictions[matchId] || null;
+    const oldPrediction = savedPredictions[key] || null;
 
     // Update saved predictions
     setSavedPredictions(prev => {
       if (prediction === null) {
         const next = { ...prev };
-        delete next[matchId];
+        delete next[key];
         return next;
       }
-      return { ...prev, [matchId]: prediction };
+      return { ...prev, [key]: prediction };
     });
 
     // Optimistically update match vote counts/percentages
@@ -758,23 +858,38 @@ export const HomePage = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1">
-        {/* Promo Banner */}
-        {bannerSlides.length > 0 && <PromoBanner slides={bannerSlides} />}
+        <div className="lg:grid lg:grid-cols-[1fr_340px] lg:gap-6 xl:gap-8">
+          {/* ===== Left column: matches ===== */}
+          <div className="min-w-0">
+            {/* Promo Banner */}
+            {bannerSlides.length > 0 && <PromoBanner slides={bannerSlides} />}
 
-        {/* Connection Status */}
-        <div className="flex items-center mt-3 mb-1">
-          {isConnected ? (
-            <div className="flex items-center gap-1.5 text-xs text-primary" data-testid="ws-connected">
-              <Wifi className="w-3 h-3" />
-              <span>Live updates active</span>
+            {/* Connection Status */}
+            <div className="flex items-center mt-3 mb-1">
+              {isConnected ? (
+                <div className="flex items-center gap-1.5 text-xs text-primary" data-testid="ws-connected">
+                  <Wifi className="w-3 h-3" />
+                  <span>Live updates active</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="ws-disconnected">
+                  <WifiOff className="w-3 h-3" />
+                  <span>Auto-refreshing every 30s</span>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="ws-disconnected">
-              <WifiOff className="w-3 h-3" />
-              <span>Auto-refreshing every 30s</span>
-            </div>
-          )}
-        </div>
+
+        {/* === Match Filters: date + category (sticky) === */}
+        <MatchFilters
+          selectedDate={selectedDate}
+          onDateChange={handleDateChange}
+          selectedCategory={selectedCategory}
+          onCategoryChange={handleCategoryChange}
+          liveCount={liveMatchCount}
+          favoritesCount={favoriteMatchIds.size}
+          predictionsCount={Object.keys(savedPredictions).length}
+          isAuthenticated={isAuthenticated}
+        />
 
         {/* Loading State — only show skeleton when no matches to display */}
         {isLoadingMatches && matches.length === 0 && (
@@ -796,7 +911,29 @@ export const HomePage = () => {
           </div>
         )}
 
-        {/* No Matches */}
+        {/* No Matches — based on filtered result */}
+        {!isLoadingMatches && initialFetchDone.current && !matchError && matches.length > 0 && filteredMatches.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 content-fade-in" data-testid="no-filtered-matches">
+            <p className="text-lg text-foreground font-medium">
+              {selectedCategory === 'favorites'
+                ? 'No favorite matches yet'
+                : selectedCategory === 'predictions'
+                ? 'No predictions for this date'
+                : selectedDate === 'live'
+                ? 'No live matches right now'
+                : 'No matches on this date'}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {selectedCategory === 'favorites'
+                ? 'Tap the bookmark icon on any match to save it here.'
+                : selectedCategory === 'predictions'
+                ? 'Make a prediction to track it here.'
+                : 'Try a different date or category.'}
+            </p>
+          </div>
+        )}
+
+        {/* No Matches at all */}
         {!isLoadingMatches && initialFetchDone.current && !matchError && matches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-3 content-fade-in" data-testid="no-matches">
             <p className="text-lg text-foreground font-medium">No matches found</p>
@@ -805,10 +942,29 @@ export const HomePage = () => {
         )}
 
         {/* Match Content — grouped by league */}
-        {!isLoadingMatches && matches.length > 0 && (
-          <div className="match-list-animate-in content-fade-in">
+        {!isLoadingMatches && filteredMatches.length > 0 && (
+          <div key={filterKey} className="match-list-animate-in content-fade-in">
+            {selectedLeague && (
+              <div
+                className="flex items-center justify-between gap-3 mt-4 mb-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30"
+                data-testid="league-filter-banner"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-primary">League</span>
+                  <span className="text-sm font-bold text-foreground truncate">{selectedLeague}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearLeagueFilter}
+                  className="text-xs font-semibold text-primary hover:text-primary/80 underline-offset-2 hover:underline whitespace-nowrap"
+                  data-testid="clear-league-filter-btn"
+                >
+                  Show all leagues
+                </button>
+              </div>
+            )}
             <MatchList
-              matches={matches}
+              matches={filteredMatches}
               savedPredictions={savedPredictions}
               onPredictionSaved={handlePredictionSaved}
               activeLeague={activeLeague}
@@ -817,9 +973,19 @@ export const HomePage = () => {
               onToggleFavorite={handleToggleFavorite}
               favoriteMatchIds={favoriteMatchIds}
               onToggleFavoriteMatch={handleToggleFavoriteMatch}
+              onLeagueClick={handleLeagueClick}
             />
           </div>
         )}
+          </div>
+
+          {/* ===== Right column: desktop-only sidebar ===== */}
+          <div className="hidden lg:block">
+            <div className="sticky top-[80px]">
+              <HomeSidebar isAuthenticated={isAuthenticated} />
+            </div>
+          </div>
+        </div>
       </main>
 
       {/* Footer */}
