@@ -129,7 +129,7 @@ PredictionLockedBanner.displayName = 'PredictionLockedBanner';
 
 // ============ Team Crest Image (larger for new design) ============
 const TeamCrest = memo(({ team, large }) => {
-  const size = large ? 'w-8 h-8 sm:w-10 sm:h-10' : 'w-6 h-6 md:w-7 md:h-7';
+  const size = large ? 'w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12' : 'w-6 h-6 md:w-7 md:h-7';
   if (team.crest) {
     return (
       <img
@@ -144,7 +144,7 @@ const TeamCrest = memo(({ team, large }) => {
     );
   }
   return (
-    <div className="flex items-center justify-center w-6 h-6 md:w-7 md:h-7 rounded-full bg-secondary text-sm md:text-base flex-shrink-0">
+    <div className={`flex items-center justify-center ${large ? 'w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12' : 'w-6 h-6 md:w-7 md:h-7'} rounded-full bg-secondary text-sm md:text-base flex-shrink-0`}>
       {team.flag || team.logo || ''}
     </div>
   );
@@ -179,14 +179,14 @@ const ClubLogoWithStar = memo(({ team, large, isFavorite, onToggle, isAuthentica
           onClick={handleClick}
           aria-label={display ? 'Remove club from favorites' : 'Add club to favorites'}
           data-testid={`club-star-${teamId}`}
-          className={`absolute -top-1 -right-1 sm:-top-1.5 sm:-right-1.5 w-[18px] h-[18px] sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-background shadow-sm ${
+          className={`absolute -top-2 -right-2 sm:-top-2.5 sm:-right-2.5 w-[16px] h-[16px] sm:w-[18px] sm:h-[18px] rounded-full flex items-center justify-center border-2 border-background shadow-sm z-10 ${
             display
               ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]'
               : 'bg-background hover:bg-amber-400/10'
           } ${animating ? 'scale-125' : 'scale-100'} transition-transform duration-150`}
         >
           <Star
-            className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${
+            className={`w-2 h-2 sm:w-2.5 sm:h-2.5 ${
               display ? 'text-background fill-background' : 'text-muted-foreground'
             }`}
           />
@@ -314,15 +314,13 @@ const LeagueHeader = memo(({ competition, competitionEmblem, competitionCountry,
         <h3 className="text-sm sm:text-base font-bold text-foreground truncate group-hover:text-primary">{competition}</h3>
         {country && <p className="text-[11px] sm:text-xs text-muted-foreground">{country}</p>}
       </div>
-      {/* View All (desktop only, when there are more matches than what's shown) */}
-      {showViewAll && (
-        <span
-          className="hidden lg:inline-flex items-center text-xs font-semibold text-primary hover:text-primary/80"
-          data-testid={`view-all-${competition}`}
-        >
-          View All{typeof extraCount === 'number' && extraCount > 0 ? ` (+${extraCount})` : ''}
-        </span>
-      )}
+      {/* View All (desktop only, always visible for all leagues) */}
+      <span
+        className="hidden lg:inline-flex items-center text-xs font-semibold text-primary hover:text-primary/80"
+        data-testid={`view-all-${competition}`}
+      >
+        View All
+      </span>
       {/* Arrow */}
       <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
     </button>
@@ -339,17 +337,17 @@ const PredictionBars = memo(({ votes, selectedType, locked, dynamicPoints }) => 
   ];
 
   return (
-    <div className="flex items-end gap-2 sm:gap-3">
+    <div className="grid grid-cols-3 gap-3 sm:gap-4">
       {items.map(({ type, label, pct }) => {
         const isSelected = selectedType === type;
         return (
           <div
             key={type}
             data-testid={`vote-btn-${type}`}
-            className="flex-1 flex flex-col items-center gap-1 cursor-default select-none"
+            className="flex flex-col items-center gap-1.5 cursor-default select-none"
           >
             {/* Bar */}
-            <div className={`w-full h-1 rounded-full overflow-hidden ${
+            <div className={`w-full h-1.5 rounded-full overflow-hidden ${
               isSelected ? 'bg-primary/30' : 'bg-muted/80'
             }`}>
               <div
@@ -1209,10 +1207,10 @@ const MatchRow = memo(({
         onNavigateMatch(match.id);
       }}
     >
-      <div className="flex flex-col flex-1 px-4 py-5 sm:px-5 sm:py-5 gap-4">
+      <div className="flex flex-col flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-5 lg:py-6 gap-4 lg:gap-5">
 
         {/* === TOP ROW: Date | Time | Countdown + Bell === */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border/30">
+        <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 lg:pb-3 border-b border-border/30">
           <span className="font-medium">
             {isLive ? (
               <StatusBadge status={match.status} statusDetail={match.statusDetail} matchMinute={match.matchMinute} />
@@ -1238,9 +1236,9 @@ const MatchRow = memo(({
 
         {/* === TEAMS ROW: Logo → Name  |  Score  |  Name → Logo  ===
             Grid layout guarantees: score is centered; team columns never overflow into score. */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4 py-2">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4 lg:gap-6 py-2 lg:py-3">
           {/* Home team (logo + name) */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 pr-1 sm:pr-2">
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 min-w-0 pr-1 sm:pr-2 lg:pr-3">
             <ClubLogoWithStar
               team={match.homeTeam}
               large
@@ -1249,7 +1247,7 @@ const MatchRow = memo(({
               isAuthenticated={isAuthenticated}
             />
             <span
-              className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-left break-words min-w-0"
+              className="text-xs sm:text-sm lg:text-sm font-bold text-foreground uppercase leading-tight text-left line-clamp-2 break-words min-w-0"
               data-testid="home-team-name"
             >
               {match.homeTeam.shortName || match.homeTeam.name}
@@ -1257,26 +1255,26 @@ const MatchRow = memo(({
           </div>
 
           {/* Score or VS (center column, fixed min-width, never collides with names) */}
-          <div className="flex-shrink-0 min-w-[56px] sm:min-w-[64px] text-center">
+          <div className="flex-shrink-0 min-w-[56px] sm:min-w-[64px] lg:min-w-[88px] text-center px-1 sm:px-2 lg:px-3">
             {(isLive || isFinished) && match.score?.home !== null ? (
-              <div className="flex items-center justify-center gap-2">
-                <span className={`text-xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
+              <div className="flex items-center justify-center gap-2.5 lg:gap-3">
+                <span className={`text-xl sm:text-2xl lg:text-3xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
                   {match.score.home}
                 </span>
-                <span className="text-sm text-muted-foreground font-medium">-</span>
-                <span className={`text-xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
+                <span className="text-sm lg:text-base text-muted-foreground font-medium">-</span>
+                <span className={`text-xl sm:text-2xl lg:text-3xl font-extrabold tabular-nums ${isLive ? 'text-red-400' : 'text-foreground'}`}>
                   {match.score.away}
                 </span>
               </div>
             ) : (
-              <span className="text-sm font-bold text-muted-foreground/60 uppercase tracking-wider">VS</span>
+              <span className="text-sm lg:text-base font-bold text-muted-foreground/60 uppercase tracking-wider">VS</span>
             )}
           </div>
 
           {/* Away team (name + logo) */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-end pl-1 sm:pl-2">
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 min-w-0 justify-end pl-1 sm:pl-2 lg:pl-3">
             <span
-              className="text-xs sm:text-sm font-bold text-foreground uppercase leading-tight text-right line-clamp-2 break-words min-w-0"
+              className="text-xs sm:text-sm lg:text-sm font-bold text-foreground uppercase leading-tight text-right line-clamp-2 break-words min-w-0"
               data-testid="away-team-name"
             >
               {match.awayTeam.shortName || match.awayTeam.name}
@@ -1292,7 +1290,7 @@ const MatchRow = memo(({
         </div>
 
         {/* === PREDICTION BARS (3 columns side by side — display only) === */}
-        <div className="px-1 sm:px-2">
+        <div className="px-2 sm:px-3">
           <PredictionBars
             votes={match.votes}
             selectedType={displayedSelection}
@@ -1321,7 +1319,125 @@ const MatchRow = memo(({
 });
 MatchRow.displayName = 'MatchRow';
 
-// ============ Main MatchList ============
+// ============ Swipeable Match Cards Container ============
+const SwipeableMatchContainer = memo(({ children, competition }) => {
+  const scrollRef = useRef(null);
+  const isDragging = useRef(false);
+  const hasDragged = useRef(false);
+  const startX = useRef(0);
+  const scrollLeft = useRef(0);
+  const velocity = useRef(0);
+  const lastX = useRef(0);
+  const lastTime = useRef(0);
+  const animationFrame = useRef(null);
+
+  // Use document-level listeners for reliable drag tracking
+  const handleDocMouseMove = useCallback((e) => {
+    if (!isDragging.current || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX;
+    const dx = x - lastX.current;
+    const now = Date.now();
+    const dt = now - lastTime.current;
+
+    if (dt > 0) {
+      velocity.current = dx / dt;
+    }
+    lastX.current = x;
+    lastTime.current = now;
+
+    const walk = x - startX.current;
+    if (Math.abs(walk) > 5) {
+      hasDragged.current = true;
+    }
+    scrollRef.current.scrollLeft = scrollLeft.current - walk;
+  }, []);
+
+  const handleDocMouseUp = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    if (scrollRef.current) {
+      scrollRef.current.style.cursor = '';
+    }
+
+    // Remove document listeners
+    document.removeEventListener('mousemove', handleDocMouseMove);
+    document.removeEventListener('mouseup', handleDocMouseUp);
+
+    // Apply momentum scrolling
+    const el = scrollRef.current;
+    if (!el) return;
+    let v = velocity.current * -1;
+
+    const decelerate = () => {
+      if (Math.abs(v) < 0.1 || !el) {
+        animationFrame.current = null;
+        return;
+      }
+      el.scrollLeft += v * 16;
+      v *= 0.92;
+      animationFrame.current = requestAnimationFrame(decelerate);
+    };
+
+    if (Math.abs(v) > 0.3) {
+      animationFrame.current = requestAnimationFrame(decelerate);
+    }
+  }, [handleDocMouseMove]);
+
+  const onMouseDown = useCallback((e) => {
+    if (!scrollRef.current || window.innerWidth < 1024) return;
+    if (animationFrame.current) {
+      cancelAnimationFrame(animationFrame.current);
+      animationFrame.current = null;
+    }
+    isDragging.current = true;
+    hasDragged.current = false;
+    startX.current = e.pageX;
+    lastX.current = e.pageX;
+    lastTime.current = Date.now();
+    scrollLeft.current = scrollRef.current.scrollLeft;
+    velocity.current = 0;
+    scrollRef.current.style.cursor = 'grabbing';
+
+    // Attach to document so drag works even if mouse leaves container
+    document.addEventListener('mousemove', handleDocMouseMove);
+    document.addEventListener('mouseup', handleDocMouseUp);
+  }, [handleDocMouseMove, handleDocMouseUp]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleDocMouseMove);
+      document.removeEventListener('mouseup', handleDocMouseUp);
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+      }
+    };
+  }, [handleDocMouseMove, handleDocMouseUp]);
+
+  // Prevent click (navigation) if user just dragged
+  const onClickCapture = useCallback((e) => {
+    if (hasDragged.current) {
+      e.stopPropagation();
+      e.preventDefault();
+      hasDragged.current = false;
+    }
+  }, []);
+
+  return (
+    <div
+      ref={scrollRef}
+      className="flex flex-col gap-4 mt-2 lg:flex-row lg:gap-4 lg:overflow-x-auto lg:pb-0 lg:px-1 lg:cursor-grab lg:select-none"
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      onMouseDown={onMouseDown}
+      onClickCapture={onClickCapture}
+      data-testid={`swipeable-matches-${competition}`}
+    >
+      {children}
+    </div>
+  );
+});
+SwipeableMatchContainer.displayName = 'SwipeableMatchContainer';
 export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, activeLeague, viewMode = 'grid', favoriteTeamIds, onToggleFavorite, favoriteMatchIds, onToggleFavoriteMatch, onLeagueClick }) => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -1616,13 +1732,14 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
               />
 
               {/* Matches under this league
-                  Mobile/tablet: stacked vertically (show all)
+                  Mobile/tablet: horizontally swipeable cards (drag + touch)
                   Desktop (lg+): 3-column grid showing max 3 matches (others hidden, accessible via View All in header) */}
-              <div className="flex flex-col gap-6 mt-2 lg:grid lg:grid-cols-3 lg:gap-4 lg:items-stretch">
+              <SwipeableMatchContainer competition={group.competition}>
                 {group.matches.map((match, idx) => (
                   <div
                     key={match.id}
-                    className={`h-full flex ${idx >= 3 ? 'lg:hidden' : ''}`}
+                    className="w-full lg:flex-shrink-0 lg:w-[480px] xl:w-[500px] h-full"
+                    style={{ scrollSnapAlign: 'start' }}
                   >
                     <MatchRow
                       match={match}
@@ -1642,7 +1759,7 @@ export const MatchList = ({ matches, savedPredictions = {}, onPredictionSaved, a
                     />
                   </div>
                 ))}
-              </div>
+              </SwipeableMatchContainer>
             </div>
           );
         })}

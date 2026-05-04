@@ -336,7 +336,12 @@ export const HomePage = () => {
   const handleLeagueClick = useCallback((competition) => {
     setSelectedLeague((prev) => (prev === competition ? null : competition));
     setFilterKey((k) => k + 1);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const filterEl = document.querySelector('[data-testid="match-filters"]');
+    if (filterEl) {
+      filterEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   const handleClearLeagueFilter = useCallback(() => {

@@ -10,6 +10,18 @@
   display: none;
 }
 
+/* Desktop-only scrollbar hiding for swipeable match containers */
+@media (min-width: 1024px) {
+  [data-testid^="swipeable-matches-"] {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  [data-testid^="swipeable-matches-"]::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+
 /* Smooth scrolling for the entire app */
 html {
   scroll-behavior: smooth;

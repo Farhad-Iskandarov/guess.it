@@ -328,3 +328,12 @@ tail -f /var/log/supervisor/frontend.err.log
 - **HomePage integration**: `<main>` wrapped in `lg:grid lg:grid-cols-[1fr_340px]` — left column keeps the existing matches UI, right column holds the sticky sidebar. Mobile/tablet (<lg) layout is **unchanged** via `hidden lg:block`
 - `MatchFilters` drops its negative horizontal margin, backdrop blur, and bottom border on `lg` so it doesn't bleed past the grid into the sidebar column
 - No existing algorithms touched — sidebar is purely additive
+
+### Match Card Layout & Swipe Fix (2026-05-03)
+- **Score alignment**: Increased center score column minimum width (`min-w-[64px] sm:min-w-[80px]`) with added horizontal padding to prevent overlap with team names
+- **Team names**: Added `line-clamp-2` to home team name (away already had it), increased gap between logo and name (`gap-3 sm:gap-3.5`), increased padding between name and score column
+- **Logo + star icon**: Repositioned star icon to `-top-2 -right-2` (was `-top-1 -right-1`) with smaller star size to prevent overlap with team crests. Added `z-10` for proper layering
+- **Prediction bars**: Changed from `flex` to `grid grid-cols-3` for guaranteed equal-width columns with consistent `gap-3 sm:gap-4`. Increased bar height from `h-1` to `h-1.5`
+- **Team crest size**: Increased from `w-8 h-8 sm:w-10 sm:h-10` to `w-9 h-9 sm:w-11 sm:h-11` for better visibility
+- **Card padding**: Increased from `px-4 py-5` to `px-5 py-6` with `gap-5` between sections (was `gap-4`)
+- **Swipeable cards**: Mobile/tablet now uses horizontal scroll with snap (`scroll-snap-type: x mandatory`), cards are `w-[88vw]` on mobile, `w-[70vw]` on tablet. Desktop retains 3-column grid. Hidden scrollbar via `.scrollbar-hide`

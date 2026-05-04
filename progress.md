@@ -624,10 +624,73 @@ Added a desktop-only right sidebar to the home page matching the reference (`You
 |------|--------|
 | `frontend/src/components/layout/Header.jsx` | Drawer moved outside header, unified menus, body-scroll lock |
 | `frontend/src/components/home/MatchFilters.jsx` | New filter bar (dates + categories) |
-| `frontend/src/components/home/MatchList.jsx` | `ClubLogoWithStar` on crests, clickable `LeagueHeader` |
+| `frontend/src/components/home/MatchList.jsx` | `ClubLogoWithStar` on crests, clickable `LeagueHeader`, swipeable cards, layout fixes |
 | `frontend/src/components/home/HomeSidebar.jsx` | New desktop sidebar (Stats, Leaderboard, Promo) |
 | `frontend/src/pages/HomePage.jsx` | Filter pipeline, league filter, string-normalized predictions keys, 2-col desktop grid |
 | `frontend/src/pages/LeaderboardPage.jsx` | Full rewrite to match reference |
 | `backend/routes/football.py` | Leaderboard accuracy computed from predictions × matches cache |
 | `frontend/src/App.css` | Drawer keyframes |
 | `README.md`, `progress.md` | Updated |
+
+---
+
+## Session 17 - Match Card Layout Fix & Swipeable Cards (2026-05-03)
+
+### Problem
+Match cards had layout issues visible on mobile (reported via screenshot):
+1. Score (e.g., "3 - 0") overlapping with team names (especially long names like "BOURNEMOUTH")
+2. Star (favorite) icon overlapping with team logos
+3. Prediction bars (1/X/2) unequal widths and misaligned
+4. General cramped spacing inside cards
+5. User also wanted cards to be swipeable like the top banner carousel
+
+### Fixes Applied
+
+#### 1. Score alignment
+- Increased center score column minimum width: `min-w-[56px]` → `min-w-[64px]` on mobile, `min-w-[64px]` → `min-w-[80px]` on sm+
+- Added `px-1 sm:px-2` horizontal padding to the score column
+- Increased gap between grid columns from `gap-3 sm:gap-4` → `gap-4 sm:gap-5`
+- Larger score font: `text-xl` → `text-xl sm:text-2xl`
+
+#### 2. Team names
+- Added `line-clamp-2` to home team name span (away team already had it)
+- Increased gap between logo and name: `gap-2 sm:gap-3` → `gap-3 sm:gap-3.5`
+- Increased padding between name and score column: `pr-1 sm:pr-2` → `pr-2 sm:pr-3`
+
+#### 3. Star icon positioning
+- Moved from `absolute -top-1 -right-1` to `absolute -top-2 -right-2` (further from logo)
+- Reduced star icon size: `w-[18px] h-[18px]` → `w-[16px] h-[16px]` on mobile
+- Added `z-10` for proper stacking
+
+#### 4. Prediction bars
+- Changed from `flex items-end gap-2` to `grid grid-cols-3 gap-3 sm:gap-4` for guaranteed equal widths
+- Increased bar height from `h-1` to `h-1.5` for better visibility
+- Increased spacing between bar and label: `gap-1` → `gap-1.5`
+
+#### 5. General spacing
+- Card internal padding: `px-4 py-5` → `px-5 py-6`
+- Section gap: `gap-4` → `gap-5`
+- Top row border padding: `pb-2` → `pb-3`
+- Teams row padding: `py-2` → `py-3`
+- Prediction bars padding: `px-1 sm:px-2` → `px-2 sm:px-3`
+
+#### 6. Card size increase
+- Team crest size: `w-8 h-8 sm:w-10 sm:h-10` → `w-9 h-9 sm:w-11 sm:h-11`
+- Fallback crest div size updated to match
+
+#### 7. Swipeable cards (new feature)
+- Mobile/tablet: Changed from vertical stack (`flex flex-col gap-6`) to horizontal scroll with snap
+- Card width: `w-[88vw]` on mobile, `w-[70vw]` on sm, `w-[50vw]` on md
+- Added `scroll-snap-type: x mandatory`, `scrollSnapAlign: 'start'` per card
+- Hidden scrollbar via `.scrollbar-hide` class + inline style overrides
+- Desktop (lg+): Retains 3-column grid layout unchanged
+
+### Testing Results
+- Mobile (390px): Score properly centered, no overlap, team names readable, swipe works
+- Desktop (1920px): 3-column grid intact, proper spacing, no visual regression
+- Score display verified with live match data (Bundesliga, Premier League)
+
+### Files Changed
+- `frontend/src/components/home/MatchList.jsx` — `ClubLogoWithStar`, `TeamCrest`, `PredictionBars`, `MatchRow`, grid container
+- `README.md` (updated Recent Changes)
+- `progress.md` (this entry)
