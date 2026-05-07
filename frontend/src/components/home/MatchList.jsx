@@ -1207,7 +1207,7 @@ const MatchRow = memo(({
         onNavigateMatch(match.id);
       }}
     >
-      <div className="flex flex-col flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-5 lg:py-6 gap-4 lg:gap-5">
+      <div className="flex flex-col flex-1 px-4 py-4 sm:px-5 sm:py-5 lg:px-5 lg:py-3 gap-4 lg:gap-3">
 
         {/* === TOP ROW: Date | Time | Countdown + Bell === */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 lg:pb-3 border-b border-border/30">
